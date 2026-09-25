@@ -14,6 +14,7 @@ import com.opencode.android.ui.session.ServerSelection
 import com.opencode.android.ui.session.SessionCommand
 import com.opencode.android.ui.session.SessionConversation
 import com.opencode.android.ui.session.UiSelection
+import com.opencode.android.ui.session.buildPromptAsyncRequest
 import com.opencode.android.ui.session.effectiveSelection
 import com.opencode.android.util.ModelSelection
 import com.opencode.android.domain.Agent
@@ -25,9 +26,6 @@ import com.opencode.android.domain.ModelRef
 import com.opencode.android.domain.ModelRefRequest
 import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.ModelVariant
-import com.opencode.android.domain.PromptAsyncModel
-import com.opencode.android.domain.PromptAsyncPart
-import com.opencode.android.domain.PromptAsyncRequest
 import com.opencode.android.domain.PromptInput
 import com.opencode.android.domain.PromptRequest
 import com.opencode.android.domain.RevertRequest
@@ -1865,27 +1863,14 @@ _uiState.update { current ->
                     }
                 }
 
-                val asyncBody = PromptAsyncRequest(
-                    messageID = generateOpenCodeId("msg"),
-                    agent = effectiveAgent.ifEmpty { null },
-                    model = modelId.takeIf { it.isNotBlank() }?.let {
-                        PromptAsyncModel(modelID = it, providerID = providerId)
-                    },
-                    // Web sends variant as a top-level field; omit "default".
-                    variant = effectiveVariant.takeIf {
-                        it.isNotBlank() && it != "default"
-                    },
-                    parts = buildList {
-                        if (finalText.isNotBlank()) {
-                            add(
-                                PromptAsyncPart(
-                                    id = generateOpenCodeId("prt"),
-                                    type = "text",
-                                    text = finalText,
-                                )
-                            )
-                        }
-                    },
+                val asyncBody = buildPromptAsyncRequest(
+                    messageId = generateOpenCodeId("msg"),
+                    partId = generateOpenCodeId("prt"),
+                    agent = effectiveAgent,
+                    providerId = providerId,
+                    modelId = modelId,
+                    variant = effectiveVariant,
+                    finalText = finalText,
                 )
                 AppLog.d(APP_LOG_TAG) { "sendMessage: prompt_async" }
                 try {
