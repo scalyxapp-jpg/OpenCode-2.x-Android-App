@@ -305,7 +305,7 @@ class ChatViewModel @javax.inject.Inject constructor(
                 conversation.resetLive()
                 _uiState.update { it.copy(pendingPersist = false) }
                 // Keep the revision map bounded to the active session.
-                guardRevisions.keys.retainAll { it == sessionId }
+                selectionGuard.retainOnly(sessionId)
                 autoAdoptedGuardRevisions.clear()
             }
             if (switching || _uiState.value.messages.isEmpty()) {
@@ -421,7 +421,7 @@ class ChatViewModel @javax.inject.Inject constructor(
                     }
                 }
                 session.sessionGuard?.revision?.let { revision ->
-                    guardRevisions[session.id] = revision
+                    selectionGuard.recordGuardRevision(session.id, revision)
                 }
 
                 // Server session model is authoritative. A selection made in
@@ -983,11 +983,9 @@ _uiState.update { current ->
     private var pollJob: Job? = null
     private var lastPollUpdated: Long? = null
     private var modelSelectionPending = false
-    private var modelSyncGeneration = 0L
-    private val guardRevisions = mutableMapOf<String, Long>()
+    private val selectionGuard = com.opencode.android.util.SelectionGuard()
     private val autoAdoptedGuardRevisions = mutableSetOf<Long>()
     private var agentSelectionPending = false
-    private var agentSyncGeneration = 0L
 
     private suspend fun loadGuardStatus(sessionId: String) {
         // One health probe is enough; the authoritative selection already
@@ -1029,7 +1027,7 @@ _uiState.update { current ->
             try {
                 val session = repo.session(sessionId)
                 session.sessionGuard?.revision?.let { revision ->
-                    guardRevisions[sessionId] = revision
+                    selectionGuard.recordGuardRevision(sessionId, revision)
                 }
                 val selectedModel = resolveSessionModelRef(session.model, _uiState.value.models)
                 _uiState.update { current ->
@@ -1396,7 +1394,7 @@ _uiState.update { current ->
     }
 
     private fun syncSessionModel(sessionId: String, modelRef: String, variant: String) {
-        val generation = ++modelSyncGeneration
+        val generation = selectionGuard.beginModelSync()
         viewModelScope.launch {
             try {
                 val (providerId, modelId) = resolveModelRef(modelRef, _uiState.value.models)
@@ -1419,7 +1417,7 @@ _uiState.update { current ->
                     throw java.io.IOException(detail)
                 }
                 response.headers()["X-Session-Guard-Revision"]?.toLongOrNull()?.let { revision ->
-                    guardRevisions[sessionId] = revision
+                    selectionGuard.recordGuardRevision(sessionId, revision)
                 }
                 response.body()?.close()
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -1431,13 +1429,13 @@ _uiState.update { current ->
                     "Model selection could not be saved: ${e.message}",
                 )
             } finally {
-                if (generation == modelSyncGeneration) modelSelectionPending = false
+                if (selectionGuard.isLatestModel(generation)) modelSelectionPending = false
             }
         }
     }
 
     private fun syncSessionAgent(sessionId: String, agent: String) {
-        val generation = ++agentSyncGeneration
+        val generation = selectionGuard.beginAgentSync()
         viewModelScope.launch {
             try {
                 if (agent.isNotBlank()) {
@@ -1450,7 +1448,7 @@ _uiState.update { current ->
                         throw java.io.IOException(detail)
                     }
                     response.headers()["X-Session-Guard-Revision"]?.toLongOrNull()?.let { revision ->
-                        guardRevisions[sessionId] = revision
+                        selectionGuard.recordGuardRevision(sessionId, revision)
                     }
                     response.body()?.close()
                 }
@@ -1463,7 +1461,7 @@ _uiState.update { current ->
                     "Agent selection could not be saved: ${e.message}",
                 )
             } finally {
-                if (generation == agentSyncGeneration) agentSelectionPending = false
+                if (selectionGuard.isLatestAgent(generation)) agentSelectionPending = false
             }
         }
     }
@@ -1882,7 +1880,7 @@ _uiState.update { current ->
                 )
                 AppLog.d(APP_LOG_TAG) { "sendMessage: prompt_async" }
                 try {
-                    val guardRevision = guardRevisions[session.id]
+                    val guardRevision = selectionGuard.guardRevision(session.id)
                     var asyncResponse = ApiClient.api.sendPromptAsync(
                         session.id,
                         asyncBody,
@@ -1892,7 +1890,7 @@ _uiState.update { current ->
                         // Selection changed through another guarded client.
                         // Retry once without stale revision; proxy rewrites the
                         // request to its current authoritative selection.
-                        guardRevisions.remove(session.id)
+                        selectionGuard.clearGuardRevision(session.id)
                         asyncResponse = ApiClient.api.sendPromptAsync(
                             session.id,
                             asyncBody,
@@ -1981,14 +1979,14 @@ _uiState.update { current ->
             try {
                 val response = ApiClient.api.adoptServerSelection(
                     sessionId,
-                    guardRevisions[sessionId],
+                    selectionGuard.guardRevision(sessionId),
                 )
                 if (!response.isSuccessful) {
                     throw java.io.IOException("adopt HTTP ${response.code()}")
                 }
                 val guard = response.body()
                     ?: throw java.io.IOException("adopt returned no selection")
-                guard.revision.let { guardRevisions[sessionId] = it }
+                guard.revision.let { selectionGuard.recordGuardRevision(sessionId, it) }
                 _uiState.update { current ->
                     if (current.session?.id != sessionId) current
                     else current.copy(
@@ -2012,14 +2010,14 @@ _uiState.update { current ->
             try {
                 val response = ApiClient.api.pushGuardSelection(
                     sessionId,
-                    guardRevisions[sessionId],
+                    selectionGuard.guardRevision(sessionId),
                 )
                 if (!response.isSuccessful) {
                     throw java.io.IOException("push HTTP ${response.code()}")
                 }
                 val guard = response.body()
                     ?: throw java.io.IOException("push returned no selection")
-                guard.revision.let { guardRevisions[sessionId] = it }
+                guard.revision.let { selectionGuard.recordGuardRevision(sessionId, it) }
                 _uiState.update { current ->
                     if (current.session?.id != sessionId) current
                     else current.copy(
@@ -2044,12 +2042,12 @@ _uiState.update { current ->
             try {
                 val response = ApiClient.api.removeGuardSelection(
                     sessionId,
-                    guardRevisions[sessionId],
+                    selectionGuard.guardRevision(sessionId),
                 )
                 if (!response.isSuccessful) {
                     throw java.io.IOException("remove guard HTTP ${response.code()}")
                 }
-                guardRevisions.remove(sessionId)
+                selectionGuard.clearGuardRevision(sessionId)
                 _uiState.update { current ->
                     if (current.session?.id != sessionId) current
                     else current.copy(
@@ -2068,7 +2066,7 @@ _uiState.update { current ->
 
     fun refreshSelectionFromServer() {
         val sessionId = _uiState.value.session?.id ?: return
-        guardRevisions.remove(sessionId)
+        selectionGuard.clearGuardRevision(sessionId)
         _uiState.update { it.copy(guardConflict = false, statusError = null) }
         refreshSessionModel(sessionId)
         requestGuardStatus(sessionId)
