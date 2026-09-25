@@ -42,4 +42,25 @@ class SendEchoTest {
         assertEquals(123L, echo.time?.created)
         assertEquals("hi", echo.parts.first().text)
     }
+
+    @Test
+    fun `no uploads leaves the prompt unchanged`() {
+        assertEquals("hello", buildPromptText("hello", emptyList()))
+    }
+
+    @Test
+    fun `uploaded paths are appended under an Attached files header`() {
+        assertEquals(
+            "hello\n\nAttached files:\n- /tmp/a.png\n- /tmp/b.pdf",
+            buildPromptText("hello", listOf("/tmp/a.png", "/tmp/b.pdf")),
+        )
+    }
+
+    @Test
+    fun `attachment-only turn does not start with a blank line`() {
+        assertEquals(
+            "Attached files:\n- /tmp/a.png",
+            buildPromptText("", listOf("/tmp/a.png")),
+        )
+    }
 }

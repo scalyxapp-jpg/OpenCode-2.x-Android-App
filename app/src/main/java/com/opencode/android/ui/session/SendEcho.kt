@@ -45,3 +45,20 @@ fun buildOptimisticEcho(
     time = MessageTime(created = createdAt),
     info = MessageInfo(role = "user"),
 )
+
+/**
+ * The text actually sent to the agent: the prompt plus the uploaded file paths
+ * the server returned. Only paths go on the wire — the `[Attached: name]`
+ * markers in [buildDisplayText] are display-only.
+ */
+fun buildPromptText(rawText: String, uploadedPaths: List<String>): String = buildString {
+    append(rawText)
+    if (uploadedPaths.isNotEmpty()) {
+        if (isNotEmpty()) append("\n\n")
+        append("Attached files:")
+        for (path in uploadedPaths) {
+            append("\n- ")
+            append(path)
+        }
+    }
+}.trim()

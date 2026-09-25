@@ -19,6 +19,7 @@ import com.opencode.android.ui.session.UiSelection
 import com.opencode.android.ui.session.buildDisplayText
 import com.opencode.android.ui.session.buildOptimisticEcho
 import com.opencode.android.ui.session.buildPromptAsyncRequest
+import com.opencode.android.ui.session.buildPromptText
 import com.opencode.android.ui.session.effectiveSelection
 import com.opencode.android.util.ModelSelection
 import com.opencode.android.domain.Agent
@@ -1702,19 +1703,6 @@ _uiState.update { current ->
             attachments.map { attachment -> async { uploadAttachment(attachment) } }.awaitAll()
         }
 
-    private fun buildPromptText(rawText: String, uploaded: List<UploadResponse>): String =
-        buildString {
-            append(rawText)
-            if (uploaded.isNotEmpty()) {
-                if (isNotEmpty()) append("\n\n")
-                append("Attached files:")
-                for (item in uploaded) {
-                    append("\n- ")
-                    append(item.path)
-                }
-            }
-        }.trim()
-
     fun sendMessage() = conversation.dispatch(SessionCommand.Send)
 
     private fun performSend() {
@@ -1852,7 +1840,7 @@ _uiState.update { current ->
                     return@launch
                 }
                 _uiState.update { it.copy(isUploading = false, uploadDone = 0, uploadTotal = 0) }
-                val finalText = buildPromptText(text, uploaded)
+                val finalText = buildPromptText(text, uploaded.map { it.path })
                 if (finalText != displayText) {
                     _uiState.update { current ->
                         current.copy(
