@@ -61,6 +61,8 @@ interface ConversationPort {
     fun notifyError(message: String?)
     fun notifyInterruptFailed(message: String?)
     fun refreshMessages(sessionId: String)
+    /** Re-read the server session status after a stream reconnect. */
+    fun resyncSessionStatus()
     fun refreshSessionModel()
     fun loadVcsDiff()
 
@@ -144,6 +146,9 @@ class SessionConversation(
 
     fun finalize() = streamer.finalize()
 
+    /** Clears the generating flag when the server confirms the turn is over. */
+    fun forceIdle() = streamer.finalize()
+
     fun completePersist() = streamer.completePersist()
 
     private fun handleEffect(effect: StreamEffect) {
@@ -154,6 +159,7 @@ class SessionConversation(
             StreamEffect.NotifyPermission -> port.notifyPermission()
             StreamEffect.NotifyDone -> port.notifyDone()
             is StreamEffect.NotifyError -> port.notifyError(effect.message)
+            StreamEffect.ResyncSessionStatus -> port.resyncSessionStatus()
             StreamEffect.RefreshSessionModel -> port.refreshSessionModel()
             StreamEffect.LoadVcsDiff -> port.loadVcsDiff()
             is StreamEffect.GeneratingChanged -> {

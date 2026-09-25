@@ -43,6 +43,14 @@ sealed interface StreamEffect {
     data object NotifyPermission : StreamEffect
     data object NotifyDone : StreamEffect
     data class NotifyError(val message: String?) : StreamEffect
+
+    /**
+     * The event stream (re)connected. Events that arrive exactly once — most
+     * importantly `session.idle` — are lost if they land during a reconnect
+     * gap, which left the UI on "generating…". The owner re-reads the session
+     * status and clears the flag when the server says the turn is over.
+     */
+    data object ResyncSessionStatus : StreamEffect
 }
 
 /** Generation/connection fields the stream owns that project into ChatUiState. */
@@ -99,7 +107,10 @@ object StreamReducer {
         return when (event.type) {
             SseEventDecoder.SSE_CONNECTED -> state.copy(
                 sseConnected = true,
-                effects = listOf(StreamEffect.Reconcile(includeMeta = true)),
+                effects = listOf(
+                    StreamEffect.Reconcile(includeMeta = true),
+                    StreamEffect.ResyncSessionStatus,
+                ),
             )
 
             SseEventDecoder.SSE_DISCONNECTED -> state.copy(

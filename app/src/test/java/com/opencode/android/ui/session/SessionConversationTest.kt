@@ -36,6 +36,7 @@ class SessionConversationTest {
         override fun notifyError(message: String?) {}
         override fun notifyInterruptFailed(message: String?) {}
         override fun refreshMessages(sessionId: String) { refreshes++ }
+        override fun resyncSessionStatus() {}
         override fun refreshSessionModel() {}
         override fun loadVcsDiff() {}
         override fun setGenerating(value: Boolean) { generatingSets++ }

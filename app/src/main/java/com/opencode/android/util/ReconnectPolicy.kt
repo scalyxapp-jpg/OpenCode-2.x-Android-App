@@ -13,13 +13,17 @@ package com.opencode.android.util
  */
 object ReconnectPolicy {
     /** Liveness watchdog tick. */
-    const val WATCHDOG_TICK_MS = 3_000L
+    const val WATCHDOG_TICK_MS = 5_000L
 
     /**
-     * Heartbeat arrives roughly every 10 s, so three missed beats means the
-     * stream is dead even though the socket was never closed.
+     * The server emits `server.heartbeat` roughly every 13–15 s (measured), not
+     * every 10 s. A 12 s window fired *between* two heartbeats, so the app
+     * reconnected every ~12 s, and an event that lands once (like
+     * `session.idle`) was lost in the reconnect gap — the UI then sat on
+     * "generating…" forever. Keep the window comfortably above two heartbeat
+     * intervals so a live stream is never mistaken for a dead one.
      */
-    const val WATCHDOG_TIMEOUT_MS = 12_000L
+    const val WATCHDOG_TIMEOUT_MS = 35_000L
 
     /**
      * A connection that lasted at least this long is treated as "it worked,

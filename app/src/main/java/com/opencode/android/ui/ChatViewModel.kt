@@ -249,6 +249,27 @@ class ChatViewModel @javax.inject.Inject constructor(
 
         override fun refreshMessages(sessionId: String) = this@ChatViewModel.refreshMessages(sessionId)
 
+        override fun resyncSessionStatus() {
+            val sessionId = _uiState.value.session?.id ?: return
+            viewModelScope.launch {
+                try {
+                    val server = repo.session(sessionId)
+                    val busy = server.status?.type == "busy" || server.status?.type == "retry"
+                    // The stream reconnected and the server says the turn is
+                    // over, but a `session.idle` may have been lost in the
+                    // reconnect gap. Clear the stuck "generating" flag.
+                    if (!busy && _uiState.value.isGenerating) {
+                        AppLog.d(APP_LOG_TAG) { "resync: server idle, clearing generating" }
+                        conversation.forceIdle()
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Best-effort; the next reconnect tries again.
+                }
+            }
+        }
+
         override fun reconcile(includeMeta: Boolean) {
             _uiState.value.session?.id?.let { scheduleRefresh(it, includeMeta) }
         }
@@ -307,14 +328,18 @@ class ChatViewModel @javax.inject.Inject constructor(
         }
     }
 
-    private val conversation = SessionConversation(
-        source = SseClient,
-        scope = viewModelScope,
-        models = { _uiState.value.models },
-        friendlyError = ::friendlyError,
-        transport = sessionTransport,
-        port = conversationPort,
-    )
+    // lazy: conversationPort.resyncSessionStatus() references conversation, and
+    // a direct initializer would make the two declarations recursively typed.
+    private val conversation: SessionConversation by lazy {
+        SessionConversation(
+            source = SseClient,
+            scope = viewModelScope,
+            models = { _uiState.value.models },
+            friendlyError = ::friendlyError,
+            transport = sessionTransport,
+            port = conversationPort,
+        )
+    }
 
     // Streaming buffers live in their own flow (see LiveStreamState) so token
     // flushes do not recompose the whole screen. Owned by SessionStreamer.
