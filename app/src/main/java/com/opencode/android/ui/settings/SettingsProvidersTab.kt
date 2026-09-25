@@ -300,11 +300,18 @@ internal fun ConnectProviderDialog(
 ) {
     val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var methods by remember { mutableStateOf<List<ProviderAuthMethod>?>(null) }
     var key by remember { mutableStateOf("") }
     var prompts by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // OAuth: the authorize call returns a URL (browser) plus instructions; the
+    // headless variant prints a code the user pastes back to /oauth/callback.
+    var oauthStarted by remember { mutableStateOf(false) }
+    var oauthMethod by remember { mutableStateOf(0) }
+    var oauthInstructions by remember { mutableStateOf<String?>(null) }
+    var oauthCode by remember { mutableStateOf("") }
 
     LaunchedEffect(provider.id) {
         methods = try {
@@ -328,12 +335,85 @@ internal fun ConnectProviderDialog(
                 if (methods == null) {
                     InlineSpinner()
                 }
-                oauthMethods.forEach { m ->
-                    Text(
-                        text = "${m.label ?: "Sign in"} — sign in from a browser, then paste the API key here.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                oauthMethods.forEachIndexed { index, m ->
+                    OutlinedButton(
+                        enabled = !busy,
+                        onClick = {
+                            busy = true
+                            error = null
+                            scope.launch {
+                                try {
+                                    val resp = backendSession.api.providerOauthAuthorize(
+                                        provider.id,
+                                        kotlinx.serialization.json.JsonObject(
+                                            mapOf(
+                                                "method" to kotlinx.serialization.json.JsonPrimitive(index),
+                                            ),
+                                        ),
+                                    ) as? kotlinx.serialization.json.JsonObject
+                                    val url = (resp?.get("url") as? kotlinx.serialization.json.JsonPrimitive)?.content
+                                    oauthInstructions =
+                                        (resp?.get("instructions") as? kotlinx.serialization.json.JsonPrimitive)?.content
+                                    oauthMethod = index
+                                    oauthStarted = true
+                                    if (!url.isNullOrBlank()) {
+                                        runCatching {
+                                            context.startActivity(
+                                                android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    android.net.Uri.parse(url),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    error = "Failed: ${e.message}"
+                                }
+                                busy = false
+                            }
+                        },
+                    ) { Text(m.label ?: "Sign in") }
+                }
+                if (oauthStarted) {
+                    oauthInstructions?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    OutlinedTextField(
+                        value = oauthCode,
+                        onValueChange = { oauthCode = it },
+                        label = { Text("Authorization code") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    OutlinedButton(
+                        enabled = !busy && oauthCode.isNotBlank(),
+                        onClick = {
+                            busy = true
+                            error = null
+                            scope.launch {
+                                try {
+                                    backendSession.api.providerOauthCallback(
+                                        provider.id,
+                                        kotlinx.serialization.json.JsonObject(
+                                            mapOf(
+                                                "method" to kotlinx.serialization.json.JsonPrimitive(oauthMethod),
+                                                "code" to kotlinx.serialization.json.JsonPrimitive(oauthCode),
+                                            ),
+                                        ),
+                                    ).close()
+                                    runCatching { backendSession.api.globalDispose() }
+                                    onConnected()
+                                } catch (e: Exception) {
+                                    error = "Failed: ${e.message}"
+                                }
+                                busy = false
+                            }
+                        },
+                    ) { Text("Submit code") }
                 }
                 visiblePrompts.forEach { pr ->
                     OutlinedTextField(

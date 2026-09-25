@@ -951,7 +951,20 @@ _uiState.update { current ->
                 ).close()
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "replyPermission failed: ${e.message}")
-                UserMessages.post(R.string.action_failed, "${e.message}")
+                // The global endpoint is 404 on some server builds; retry with
+                // the session-scoped form before surfacing a failure.
+                val ok = try {
+                    api.replySessionPermission(
+                        sessionId,
+                        requestId,
+                        PermissionReplyRequest(reply = reply),
+                    ).close()
+                    true
+                } catch (e2: Exception) {
+                    AppLog.e(APP_LOG_TAG, "replySessionPermission failed: ${e2.message}")
+                    false
+                }
+                if (!ok) UserMessages.post(R.string.action_failed, "${e.message}")
             } finally {
                 if (_uiState.value.session?.id == sessionId) loadPermissions()
             }

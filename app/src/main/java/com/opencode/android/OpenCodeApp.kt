@@ -59,6 +59,10 @@ class OpenCodeApp : Application() {
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
                 AppLog.e("OpenCodeCrash", "Uncaught in thread ${thread.name}", throwable)
+                com.opencode.android.data.ClientLog.report(
+                    "error",
+                    "uncaught: ${thread.name}: ${throwable::class.java.simpleName}: ${throwable.message}",
+                )
                 java.io.File(filesDir, "crash_last.txt").writeText(
                     buildString {
                         append(java.util.Date().toString()).append('\n')

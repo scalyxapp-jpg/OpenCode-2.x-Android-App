@@ -49,6 +49,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         deepLinkSessionId.value = intent?.getStringExtra(Notifier.EXTRA_SESSION_ID)
+        // Route client errors to the server log (POST /log). Best-effort.
+        com.opencode.android.data.ClientLog.install { backendSession.api }
         enableEdgeToEdge()
         setContent {
             // Apply the persisted appearance settings (color scheme, theme,
