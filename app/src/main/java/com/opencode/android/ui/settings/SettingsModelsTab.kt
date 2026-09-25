@@ -27,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.opencode.android.data.ModelVisibilityStore
-import com.opencode.android.data.ProviderCatalog
+import com.opencode.android.data.ProviderDirectory
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.PickerSearchField
 import com.opencode.android.ui.InlineSpinner
@@ -43,20 +43,21 @@ import androidx.compose.ui.res.stringResource
 //  - visibility is client-side only (no endpoint) and upserted into
 //    localStorage "opencode.global.dat:model" -> user[{providerID, modelID, visibility}]
 internal fun ModelsTab() {
+    val providerDirectory = com.opencode.android.ui.LocalProviderDirectory.current
     var query by remember { mutableStateOf("") }
     // Bumped after every toggle so the switches re-read the persisted state.
     var revision by remember { mutableIntStateOf(0) }
 
-    // Shared, cached catalog (see ProviderCatalog).
-    val catalog by ProviderCatalog.state.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { ProviderCatalog.load() }
+    // Shared, cached catalog (see ProviderDirectory).
+    val catalog by providerDirectory.state.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { providerDirectory.load() }
 
     val visibleProviders = when (val c = catalog) {
-        is ProviderCatalog.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
+        is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
         else -> emptyList()
     }
-    val loadError = (catalog as? ProviderCatalog.State.Failed)?.message
-    val loading = catalog is ProviderCatalog.State.Loading || catalog is ProviderCatalog.State.Idle
+    val loadError = (catalog as? ProviderDirectory.State.Failed)?.message
+    val loading = catalog is ProviderDirectory.State.Loading
     val q = query.trim().lowercase()
     val visibility = remember(revision) { ModelVisibilityStore.visibilityMap() }
 

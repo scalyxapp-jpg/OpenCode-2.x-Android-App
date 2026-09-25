@@ -72,7 +72,6 @@ import com.opencode.android.ui.theme.spacing
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.opencode.android.data.ApiClient
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.HealthResponse
@@ -99,6 +98,7 @@ internal fun HomeScreen(
     animatedVisibilityScope: androidx.compose.animation.AnimatedVisibilityScope? = null,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
+    val backendSession = LocalBackendSession.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val appSettings by AppSettingsStore.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -145,7 +145,7 @@ internal fun HomeScreen(
                             showServerStatus = true
                             statusScope.launch {
                                 serverHealth = try {
-                                    ApiClient.api.globalHealth()
+                                    backendSession.api.globalHealth()
                                 } catch (_: Exception) {
                                     null
                                 }
@@ -394,7 +394,7 @@ internal fun HomeScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
                     Text(
-                        text = ApiClient.currentBaseUrl(),
+                        text = backendSession.currentBaseUrl(),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -729,6 +729,7 @@ private fun AddProjectDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val backendSession = LocalBackendSession.current
     // Mirrors the web "Open project" dialog (verified via Playwright):
     //  - starts at the serve host's home dir (GET /path → home)
     //  - lists directories via GET /file?path=.&directory=<abs>
@@ -773,7 +774,7 @@ private fun AddProjectDialog(
         listJob = scope.launch {
             val result = try {
                 val loaded = if (query.isBlank()) {
-                    ApiClient.api.getFiles(path = ".", directory = dir)
+                    backendSession.api.getFiles(path = ".", directory = dir)
                         .filter { it.type == "directory" }
                 } else {
                     // /find/file needs a RELATIVE directory and returns plain
@@ -787,7 +788,7 @@ private fun AddProjectDialog(
                     } else {
                         "."
                     }
-                    ApiClient.api.findFiles(query = query, directory = rel).map { p ->
+                    backendSession.api.findFiles(query = query, directory = rel).map { p ->
                         val clean = p.trimEnd('/')
                         FileEntry(
                             // Search hits span directories, so show the relative
@@ -819,7 +820,7 @@ private fun AddProjectDialog(
 
     // Seed the browser from the serve host's home directory.
     LaunchedEffect(Unit) {
-        val info = try { ApiClient.api.getPathInfo() } catch (_: Exception) { null }
+        val info = try { backendSession.api.getPathInfo() } catch (_: Exception) { null }
         val h = info?.home?.trimEnd('/')?.ifBlank { "/" } ?: "/"
         home = h
         currentDir = h

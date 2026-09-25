@@ -11,7 +11,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Exercises the real HTTP path of [ApiClient.getMessagesStreamed].
+ * Exercises the real HTTP path of [BackendSession.getMessagesStreamed].
  *
  * This is the code that replaced `ResponseBody.string()` and caused the OOM
  * crashes when a heavy session returned ~14 MB: the streamed decode plus the
@@ -22,12 +22,14 @@ import org.junit.Test
 class ApiClientStreamingTest {
 
     private lateinit var server: MockWebServer
+    private lateinit var session: BackendSession
 
     @Before
     fun setUp() {
         server = MockWebServer()
         server.start()
-        ApiClient.setBaseUrl(server.url("/").toString())
+        session = BackendSession()
+        session.setBaseUrl(server.url("/").toString())
     }
 
     @After
@@ -45,7 +47,7 @@ class ApiClientStreamingTest {
         val body = "[${messageJson("m1", "user", "hello")},${messageJson("m2", "assistant", "hi")}]"
         server.enqueue(MockResponse().setBody(body).setHeader("Content-Type", "application/json"))
 
-        val result = ApiClient.getMessagesStreamed("ses_test", 60)
+        val result = session.getMessagesStreamed("ses_test", 60)
 
         assertNotNull(result)
         assertEquals(2, result!!.size)
@@ -59,7 +61,7 @@ class ApiClientStreamingTest {
     fun `passes the page size through as the limit query parameter`() = runBlocking {
         server.enqueue(MockResponse().setBody("[]").setHeader("Content-Type", "application/json"))
 
-        ApiClient.getMessagesStreamed("ses_test", 60)
+        session.getMessagesStreamed("ses_test", 60)
 
         val request = server.takeRequest()
         assertTrue(
@@ -73,7 +75,7 @@ class ApiClientStreamingTest {
     fun `an empty list stays empty instead of throwing`() = runBlocking {
         server.enqueue(MockResponse().setBody("[]").setHeader("Content-Type", "application/json"))
 
-        val result = ApiClient.getMessagesStreamed("ses_test", 60)
+        val result = session.getMessagesStreamed("ses_test", 60)
 
         assertNotNull(result)
         assertTrue(result!!.isEmpty())
@@ -87,7 +89,7 @@ class ApiClientStreamingTest {
         val body = "[" + (1..400).joinToString(",") { messageJson("m$it", "assistant", chunk) } + "]"
         server.enqueue(MockResponse().setBody(body).setHeader("Content-Type", "application/json"))
 
-        val result = ApiClient.getMessagesStreamed("ses_test", 400)
+        val result = session.getMessagesStreamed("ses_test", 400)
 
         assertEquals(400, result!!.size)
         assertEquals(1_000, result.last().parts.first().text!!.length)
@@ -100,7 +102,7 @@ class ApiClientStreamingTest {
             server.enqueue(
                 MockResponse().setBody("not json at all").setHeader("Content-Type", "application/json"),
             )
-            ApiClient.getMessagesStreamed("ses_test", 60)
+            session.getMessagesStreamed("ses_test", 60)
         }
     }
 
@@ -108,7 +110,7 @@ class ApiClientStreamingTest {
     fun `a server error surfaces as an error`() {
         runBlocking {
             server.enqueue(MockResponse().setResponseCode(500).setBody("boom"))
-            ApiClient.getMessagesStreamed("ses_test", 60)
+            session.getMessagesStreamed("ses_test", 60)
         }
     }
 }

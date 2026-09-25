@@ -1,7 +1,6 @@
 package com.opencode.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.opencode.android.data.ApiClient
 import com.opencode.android.data.BackendSession
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -20,7 +19,7 @@ class GuardTokenInstrumentedTest {
 
     @Test
     fun tokenProtectsGuardEndpoints() = runBlocking {
-        val session = BackendSession.shared()
+        val session = BackendSession()
         val originalUrl = session.currentBaseUrl()
         try {
             session.setBaseUrl("http://192.168.1.100:8944")

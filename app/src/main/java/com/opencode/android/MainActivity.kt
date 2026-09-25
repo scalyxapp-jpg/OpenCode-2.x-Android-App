@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,11 +19,22 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.data.AppSettingsStore
+import com.opencode.android.data.BackendSession
+import com.opencode.android.data.ProviderDirectory
+import com.opencode.android.ui.LocalBackendSession
+import com.opencode.android.ui.LocalProviderDirectory
 import com.opencode.android.ui.OpenCodeApp
 import com.opencode.android.ui.theme.OpenCodeTheme
 
 @dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @javax.inject.Inject
+    lateinit var backendSession: BackendSession
+
+    @javax.inject.Inject
+    lateinit var providerDirectory: ProviderDirectory
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -69,7 +81,12 @@ class MainActivity : ComponentActivity() {
                 sansFont = settings.sansFont,
                 monoFont = settings.monoFont,
             ) {
-                OpenCodeApp()
+                CompositionLocalProvider(
+                    LocalBackendSession provides backendSession,
+                    LocalProviderDirectory provides providerDirectory,
+                ) {
+                    OpenCodeApp()
+                }
                 // The first frame is on screen, so the content is usable.
                 // Without this the platform only records time-to-INITIAL-display
                 // and startup regressions hide behind the empty window.

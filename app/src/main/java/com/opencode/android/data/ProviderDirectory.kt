@@ -4,8 +4,6 @@ import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.ProvidersResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,21 +107,16 @@ class ProviderDirectory(
     fun prefetch() {
         scope.launch { load() }
     }
+}
 
-    companion object {
-        @Volatile
-        private var shared: ProviderDirectory? = null
-
-        /**
-         * Process-wide instance shared by legacy static callers (the
-         * `ProviderCatalog` object) and Hilt injection, so both observe one
-         * cache. New code should inject `ProviderDirectory` instead.
-         */
-        fun shared(): ProviderDirectory = shared ?: synchronized(this) {
-            shared ?: ProviderDirectory(
-                fetch = { ApiClient.api.getProviderList() },
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            ).also { shared = it }
-        }
+/**
+ * GET /provider keys models as provider/model, while prompt requests carry the
+ * bare model id. Match both forms so a valid server model is not rejected by
+ * the client-side availability guard.
+ */
+internal fun ProviderEntry.hasModel(modelId: String): Boolean {
+    val requestedId = modelId.substringAfter('/')
+    return models.keys.any { catalogId ->
+        catalogId == modelId || catalogId.substringAfter('/') == requestedId
     }
 }

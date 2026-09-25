@@ -27,7 +27,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.opencode.android.data.ApiClient
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.BackendStore
 import com.opencode.android.ui.theme.spacing
@@ -46,7 +45,7 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
     var newUrl by remember { mutableStateOf("") }
     var renameFor by remember { mutableStateOf<BackendStore.Backend?>(null) }
     var renameText by remember { mutableStateOf("") }
-    val activeUrl = ApiClient.currentBaseUrl()
+    val activeUrl = com.opencode.android.ui.LocalBackendSession.current.currentBaseUrl()
 
     LazyColumn(
         modifier = Modifier

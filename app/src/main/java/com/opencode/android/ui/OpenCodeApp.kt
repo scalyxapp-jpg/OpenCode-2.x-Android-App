@@ -50,7 +50,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.opencode.android.data.ApiClient
 import com.opencode.android.ui.settings.SettingsScreen
 import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.launch
@@ -63,7 +62,6 @@ import androidx.navigation.compose.rememberNavController
 import com.opencode.android.data.BackendStore
 import com.opencode.android.data.LastSessionStore
 import com.opencode.android.data.MessageCache
-import com.opencode.android.data.ProviderCatalog
 import androidx.compose.ui.res.stringResource
 import com.opencode.android.R
 
@@ -109,6 +107,8 @@ private fun compactTabTitle(title: String): String {
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 internal fun OpenCodeApp() {
+    val backendSession = LocalBackendSession.current
+    val providerDirectory = LocalProviderDirectory.current
     // The disk-backed stores load on a background thread (see AppStartup).
     // Rendering before they are ready would race: the saved backend/session
     // would read as null and auto-connect would be skipped.
@@ -399,17 +399,17 @@ internal fun OpenCodeApp() {
         LaunchedEffect(Unit) {
             val backend = savedBackend ?: return@LaunchedEffect
             try {
-                ApiClient.setBaseUrl(backend.url)
+                backendSession.setBaseUrl(backend.url)
                 if (!backend.password.isNullOrBlank()) {
-                    ApiClient.setAuth(
+                    backendSession.setAuth(
                         backend.username.ifBlank {
                             BackendStore.DEFAULT_USERNAME
                         },
                         backend.password,
                     )
                 }
-                ProviderCatalog.invalidate()
-                ProviderCatalog.prefetch()
+                providerDirectory.invalidate()
+                providerDirectory.prefetch()
                 // Restore the last conversation, if the server still has it.
                 val sessionId = savedSessionId
                 if (sessionId != null) {

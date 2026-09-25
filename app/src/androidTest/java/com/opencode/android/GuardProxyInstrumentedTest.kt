@@ -1,7 +1,7 @@
 package com.opencode.android
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.opencode.android.data.ApiClient
+import com.opencode.android.data.BackendSession
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -20,8 +20,9 @@ class GuardProxyInstrumentedTest {
 
     @Test
     fun guardHealthIsReachableAndReportsMetrics() = runBlocking {
-        ApiClient.setBaseUrl("http://192.168.1.100:8932")
-        val response = runCatching { ApiClient.api.sessionGuardHealth() }.getOrNull()
+        val session = BackendSession()
+        session.setBaseUrl("http://192.168.1.100:8932")
+        val response = runCatching { session.api.sessionGuardHealth() }.getOrNull()
         assumeTrue("guard proxy not reachable", response?.isSuccessful == true)
         val body = response?.body()
         assertTrue(body?.ok == true)

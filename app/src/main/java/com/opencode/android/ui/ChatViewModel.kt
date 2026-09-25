@@ -7,7 +7,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.opencode.android.data.BackendSession
 import com.opencode.android.data.OpenCodeApi
-import com.opencode.android.data.ProviderCatalog
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.SseClient
 import com.opencode.android.ui.session.ConversationPort
@@ -201,6 +200,7 @@ class ChatViewModel @javax.inject.Inject constructor(
     // Provider rather than a captured instance.
     private val apiProvider: javax.inject.Provider<OpenCodeApi>,
     private val backendSession: BackendSession,
+    private val providerDirectory: com.opencode.android.data.ProviderDirectory,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
     private val api: OpenCodeApi get() = apiProvider.get()
@@ -408,8 +408,8 @@ class ChatViewModel @javax.inject.Inject constructor(
                 // rule the web and Settings → Models apply).
                 // Served from the shared cache — /provider is ~6 MB and is
                 // fetched once per process, not on every session open.
-                ProviderCatalog.load()
-                val providerGroups = ProviderCatalog.connectedProviders
+                providerDirectory.load()
+                val providerGroups = providerDirectory.connectedProviders
                 val models = providerGroups.flatMap { provider ->
                     provider.models.values.map { m ->
                         Model(
@@ -1813,7 +1813,7 @@ _uiState.update { current ->
                     )
                 }
                 val (providerId, modelId) = parseModelRef(effectiveModelRef)
-                if (!ProviderCatalog.isModelAvailable(providerId, modelId)) {
+                if (!providerDirectory.isAvailable(providerId, modelId)) {
                     val errorMsg = "Model $providerId/$modelId not available on server"
                     AppLog.e(APP_LOG_TAG, errorMsg)
                     UserMessages.post(R.string.could_not_send, errorMsg)

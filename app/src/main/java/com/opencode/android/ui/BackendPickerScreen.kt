@@ -50,9 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.opencode.android.data.ApiClient
 import com.opencode.android.data.BackendStore
-import com.opencode.android.data.ProviderCatalog
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.settings.SectionHeader
 import kotlinx.coroutines.launch
@@ -71,6 +69,8 @@ import com.opencode.android.R
 internal fun BackendPickerScreen(
     onConnected: () -> Unit,
 ) {
+    val backendSession = LocalBackendSession.current
+    val providerDirectory = LocalProviderDirectory.current
     val scope = rememberCoroutineScope()
     var backends by remember { mutableStateOf(BackendStore.backends()) }
     var showAdd by remember { mutableStateOf(false) }
@@ -97,7 +97,7 @@ internal fun BackendPickerScreen(
         errorText = null
         scope.launch {
             try {
-                val needsAuth = ApiClient.requiresAuth(backend.url)
+                val needsAuth = backendSession.requiresAuth(backend.url)
                 if (needsAuth == null) {
                     // Probe failed (unreachable). Do NOT clear credentials or
                     // treat the server as open — report it and stop.
@@ -113,14 +113,14 @@ internal fun BackendPickerScreen(
                     connectingUrl = null
                     return@launch
                 }
-                ApiClient.setBaseUrl(backend.url)
+                backendSession.setBaseUrl(backend.url)
                 if (needsAuth) {
-                    ApiClient.setAuth(username.ifBlank { BackendStore.DEFAULT_USERNAME }, pass)
+                    backendSession.setAuth(username.ifBlank { BackendStore.DEFAULT_USERNAME }, pass)
                 } else {
-                    ApiClient.setAuth(null, null)
+                    backendSession.setAuth(null, null)
                 }
                 // Verify the connection (health must be reachable).
-                val health = ApiClient.api.health()
+                val health = backendSession.api.health()
                 if (!health.healthy) {
                     errorText = serverUnhealthyMsg
                     connectingUrl = null
@@ -135,8 +135,8 @@ internal fun BackendPickerScreen(
                 backends = BackendStore.backends()
                 // Warm the provider catalog (~6 MB, slow to parse) in the
                 // background so Settings/chat never wait for it later.
-                ProviderCatalog.invalidate()
-                ProviderCatalog.prefetch()
+                providerDirectory.invalidate()
+                providerDirectory.prefetch()
                 connectingUrl = null
                 // Hero moment: celebrate the successful connection with an
                 // expressive spring before navigating on.

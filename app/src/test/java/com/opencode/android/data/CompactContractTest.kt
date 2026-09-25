@@ -26,12 +26,14 @@ import org.junit.Test
 class CompactContractTest {
 
     private lateinit var server: MockWebServer
+    private lateinit var session: BackendSession
 
     @Before
     fun setUp() {
         server = MockWebServer()
         server.start()
-        ApiClient.setBaseUrl(server.url("/").toString())
+        session = BackendSession()
+        session.setBaseUrl(server.url("/").toString())
     }
 
     @After
@@ -43,7 +45,7 @@ class CompactContractTest {
     fun `summarize posts the exact web body, header and path`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
 
-        val response = ApiClient.api.summarizeSession(
+        val response = session.api.summarizeSession(
             sessionId = "ses_abc",
             directory = "%2Fhome%2Fuser%2FDocuments",
             body = SummarizeRequest(
@@ -73,7 +75,7 @@ class CompactContractTest {
         // The endpoint returns a Retrofit Response; the payload is the literal
         // `true` body and a non-2xx is surfaced as !isSuccessful (not a throw),
         // so the app can read the server's error message.
-        val response = ApiClient.api.summarizeSession(
+        val response = session.api.summarizeSession(
             sessionId = "ses_abc",
             directory = null,
             body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
@@ -93,7 +95,7 @@ class CompactContractTest {
                 .setHeader("Content-Type", "application/json"),
         )
 
-        val response = ApiClient.api.summarizeSession(
+        val response = session.api.summarizeSession(
             sessionId = "ses_abc",
             directory = null,
             body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
@@ -113,7 +115,7 @@ class CompactContractTest {
     fun `a missing directory omits the header entirely`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
 
-        val response = ApiClient.api.summarizeSession(
+        val response = session.api.summarizeSession(
             sessionId = "ses_abc",
             directory = null,
             body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),

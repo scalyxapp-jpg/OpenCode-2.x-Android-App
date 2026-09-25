@@ -185,17 +185,5 @@ class BackendSession(
         // On a real Android device 127.0.0.1 points to the device itself, so we
         // must reach the server over the Tailscale network.
         const val DEFAULT_BASE_URL = "http://192.168.1.100:4096"
-
-        @Volatile
-        private var shared: BackendSession? = null
-
-        /**
-         * Process-wide instance shared by legacy static callers (the
-         * `ApiClient` object) and Hilt injection, so both observe one
-         * connection. New code should inject `BackendSession` instead.
-         */
-        fun shared(): BackendSession = shared ?: synchronized(this) {
-            shared ?: BackendSession().also { shared = it }
-        }
     }
 }

@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import com.opencode.android.data.ApiClient
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.TopBarTitle
@@ -46,6 +45,7 @@ internal fun SettingsScreen(
     onBack: () -> Unit,
     onSwitchBackend: () -> Unit = {},
 ) {
+    val backendSession = com.opencode.android.ui.LocalBackendSession.current
     var tab by remember { mutableIntStateOf(0) }
     val tabs = listOf("General", "Shortcuts", "Servers", "Providers", "Models")
     // Web parity: the settings header shows "OpenCode Desktop · v<version>".
@@ -53,7 +53,7 @@ internal fun SettingsScreen(
 
     LaunchedEffect(Unit) {
         version = try {
-            ApiClient.api.globalHealth().version
+            backendSession.api.globalHealth().version
         } catch (_: Exception) {
             null
         }
@@ -329,8 +329,9 @@ internal fun GeneralTab() {
 
 @Composable
 private fun SessionGuardSection() {
+    val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val health by produceState<com.opencode.android.domain.SessionGuardHealth?>(initialValue = null) {
-        value = runCatching { ApiClient.api.sessionGuardHealth() }
+        value = runCatching { backendSession.api.sessionGuardHealth() }
             .getOrNull()
             ?.takeIf { it.isSuccessful }
             ?.body()

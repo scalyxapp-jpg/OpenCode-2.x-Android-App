@@ -10,6 +10,9 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import javax.inject.Singleton
 
 /**
@@ -20,10 +23,10 @@ import javax.inject.Singleton
  * container rather than by name, so a test can supply a fake by installing a
  * module that overrides these providers.
  *
- * [BackendSession] and [ProviderDirectory] are process-wide singletons defined
- * in `data/`. Their `shared()` factory keeps the legacy `object` adapters
- * (`ApiClient`, `ProviderCatalog`) on the same instance that Hilt injects, so
- * there is one connection and one catalog, not two.
+ * [BackendSession] and [ProviderDirectory] are created here and only here:
+ * Hilt owns the single process-wide instance, and the UI reads it through the
+ * composition locals provided at the app root. The legacy `shared()` accessors
+ * and the `ApiClient` / `ProviderCatalog` static facades are gone.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -31,7 +34,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideBackendSession(): BackendSession = BackendSession.shared()
+    fun provideBackendSession(): BackendSession = BackendSession()
 
     // Deliberately UNSCOPED: BackendSession swaps its Retrofit instance when the
     // backend URL changes, so every resolution must return the current one.
@@ -40,7 +43,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideProviderDirectory(): ProviderDirectory = ProviderDirectory.shared()
+    fun provideProviderDirectory(session: BackendSession): ProviderDirectory = ProviderDirectory(
+        // Resolved per fetch: the directory outlives a backend switch.
+        fetch = { session.api.getProviderList() },
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    )
 
     @Provides
     @Singleton

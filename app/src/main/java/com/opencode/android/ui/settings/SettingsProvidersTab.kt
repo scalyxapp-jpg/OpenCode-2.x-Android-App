@@ -33,10 +33,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.opencode.android.data.ApiClient
-import com.opencode.android.data.ProviderCatalog
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.InlineSpinner
+import com.opencode.android.data.ProviderDirectory
 import com.opencode.android.domain.AuthSetRequest
 import com.opencode.android.domain.ProviderAuthMethod
 import com.opencode.android.domain.ProviderEntry
@@ -74,6 +73,8 @@ internal val POPULAR_PROVIDERS = listOf(
 //  - Connect    = GET /provider/auth, then PUT /auth/{id} {"type":"api","key":…}
 @Composable
 internal fun ProvidersTab() {
+    val providerDirectory = com.opencode.android.ui.LocalProviderDirectory.current
+    val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val scope = rememberCoroutineScope()
     var reload by remember { mutableIntStateOf(0) }
     var connectFor by remember { mutableStateOf<ProviderEntry?>(null) }
@@ -81,18 +82,21 @@ internal fun ProvidersTab() {
 
     // Shared, cached catalog: /provider is ~6 MB, so it is fetched once per
     // process instead of on every tab switch.
-    val catalog by ProviderCatalog.state.collectAsStateWithLifecycle()
+    val catalog by providerDirectory.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(reload) { ProviderCatalog.load(force = reload > 0) }
+    LaunchedEffect(reload) {
+        if (reload > 0) providerDirectory.invalidate()
+        providerDirectory.load()
+    }
 
     val connectedProviders = when (val c = catalog) {
-        is ProviderCatalog.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
+        is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
         else -> emptyList()
     }
-    val allProviders = (catalog as? ProviderCatalog.State.Ready)?.providers ?: emptyList()
-    val connected = (catalog as? ProviderCatalog.State.Ready)?.connectedIds ?: emptySet()
-    val loadError = (catalog as? ProviderCatalog.State.Failed)?.message
-    val loading = catalog is ProviderCatalog.State.Loading || catalog is ProviderCatalog.State.Idle
+    val allProviders = (catalog as? ProviderDirectory.State.Ready)?.providers ?: emptyList()
+    val connected = (catalog as? ProviderDirectory.State.Ready)?.connectedIds ?: emptySet()
+    val loadError = (catalog as? ProviderDirectory.State.Failed)?.message
+    val loading = catalog is ProviderDirectory.State.Loading
     val popular = POPULAR_PROVIDERS.filterNot { connected.contains(it.id) }
 
     LazyColumn(
@@ -169,11 +173,11 @@ internal fun ProvidersTab() {
                     OutlinedButton(onClick = {
                         scope.launch {
                             try {
-                                ApiClient.api.disconnectProvider(p.id)
-                                ApiClient.api.globalDispose()
+                                backendSession.api.disconnectProvider(p.id)
+                                backendSession.api.globalDispose()
                             } catch (_: Exception) {
                             }
-                            ProviderCatalog.invalidate()
+                            providerDirectory.invalidate()
                             reload++
                         }
                     }) { Text(stringResource(R.string.disconnect)) }
@@ -294,6 +298,7 @@ internal fun ConnectProviderDialog(
     onDismiss: () -> Unit,
     onConnected: () -> Unit,
 ) {
+    val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val scope = rememberCoroutineScope()
     var methods by remember { mutableStateOf<List<ProviderAuthMethod>?>(null) }
     var key by remember { mutableStateOf("") }
@@ -303,7 +308,7 @@ internal fun ConnectProviderDialog(
 
     LaunchedEffect(provider.id) {
         methods = try {
-            ApiClient.api.getProviderAuth()[provider.id] ?: emptyList()
+            backendSession.api.getProviderAuth()[provider.id] ?: emptyList()
         } catch (_: Exception) {
             emptyList()
         }
@@ -365,7 +370,7 @@ internal fun ConnectProviderDialog(
                     error = null
                     scope.launch {
                         try {
-                            val resp = ApiClient.api.setProviderAuth(
+                            val resp = backendSession.api.setProviderAuth(
                                 provider.id,
                                 AuthSetRequest(
                                     type = apiMethod?.type ?: "api",
@@ -375,7 +380,7 @@ internal fun ConnectProviderDialog(
                             )
                             if (resp.isSuccessful) {
                                 try {
-                                    ApiClient.api.globalDispose()
+                                    backendSession.api.globalDispose()
                                 } catch (_: Exception) {
                                 }
                                 onConnected()

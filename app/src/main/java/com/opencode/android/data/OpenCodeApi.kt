@@ -421,28 +421,3 @@ interface OpenCodeApi {
         @Path("requestID") requestId: String,
     ): ResponseBody
 }
-
-object ApiClient {
-    // Legacy compatibility adapter over BackendSession. New code should inject
-    // BackendSession (or OpenCodeApi) directly; this object keeps the old static
-    // call sites working until they migrate.
-    private val session: BackendSession get() = BackendSession.shared()
-
-    // A getter, not a field: the Retrofit instance changes when the backend does.
-    val api: OpenCodeApi get() = session.api
-
-    fun setBaseUrl(url: String) = session.setBaseUrl(url)
-
-    fun currentBaseUrl(): String = session.currentBaseUrl()
-
-    fun setAuth(username: String?, password: String?) = session.setAuth(username, password)
-
-    fun hasAuth(): Boolean = session.hasAuth()
-
-    suspend fun requiresAuth(url: String): Boolean? = session.requiresAuth(url)
-
-    suspend fun getMessagesStreamed(sessionId: String, limit: Int?): List<Message>? =
-        session.getMessagesStreamed(sessionId, limit)
-
-    const val DEFAULT_BASE_URL = BackendSession.DEFAULT_BASE_URL
-}
