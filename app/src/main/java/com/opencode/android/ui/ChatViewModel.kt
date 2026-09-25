@@ -10,8 +10,11 @@ import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.SseClient
 import com.opencode.android.ui.session.ConversationPort
+import com.opencode.android.ui.session.ServerSelection
 import com.opencode.android.ui.session.SessionCommand
 import com.opencode.android.ui.session.SessionConversation
+import com.opencode.android.ui.session.UiSelection
+import com.opencode.android.ui.session.effectiveSelection
 import com.opencode.android.util.ModelSelection
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.ContextUsage
@@ -1787,31 +1790,30 @@ _uiState.update { current ->
                 val serverModelRef = serverSession?.let {
                     resolveSessionModelRef(it.model, _uiState.value.models)
                 }
-                val effectiveModelRef = if (modelSelectionPending) {
-                    _uiState.value.selectedModel
-                } else {
-                    serverModelRef ?: _uiState.value.selectedModel
-                }
-                val effectiveAgent = if (agentSelectionPending) {
-                    _uiState.value.selectedAgent
-                } else {
-                    serverSession?.agent ?: _uiState.value.selectedAgent
-                }
-                val effectiveVariant = if (modelSelectionPending) {
-                    _uiState.value.selectedVariant
-                } else {
-                    serverSession?.model?.variant ?: _uiState.value.selectedVariant
-                }
+                val effective = effectiveSelection(
+                    server = ServerSelection(
+                        model = serverModelRef,
+                        agent = serverSession?.agent,
+                        variant = serverSession?.model?.variant,
+                    ),
+                    ui = UiSelection(
+                        model = _uiState.value.selectedModel,
+                        agent = _uiState.value.selectedAgent,
+                        variant = _uiState.value.selectedVariant,
+                        modelPending = modelSelectionPending,
+                        agentPending = agentSelectionPending,
+                    ),
+                )
                 _uiState.update { current ->
                     current.copy(
-                        selectedModel = if (modelSelectionPending) current.selectedModel
-                            else serverModelRef ?: current.selectedModel,
-                        selectedAgent = if (agentSelectionPending) current.selectedAgent
-                            else serverSession?.agent ?: current.selectedAgent,
-                        selectedVariant = if (modelSelectionPending) current.selectedVariant
-                            else serverSession?.model?.variant ?: current.selectedVariant,
+                        selectedModel = effective.model,
+                        selectedAgent = effective.agent,
+                        selectedVariant = effective.variant,
                     )
                 }
+                val effectiveModelRef = effective.model
+                val effectiveAgent = effective.agent
+                val effectiveVariant = effective.variant
                 val (providerId, modelId) = parseModelRef(effectiveModelRef)
                 if (!providerDirectory.isAvailable(providerId, modelId)) {
                     val errorMsg = "Model $providerId/$modelId not available on server"
