@@ -209,6 +209,17 @@ class ChatViewModel @javax.inject.Inject constructor(
 ) : ViewModel() {
     private val api: OpenCodeApi get() = apiProvider.get()
 
+    // Guard revisions for the active session(s); owned by the conversation
+    // workflows through the transport.
+    private val selectionGuard = com.opencode.android.util.SelectionGuard()
+    private val autoAdoptedGuardRevisions = mutableSetOf<Long>()
+
+    // Transport seam for the workflows SessionConversation owns (interrupt).
+    private val sessionTransport = com.opencode.android.data.BackendSessionTransport(
+        session = backendSession,
+        guard = selectionGuard,
+    )
+
     // Guarded prompt_async state machine (409 retry, readable error, close).
     private val promptSender = PromptSender(
         sendPromptAsync = { sessionId, body, guardRevision ->
@@ -226,8 +237,14 @@ class ChatViewModel @javax.inject.Inject constructor(
     // projects the conversation's projection into it.
     private val conversationPort = object : ConversationPort {
         override fun send() = performSend()
-        override fun interrupt() = performInterrupt()
         override fun retry() = performRetry()
+
+        override fun notifyInterruptFailed(message: String?) {
+            AppLog.e(APP_LOG_TAG, "abort failed: $message")
+            UserMessages.post(R.string.could_not_interrupt, message ?: "")
+        }
+
+        override fun refreshMessages(sessionId: String) = this@ChatViewModel.refreshMessages(sessionId)
 
         override fun reconcile(includeMeta: Boolean) {
             _uiState.value.session?.id?.let { scheduleRefresh(it, includeMeta) }
@@ -290,6 +307,7 @@ class ChatViewModel @javax.inject.Inject constructor(
         scope = viewModelScope,
         models = { _uiState.value.models },
         friendlyError = ::friendlyError,
+        transport = sessionTransport,
         port = conversationPort,
     )
 
@@ -1003,8 +1021,6 @@ _uiState.update { current ->
     private var pollJob: Job? = null
     private var lastPollUpdated: Long? = null
     private var modelSelectionPending = false
-    private val selectionGuard = com.opencode.android.util.SelectionGuard()
-    private val autoAdoptedGuardRevisions = mutableSetOf<Long>()
     private var agentSelectionPending = false
 
     private suspend fun loadGuardStatus(sessionId: String) {
@@ -2066,33 +2082,6 @@ _uiState.update { current ->
     }
 
     fun interrupt() = conversation.dispatch(SessionCommand.Interrupt)
-
-    private fun performInterrupt() {
-        val session = _uiState.value.session ?: return
-        // Optimistically clear the generating state (web shows Send again
-        // immediately) — but route it through the streamer's finalize so the
-        // partial answer stays on screen. Plainly clearing isGenerating hid the
-        // live section, so pressing Stop made the text already received vanish
-        // until the server persisted the aborted turn.
-        conversation.finalize()
-        viewModelScope.launch {
-            try {
-                // Web stop action: POST /session/{id}/abort -> 200 "true".
-                val response = api.abort(session.id)
-                if (!response.isSuccessful) {
-                    // Fallback for older servers.
-                    api.interrupt(session.id)
-                }
-            } catch (e: Exception) {
-                AppLog.e(APP_LOG_TAG, "abort failed: ${e.message}")
-                UserMessages.post(R.string.could_not_interrupt, "${e.message}")
-            } finally {
-                // Web refreshes the session todo after aborting; we reload
-                // messages so the final (aborted) state is shown.
-                refreshMessages(session.id)
-            }
-        }
-    }
 
     override fun onCleared() {
         conversation.stop()

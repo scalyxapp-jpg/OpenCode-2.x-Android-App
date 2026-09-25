@@ -1,5 +1,6 @@
 package com.opencode.android.ui.session
 
+import com.opencode.android.data.SessionTransport
 import com.opencode.android.domain.Model
 import com.opencode.android.ui.LiveStreamState
 import kotlinx.coroutines.CoroutineScope
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 
 /**
@@ -50,7 +52,6 @@ data class ConversationState(
  */
 interface ConversationPort {
     fun send()
-    fun interrupt()
     fun retry()
     fun reconcile(includeMeta: Boolean)
     fun loadPendingQuestions()
@@ -58,6 +59,8 @@ interface ConversationPort {
     fun notifyPermission()
     fun notifyDone()
     fun notifyError(message: String?)
+    fun notifyInterruptFailed(message: String?)
+    fun refreshMessages(sessionId: String)
     fun refreshSessionModel()
     fun loadVcsDiff()
 
@@ -74,8 +77,10 @@ class SessionConversation(
     scope: CoroutineScope,
     models: () -> List<Model>,
     friendlyError: (JsonElement?) -> String?,
+    private val transport: SessionTransport,
     private val port: ConversationPort,
 ) {
+    private val scope = scope
     val streamer = SessionStreamer(source, scope, models, friendlyError, ::handleEffect)
 
     private val _commands = MutableSharedFlow<SessionCommand>(extraBufferCapacity = 16)
@@ -102,8 +107,34 @@ class SessionConversation(
                 streamer.start(command.sessionId, command.baseUrl)
             }
             SessionCommand.Send -> port.send()
-            SessionCommand.Interrupt -> port.interrupt()
+            SessionCommand.Interrupt -> interrupt()
             SessionCommand.Retry -> port.retry()
+        }
+    }
+
+    /**
+     * The interrupt workflow: finalize the live stream first so the partial
+     * answer stays on screen (plainly clearing isGenerating hid it), then ask
+     * the server to abort, falling back to the older interrupt endpoint, and
+     * finally reload the messages so the aborted state is shown.
+     */
+    private fun interrupt() {
+        finalize()
+        val sessionId = _state.value.sessionId ?: return
+        scope.launch {
+            try {
+                // Web stop action: POST /session/{id}/abort -> 200 "true".
+                val response = transport.abort(sessionId)
+                if (!response.isSuccessful) {
+                    transport.interrupt(sessionId)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                port.notifyInterruptFailed(e.message)
+            } finally {
+                port.refreshMessages(sessionId)
+            }
         }
     }
 
