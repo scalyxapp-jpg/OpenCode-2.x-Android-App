@@ -24,6 +24,17 @@ Domain glossary for the OpenCode Android client and its session-guard proxy.
 - **PromptSender** — the guarded `prompt_async` state machine: revision lookup,
   once-only 409 retry without a stale revision, readable error, response close
   (`ui/session/PromptSender.kt`).
+- **SessionTransport** — the transport seam for the session-level HTTP a
+  conversation workflow owns (guarded prompt, abort/interrupt, guard
+  revisions). `BackendSessionTransport` is the production adapter over
+  `BackendSession` + `SelectionGuard`; `SessionConversation` takes the
+  interface, so workflows are testable with a fake (`data/SessionTransport.kt`).
+- **Conversation flags ownership** — `ConversationState` is the authoritative
+  projection of the event stream (generating, pending-persist, compacting,
+  status error, SSE connected, selected model). `ChatUiState` mirrors those
+  fields through `ConversationPort` synchronously, so a ViewModel read right
+  after a write is never stale. The mirror stays until the send workflow moves
+  wholesale and `ChatUiState` becomes a pure projection.
 - **Session Guard** — the optional proxy that pins a session's
   provider/model/variant/agent and rewrites prompts to that selection.
 - **Guard Drift** — the state where the upstream session selection differs from
