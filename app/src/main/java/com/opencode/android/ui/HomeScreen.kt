@@ -119,7 +119,7 @@ internal fun HomeScreen(
         uiState.searchQuery,
         uiState.showOnlyGuarded,
     ) {
-        filterSessions(uiState.sessions, uiState.searchQuery, uiState.showOnlyGuarded)
+        filterSessions(uiState.sessions, uiState.searchQuery, uiState.showOnlyGuarded, uiState.messageMatchIds)
     }
     val grouped = remember(filteredSessions, uiState.pinnedIds) {
         groupSessions(filteredSessions, uiState.pinnedIds)
@@ -673,6 +673,7 @@ internal fun filterSessions(
     sessions: List<Session>,
     query: String,
     onlyGuarded: Boolean,
+    messageMatchIds: Set<String> = emptySet(),
 ): List<Session> {
     val q = query.trim()
     return sessions
@@ -680,7 +681,8 @@ internal fun filterSessions(
         .filter {
             q.isBlank() ||
                 (it.title ?: "").contains(q, ignoreCase = true) ||
-                (it.path ?: "").contains(q, ignoreCase = true)
+                (it.path ?: "").contains(q, ignoreCase = true) ||
+                it.id in messageMatchIds
         }
 }
 

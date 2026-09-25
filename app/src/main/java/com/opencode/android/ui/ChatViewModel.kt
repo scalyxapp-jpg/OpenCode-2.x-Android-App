@@ -2066,6 +2066,14 @@ _uiState.update { current ->
 
     private fun performRetry() {
         val sessionId = _uiState.value.session?.id ?: return
+        // A failed send restores the text + attachments and shows the error
+        // banner. Its Retry must re-run that send, not just reload the session
+        // (which would leave the user staring at the same unsent prompt).
+        if (_uiState.value.attachments.isNotEmpty() && _uiState.value.inputText.isNotBlank()) {
+            _uiState.update { it.copy(error = null, statusError = null) }
+            performSend()
+            return
+        }
         _uiState.update { it.copy(error = null, statusError = null) }
         loadSession(sessionId)
     }

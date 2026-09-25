@@ -129,4 +129,37 @@ object MessageCache : MessageStore {
             // best-effort
         }
     }
+
+    /**
+     * Session ids whose cached tail contains [query] (case-insensitive), so the
+     * home search can surface conversations by message content and not only by
+     * title. The server has no message-search endpoint, so this is deliberately
+     * local: it only sees the cached tail (newest [MAX_MESSAGES]) and is best
+     * effort. Requires at least two characters to avoid scanning on every key.
+     */
+    suspend fun search(query: String): List<String> = withContext(Dispatchers.IO) {
+        val q = query.trim()
+        if (q.length < 2) return@withContext emptyList()
+        val base = dir ?: appContext?.let { File(it.filesDir, DIR) } ?: return@withContext emptyList()
+        try {
+            base.listFiles()
+                ?.mapNotNull { file ->
+                    try {
+                        val messages = json.decodeFromString<List<Message>>(file.readText())
+                        val hit = messages.any { message ->
+                            message.parts.any { part ->
+                                part.text?.contains(q, ignoreCase = true) == true
+                            }
+                        }
+                        if (hit) file.nameWithoutExtension else null
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+                ?: emptyList()
+        } catch (e: Exception) {
+            AppLog.e(APP_LOG_TAG, "MessageCache search failed: ${e.message}")
+            emptyList()
+        }
+    }
 }

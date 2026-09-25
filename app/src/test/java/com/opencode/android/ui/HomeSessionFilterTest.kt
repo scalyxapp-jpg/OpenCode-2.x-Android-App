@@ -31,4 +31,15 @@ class HomeSessionFilterTest {
         val result = filterSessions(listOf(guarded, plain), query = "plain", onlyGuarded = true)
         assertEquals(emptyList<String>(), result.map { it.id })
     }
+
+    @Test
+    fun `message-content match keeps a session whose title does not match`() {
+        val result = filterSessions(
+            listOf(guarded, plain),
+            query = "deployment",
+            onlyGuarded = false,
+            messageMatchIds = setOf("ses_plain"),
+        )
+        assertEquals(listOf("ses_plain"), result.map { it.id })
+    }
 }

@@ -43,6 +43,9 @@ data class HomeUiState(
     val selectedProject: HomeProject? = null,
     val sessions: List<Session> = emptyList(),
     val searchQuery: String = "",
+    // Session ids whose cached message tail matches `searchQuery` (local,
+    // best-effort). Lets the search find conversations by content, not title.
+    val messageMatchIds: Set<String> = emptySet(),
     val showOnlyGuarded: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -338,6 +341,13 @@ class HomeViewModel @Inject constructor(
 
     fun setSearchQuery(query: String) {
         _uiState.update { it.copy(searchQuery = query) }
+        viewModelScope.launch {
+            val ids = com.opencode.android.data.MessageCache.search(query).toSet()
+            // Ignore a stale result: the query may have changed while scanning.
+            if (_uiState.value.searchQuery == query) {
+                _uiState.update { it.copy(messageMatchIds = ids) }
+            }
+        }
     }
 
     fun setShowOnlyGuarded(enabled: Boolean) {
