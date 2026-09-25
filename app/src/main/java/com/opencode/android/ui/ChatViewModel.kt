@@ -2308,6 +2308,42 @@ _uiState.update { current ->
         }
     }
 
+    /** Child sessions (subagents spawned by this session). */
+    fun loadChildSessions(onLoaded: (List<Session>) -> Unit) {
+        val sessionId = _uiState.value.session?.id ?: return
+        viewModelScope.launch {
+            val children = try {
+                api.getSessionChildren(sessionId)
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "getSessionChildren failed: ${e.message}")
+                emptyList()
+            }
+            onLoaded(children)
+        }
+    }
+
+    /**
+     * Web "Initialize": asks the server to create/refresh the project's
+     * AGENTS.md from the current codebase. Runs a real turn, so it is only
+     * triggered explicitly from the session menu.
+     */
+    fun initProject(onDone: (Boolean) -> Unit) {
+        val sessionId = _uiState.value.session?.id ?: return
+        viewModelScope.launch {
+            val ok = try {
+                api.initSession(sessionId, kotlinx.serialization.json.JsonObject(emptyMap()))
+                    .close()
+                true
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "initSession failed: ${e.message}")
+                UserMessages.post(R.string.action_failed, "${e.message}")
+                false
+            }
+            if (ok) refreshMessages(sessionId)
+            onDone(ok)
+        }
+    }
+
     fun exportSession(onDone: (String?) -> Unit) {
         val session = _uiState.value.session ?: return
         viewModelScope.launch {

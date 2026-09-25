@@ -328,6 +328,8 @@ internal fun ChatScreen(
                     var showMore by remember { mutableStateOf(false) }
                     var showRename by remember { mutableStateOf(false) }
                     var showDeleteConfirm by remember { mutableStateOf(false) }
+                    var showChildren by remember { mutableStateOf(false) }
+                    var children by remember { mutableStateOf<List<com.opencode.android.domain.Session>>(emptyList()) }
                     Box {
                         IconButton(onClick = { showMore = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
@@ -395,6 +397,30 @@ internal fun ChatScreen(
                                     }
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.subagent_sessions)) },
+                                onClick = {
+                                    showMore = false
+                                    viewModel.loadChildSessions { list ->
+                                        children = list
+                                        showChildren = true
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.initialize_project)) },
+                                onClick = {
+                                    showMore = false
+                                    viewModel.initProject { ok ->
+                                        toast(
+                                            context,
+                                            context.getString(
+                                                if (ok) R.string.initialized_ok else R.string.init_failed,
+                                            ),
+                                        )
+                                    }
+                                },
+                            )
                             HorizontalDivider()
                             DropdownMenuItem(
                                 text = {
@@ -421,6 +447,39 @@ internal fun ChatScreen(
                                 viewModel.renameSession(newTitle) { showRename = false }
                             },
                             onDismiss = { showRename = false },
+                        )
+                    }
+                    if (showChildren) {
+                        AlertDialog(
+                            onDismissRequest = { showChildren = false },
+                            title = { Text(stringResource(R.string.subagent_sessions)) },
+                            text = {
+                                if (children.isEmpty()) {
+                                    Text(stringResource(R.string.no_subagents))
+                                } else {
+                                    Column {
+                                        children.forEach { child ->
+                                            TextButton(
+                                                onClick = {
+                                                    showChildren = false
+                                                    onOpenSession(child.id)
+                                                },
+                                            ) {
+                                                Text(
+                                                    text = child.title ?: child.id,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showChildren = false }) {
+                                    Text(stringResource(R.string.close))
+                                }
+                            },
                         )
                     }
                     if (showDeleteConfirm) {

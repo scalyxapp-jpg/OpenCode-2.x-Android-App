@@ -255,6 +255,9 @@ internal fun GeneralTab() {
         item { SettingSwitch(stringResource(R.string.settings_server_status), stringResource(R.string.settings_server_status_sub), settings.showServerStatus) { AppSettingsStore.setShowServerStatus(it) } }
         item { SettingSwitch(stringResource(R.string.settings_show_agent), stringResource(R.string.settings_show_agent_sub), settings.showCustomAgents) { AppSettingsStore.setShowCustomAgents(it) } }
 
+        item { SectionHeader(stringResource(R.string.settings_server)) }
+        item { ServerSection() }
+
         item { SectionHeader(stringResource(R.string.settings_backup)) }
         item {
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -324,6 +327,82 @@ internal fun GeneralTab() {
         }
 
         item { Spacer(Modifier.height(MaterialTheme.spacing.large)) }
+    }
+}
+
+@Composable
+// Web-parity endpoints the app did not expose yet: POST /global/upgrade and
+// GET /skill (Settings → Server).
+private fun ServerSection() {
+    val backendSession = com.opencode.android.ui.LocalBackendSession.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var showSkills by remember { mutableStateOf(false) }
+    var skills by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(stringResource(R.string.settings_update_server))
+            androidx.compose.material3.TextButton(
+                enabled = !busy,
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        val ok = runCatching {
+                            backendSession.api.globalUpgrade(
+                                kotlinx.serialization.json.JsonObject(emptyMap()),
+                            ).close()
+                        }.isSuccess
+                        busy = false
+                        UserMessages.post(
+                            if (ok) R.string.settings_update_requested else R.string.settings_update_failed,
+                        )
+                    }
+                },
+            ) { Text(stringResource(R.string.settings_update_server)) }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(stringResource(R.string.settings_skills))
+            androidx.compose.material3.TextButton(onClick = {
+                scope.launch {
+                    skills = runCatching {
+                        backendSession.api.getSkills().mapNotNull { el ->
+                            (el as? kotlinx.serialization.json.JsonObject)
+                                ?.get("name")
+                                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                        }
+                    }.getOrDefault(emptyList())
+                    showSkills = true
+                }
+            }) { Text(stringResource(R.string.settings_skills)) }
+        }
+    }
+
+    if (showSkills) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showSkills = false },
+            title = { Text(stringResource(R.string.settings_skills)) },
+            text = {
+                if (skills.isEmpty()) {
+                    Text(stringResource(R.string.settings_no_skills))
+                } else {
+                    Column { skills.forEach { Text(it) } }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showSkills = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            },
+        )
     }
 }
 

@@ -42,6 +42,7 @@ import com.opencode.android.domain.SessionListResponse
 import com.opencode.android.domain.SessionQuestionListResponse
 import com.opencode.android.domain.SessionResponse
 import com.opencode.android.domain.SessionUpdateRequest
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import okhttp3.ResponseBody
 import retrofit2.http.Body
@@ -434,4 +435,120 @@ interface OpenCodeApi {
         @Path("sessionID") sessionId: String,
         @Path("requestID") requestId: String,
     ): ResponseBody
+
+    // ------------------------------------------------------------------
+    // Web-parity coverage for endpoints the app did not call yet.
+    // Shapes are the ones verified against the running server; where the
+    // response is opaque it is a JsonElement so the caller decodes what it
+    // needs without a rigid DTO.
+    // ------------------------------------------------------------------
+
+    /** Child sessions (subagents spawned by this session). */
+    @GET("session/{sessionID}/children")
+    suspend fun getSessionChildren(@Path("sessionID") sessionId: String): List<Session>
+
+    /** Per-session file diff (the Changes tab uses /vcs/diff; this is the
+     *  session-scoped view the web session header exposes). */
+    @GET("session/{sessionID}/diff")
+    suspend fun getSessionDiff(
+        @Path("sessionID") sessionId: String,
+        @Query("messageID") messageId: String? = null,
+    ): List<JsonElement>
+
+    /** Create/refresh the project's AGENTS.md (web "Initialize"). */
+    @POST("session/{sessionID}/init")
+    suspend fun initSession(
+        @Path("sessionID") sessionId: String,
+        @Body body: JsonElement,
+    ): ResponseBody
+
+    /** Installed skills (Settings → Skills). */
+    @GET("skill")
+    suspend fun getSkills(): List<JsonElement>
+
+    /** Provider configuration including credentials — do not render raw keys. */
+    @GET("config/providers")
+    suspend fun getConfigProviders(): JsonElement
+
+    /** OAuth sign-in: step 1 returns the authorize URL + method. */
+    @POST("provider/{providerID}/oauth/authorize")
+    suspend fun providerOauthAuthorize(
+        @Path("providerID") providerId: String,
+        @Body body: JsonElement,
+    ): JsonElement
+
+    /** OAuth sign-in: step 2 exchanges the pasted code. */
+    @POST("provider/{providerID}/oauth/callback")
+    suspend fun providerOauthCallback(
+        @Path("providerID") providerId: String,
+        @Body body: JsonElement,
+    ): ResponseBody
+
+    /** Experimental: session list with extra metadata. */
+    @GET("experimental/session")
+    suspend fun getExperimentalSessions(): List<Session>
+
+    /** Experimental: git worktrees of the project. */
+    @GET("experimental/worktree")
+    suspend fun getExperimentalWorktrees(
+        @Query("directory") directory: String? = null,
+    ): List<JsonElement>
+
+    /** Experimental: MCP resources exposed by connected servers. */
+    @GET("experimental/resource")
+    suspend fun getExperimentalResources(
+        @Query("directory") directory: String? = null,
+    ): JsonElement
+
+    /** Experimental: invoke an MCP tool directly. */
+    @POST("experimental/tool")
+    suspend fun callExperimentalTool(
+        @Body body: JsonElement,
+    ): ResponseBody
+
+    /** Create a PTY. Attaching to a live PTY is a websocket at /pty/{id}. */
+    @POST("pty")
+    suspend fun createPty(
+        @Body body: JsonElement,
+    ): JsonElement
+
+    /** PTY metadata (the data stream itself is a websocket, not HTTP). */
+    @GET("pty/{ptyID}")
+    suspend fun getPty(@Path("ptyID") ptyId: String): JsonElement
+
+    @DELETE("pty/{ptyID}")
+    suspend fun deletePty(@Path("ptyID") ptyId: String): ResponseBody
+
+    /** Client log line forwarded to the server log. */
+    @POST("log")
+    suspend fun postLog(@Body body: JsonElement): ResponseBody
+
+    /** Ask the server to upgrade itself. */
+    @POST("global/upgrade")
+    suspend fun globalUpgrade(@Body body: JsonElement): ResponseBody
+
+    /** Session-scoped permission reply (the app also has the global form). */
+    @POST("session/{sessionID}/permissions/{permissionID}")
+    suspend fun replySessionPermission(
+        @Path("sessionID") sessionId: String,
+        @Path("permissionID") permissionId: String,
+        @Body body: PermissionReplyRequest,
+    ): ResponseBody
+
+    // TUI control channel. These drive a running TUI, not the Android UI; kept
+    // for API parity so a caller can reach them if a TUI session is attached.
+    @POST("tui/append-prompt")
+    suspend fun tuiAppendPrompt(@Body body: JsonElement): ResponseBody
+
+    @POST("tui/submit-prompt")
+    suspend fun tuiSubmitPrompt(): ResponseBody
+
+    @POST("tui/clear-prompt")
+    suspend fun tuiClearPrompt(): ResponseBody
+
+    @POST("tui/open-help")
+    suspend fun tuiOpenHelp(): ResponseBody
+
+    @POST("tui/show-toast")
+    suspend fun tuiShowToast(@Body body: JsonElement): ResponseBody
 }

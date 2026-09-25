@@ -302,4 +302,15 @@
         <item quantity="one">%1$d of %2$d todo completed</item>
         <item quantity="other">%1$d of %2$d todos completed</item>
     </plurals>
+    <string name="subagent_sessions">Subagents</string>
+    <string name="no_subagents">No subagents</string>
+    <string name="initialize_project">Initialize project</string>
+    <string name="initialized_ok">Project initialized</string>
+    <string name="init_failed">Initialization failed</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_update_server">Update server</string>
+    <string name="settings_update_requested">Update requested</string>
+    <string name="settings_update_failed">Update failed</string>
+    <string name="settings_skills">Skills</string>
+    <string name="settings_no_skills">No skills installed</string>
 </resources>
