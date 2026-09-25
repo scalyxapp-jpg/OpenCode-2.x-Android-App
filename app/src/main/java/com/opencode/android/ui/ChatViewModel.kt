@@ -10,10 +10,14 @@ import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.SseClient
 import com.opencode.android.ui.session.ConversationPort
+import com.opencode.android.ui.session.PromptSendResult
+import com.opencode.android.ui.session.PromptSender
 import com.opencode.android.ui.session.ServerSelection
 import com.opencode.android.ui.session.SessionCommand
 import com.opencode.android.ui.session.SessionConversation
 import com.opencode.android.ui.session.UiSelection
+import com.opencode.android.ui.session.buildDisplayText
+import com.opencode.android.ui.session.buildOptimisticEcho
 import com.opencode.android.ui.session.buildPromptAsyncRequest
 import com.opencode.android.ui.session.effectiveSelection
 import com.opencode.android.util.ModelSelection
@@ -57,8 +61,6 @@ import com.opencode.android.domain.BUILTIN_COMMANDS
 import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.McpEntry
 import com.opencode.android.domain.SummarizeRequest
-import com.opencode.android.domain.MessageInfo
-import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Part
 import com.opencode.android.domain.PermissionReplyRequest
 import com.opencode.android.domain.PermissionRequest
@@ -205,6 +207,15 @@ class ChatViewModel @javax.inject.Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
     private val api: OpenCodeApi get() = apiProvider.get()
+
+    // Guarded prompt_async state machine (409 retry, readable error, close).
+    private val promptSender = PromptSender(
+        sendPromptAsync = { sessionId, body, guardRevision ->
+            api.sendPromptAsync(sessionId, body, guardRevision)
+        },
+        guardRevision = { sessionId -> selectionGuard.guardRevision(sessionId) },
+        clearGuardRevision = { sessionId -> selectionGuard.clearGuardRevision(sessionId) },
+    )
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -1724,13 +1735,7 @@ _uiState.update { current ->
         // base64 data URL. The old text-only "[Attached: name]" marker never
         // reached the agent, so files were silently ignored.
         val text = rawText
-        val displayText = buildString {
-            append(rawText)
-            for (a in attachments) {
-                if (isNotEmpty()) append("\n")
-                append("[Attached: ${a.name}]")
-            }
-        }.trim()
+        val displayText = buildDisplayText(rawText, attachments.map { it.name })
         if (text.isEmpty() && attachments.isEmpty()) return
 
         // Optimistic echo: show the user's message and clear the composer
@@ -1738,13 +1743,12 @@ _uiState.update { current ->
         // is fetched afterwards, so without this the sent message appeared a
         // network round-trip later — the main source of the "not direct" feel.
         // The next refresh replaces this local row with the server one.
-        val optimistic = Message(
-            id = com.opencode.android.util.MessageEcho.LOCAL_PREFIX + System.currentTimeMillis(),
+        val now = System.currentTimeMillis()
+        val optimistic = buildOptimisticEcho(
             sessionId = session.id,
-            role = "user",
-            parts = listOf(Part(type = "text", text = displayText)),
-            time = MessageTime(created = System.currentTimeMillis()),
-            info = MessageInfo(role = "user"),
+            messageId = com.opencode.android.util.MessageEcho.LOCAL_PREFIX + now,
+            displayText = displayText,
+            createdAt = now,
         )
         // Capture BEFORE the optimistic echo flips isGenerating to true.
         // Reading the flag after the update made it always true, so every send
@@ -1873,25 +1877,9 @@ _uiState.update { current ->
                     finalText = finalText,
                 )
                 AppLog.d(APP_LOG_TAG) { "sendMessage: prompt_async" }
-                try {
-                    val guardRevision = selectionGuard.guardRevision(session.id)
-                    var asyncResponse = api.sendPromptAsync(
-                        session.id,
-                        asyncBody,
-                        guardRevision,
-                    )
-                    if (asyncResponse.code() == 409 && guardRevision != null) {
-                        // Selection changed through another guarded client.
-                        // Retry once without stale revision; proxy rewrites the
-                        // request to its current authoritative selection.
-                        selectionGuard.clearGuardRevision(session.id)
-                        asyncResponse = api.sendPromptAsync(
-                            session.id,
-                            asyncBody,
-                            null,
-                        )
-                    }
-                    if (asyncResponse.code() == 409) {
+                when (val result = promptSender.send(session.id, asyncBody)) {
+                    PromptSendResult.Ok -> Unit
+                    PromptSendResult.Conflict -> {
                         _uiState.update { it.copy(
                             isGenerating = false,
                             guardConflict = true,
@@ -1899,42 +1887,25 @@ _uiState.update { current ->
                         ) }
                         return@launch
                     }
-                    if (!asyncResponse.isSuccessful) {
-                        // Keep the real reason ("insufficient balance…"):
-                        // a bare HTTP code tells the user nothing.
-                        val body = try {
-                            asyncResponse.errorBody()?.string()
-                        } catch (_: Exception) {
-                            null
+                    is PromptSendResult.Failed -> {
+                        // The legacy endpoint has no file parts. Falling back
+                        // with attachments present would silently drop the files.
+                        if (attachments.isNotEmpty()) {
+                            AppLog.e(APP_LOG_TAG, "sendMessage: attachment prompt failed: ${result.message}")
+                            throw java.io.IOException(result.message)
                         }
-                        val detail = com.opencode.android.util.serverErrorMessage(
-                            body,
-                            "prompt_async HTTP ${asyncResponse.code()}",
+                        // Fallback to the legacy prompt endpoint.
+                        AppLog.e(APP_LOG_TAG, "sendMessage: prompt_async failed, fallback: ${result.message}")
+                        UserMessages.post(R.string.could_not_send, "prompt_async failed, fallback: ${result.message}")
+                        api.sendPrompt(
+                            session.id,
+                            PromptRequest(
+                                prompt = PromptInput(text = finalText),
+                                 agent = effectiveAgent,
+                                model = modelId.takeIf { it.isNotBlank() },
+                            ),
                         )
-                        throw java.io.IOException(detail)
                     }
-                    asyncResponse.body()?.close()
-                } catch (e: kotlinx.coroutines.CancellationException) {
-                    // Never run a fallback request on a cancelled coroutine.
-                    throw e
-                } catch (e: Exception) {
-                    // The legacy endpoint has no file parts. Falling back with
-                    // attachments present would silently drop the files.
-                    if (attachments.isNotEmpty()) {
-                        AppLog.e(APP_LOG_TAG, "sendMessage: attachment prompt failed: ${e.message}")
-                        throw e
-                    }
-                    // Fallback to the legacy prompt endpoint.
-                    AppLog.e(APP_LOG_TAG, "sendMessage: prompt_async failed, fallback: ${e.message}")
-                    UserMessages.post(R.string.could_not_send, "prompt_async failed, fallback: ${e.message}")
-                    api.sendPrompt(
-                        session.id,
-                        PromptRequest(
-                            prompt = PromptInput(text = finalText),
-                             agent = effectiveAgent,
-                            model = modelId.takeIf { it.isNotBlank() },
-                        ),
-                    )
                 }
                 _uiState.update { it.copy(guardConflict = false) }
                 AppLog.d(APP_LOG_TAG) { "sendMessage: API ok" }
