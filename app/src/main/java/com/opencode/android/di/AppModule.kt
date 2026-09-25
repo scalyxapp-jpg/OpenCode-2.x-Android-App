@@ -49,9 +49,14 @@ object AppModule {
     @Provides
     @Singleton
     fun provideChatRepository(
+        session: BackendSession,
         // Provider (not the instance): the repository resolves the api on each
         // call, so switching backend is picked up without restarting the app.
         api: javax.inject.Provider<OpenCodeApi>,
         messageStore: MessageStore,
-    ): ChatRepository = ChatRepository(apiProvider = { api.get() }, messageStore = messageStore)
+    ): ChatRepository = ChatRepository(
+        apiProvider = { api.get() },
+        messageStore = messageStore,
+        streamedMessages = { sessionId, limit -> session.getMessagesStreamed(sessionId, limit) },
+    )
 }

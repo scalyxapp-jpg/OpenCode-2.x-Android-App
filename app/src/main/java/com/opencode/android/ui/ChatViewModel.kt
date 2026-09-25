@@ -5,7 +5,8 @@ import androidx.compose.runtime.Immutable
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.opencode.android.data.ApiClient
+import com.opencode.android.data.BackendSession
+import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.ProviderCatalog
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.SseClient
@@ -196,8 +197,14 @@ data class ContextInfo(
 @dagger.hilt.android.lifecycle.HiltViewModel
 class ChatViewModel @javax.inject.Inject constructor(
     private val repo: ChatRepository,
+    // Resolved per call (the backend URL can change mid-session), so this is a
+    // Provider rather than a captured instance.
+    private val apiProvider: javax.inject.Provider<OpenCodeApi>,
+    private val backendSession: BackendSession,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
+    private val api: OpenCodeApi get() = apiProvider.get()
+
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
@@ -346,7 +353,7 @@ class ChatViewModel @javax.inject.Inject constructor(
                     val agentsD = async {
                         // Server-global and rarely changes: fetch once per process.
                         cachedAgents ?: try {
-                            ApiClient.api.getAgents().data.also {
+                            api.getAgents().data.also {
                                 if (it.isNotEmpty()) cachedAgents = it
                             }
                         } catch (e: Exception) {
@@ -413,7 +420,7 @@ class ChatViewModel @javax.inject.Inject constructor(
                     }
                 }.ifEmpty {
                     try {
-                        ApiClient.api.getModels().data
+                        api.getModels().data
                     } catch (e2: Exception) {
                         AppLog.e(APP_LOG_TAG, "getModels failed: ${e2.message}")
                         UserMessages.post(R.string.could_not_load_models, "${e2.message}")
@@ -550,7 +557,7 @@ _uiState.update { current ->
                 // servers — which is why every figure showed 0 and never moved.
                 // Verified against the live server; the web reads the session
                 // object the same way.
-                val full = ApiClient.api.getSessionFull(session.id)
+                val full = api.getSessionFull(session.id)
 
                 val messages = _uiState.value.messages
                 val roleOf = { m: Message -> m.role ?: m.info?.role ?: m.type }
@@ -605,7 +612,7 @@ _uiState.update { current ->
                 // The top-bar "N ctx" chip still reads the (often empty)
                 // context list; keep it best-effort without failing the rest.
                 val context = try {
-                    ApiClient.api.getContext(session.id)
+                    api.getContext(session.id)
                 } catch (_: Exception) {
                     null
                 }
@@ -646,7 +653,7 @@ _uiState.update { current ->
         viewModelScope.launch {
             try {
                 // /file takes a RELATIVE path + an absolute `directory` base.
-                val files = ApiClient.api.getFiles(path = ".", directory = path)
+                val files = api.getFiles(path = ".", directory = path)
                 _uiState.update { it.copy(files = files) }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "loadFiles failed: ${e.message}")
@@ -661,7 +668,7 @@ _uiState.update { current ->
      * server cannot be reached, so no hardcoded path is ever used.
      */
     private suspend fun serverHome(): String? = try {
-        ApiClient.api.getPathInfo().home?.takeIf { it.isNotBlank() }
+        api.getPathInfo().home?.takeIf { it.isNotBlank() }
     } catch (e: Exception) {
         AppLog.e(APP_LOG_TAG, "serverHome failed: ${e.message}")
         UserMessages.post(R.string.could_not_load_files, "${e.message}")
@@ -672,7 +679,7 @@ _uiState.update { current ->
     fun loadCommands(directory: String? = null) {
         viewModelScope.launch {
             try {
-                val server = ApiClient.api.getCommands(directory)
+                val server = api.getCommands(directory)
                 // Built-ins first, then the server commands; a server command
                 // with the same name wins (dedupe by name, builtin kept only
                 // when the server does not define it).
@@ -704,7 +711,7 @@ _uiState.update { current ->
         val directory = _uiState.value.session?.directory
         viewModelScope.launch {
             try {
-                val servers = ApiClient.api.getMcpServers(directory)
+                val servers = api.getMcpServers(directory)
                     .map { (name, s) -> McpEntry(name, s.status ?: "disabled") }
                     .sortedBy { it.name }
                 _uiState.update { it.copy(mcpServers = servers) }
@@ -733,9 +740,9 @@ _uiState.update { current ->
         mcpToggleJob = viewModelScope.launch {
             try {
                 if (enable) {
-                    ApiClient.api.connectMcp(name).close()
+                    api.connectMcp(name).close()
                 } else {
-                    ApiClient.api.disconnectMcp(name).close()
+                    api.disconnectMcp(name).close()
                 }
                 // Poll until the server agrees (max ~30s). While unconfirmed,
                 // keep the optimistic status for THIS server so a stale
@@ -745,7 +752,7 @@ _uiState.update { current ->
                     kotlinx.coroutines.delay(500)
                     val directory = _uiState.value.session?.directory
                     val map = try {
-                        ApiClient.api.getMcpServers(directory)
+                        api.getMcpServers(directory)
                     } catch (_: Exception) {
                         null
                     } ?: return@repeat
@@ -775,7 +782,7 @@ _uiState.update { current ->
     fun authenticateMcp(name: String) {
         viewModelScope.launch {
             try {
-                ApiClient.api.authenticateMcp(name).close()
+                api.authenticateMcp(name).close()
                 loadMcp()
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "authenticateMcp failed: ${e.message}")
@@ -812,7 +819,7 @@ _uiState.update { current ->
         _uiState.update { it.copy(isCompacting = true, statusError = null) }
         viewModelScope.launch {
             try {
-                val response = ApiClient.api.summarizeSession(
+                val response = api.summarizeSession(
                     session.id,
                     // URL-encoded, exactly as the web sends it.
                     session.directory?.let {
@@ -863,7 +870,7 @@ _uiState.update { current ->
         val sessionId = _uiState.value.session?.id ?: return
         viewModelScope.launch {
             try {
-                val all = ApiClient.api.getPermissions()
+                val all = api.getPermissions()
                 if (_uiState.value.session?.id != sessionId) return@launch
                 _uiState.update { it.copy(
                     pendingPermissions = all.filter {
@@ -888,7 +895,7 @@ _uiState.update { current ->
         ) }
         viewModelScope.launch {
             try {
-                ApiClient.api.replyPermission(
+                api.replyPermission(
                     requestId,
                     PermissionReplyRequest(reply = reply),
                 ).close()
@@ -905,7 +912,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                val questions = ApiClient.api.getSessionQuestions(session.id).data
+                val questions = api.getSessionQuestions(session.id).data
                 _uiState.update { it.copy(pendingQuestions = questions) }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "loadPendingQuestions failed: ${e.message}")
@@ -928,7 +935,7 @@ _uiState.update { current ->
         ) }
         viewModelScope.launch {
             try {
-                ApiClient.api.replySessionQuestion(
+                api.replySessionQuestion(
                     session.id,
                     requestId,
                     // answers is string[][] — one answer list per question.
@@ -959,7 +966,7 @@ _uiState.update { current ->
         ) }
         viewModelScope.launch {
             try {
-                ApiClient.api.rejectSessionQuestion(session.id, requestId).close()
+                api.rejectSessionQuestion(session.id, requestId).close()
                 loadPendingQuestions()
                 onDone(true)
             } catch (e: Exception) {
@@ -990,7 +997,7 @@ _uiState.update { current ->
     private suspend fun loadGuardStatus(sessionId: String) {
         // One health probe is enough; the authoritative selection already
         // comes from GET /session (sessionGuard) and is stored above.
-        val health = runCatching { ApiClient.api.sessionGuardHealth() }.getOrNull()
+        val health = runCatching { api.sessionGuardHealth() }.getOrNull()
         val body = health?.takeIf { it.isSuccessful }?.body()
         val enabled = body?.ok == true
         // Keep the banner visible when a guarded session goes unhealthy so
@@ -1075,8 +1082,8 @@ _uiState.update { current ->
         // Must follow the ACTIVE backend, not the compiled-in default: a user
         // pointed at another server previously got a live stream from the
         // hardcoded host, so streaming silently broke on custom backends.
-        AppLog.d(APP_LOG_TAG) { "startSse: session=$sessionId url=${ApiClient.currentBaseUrl()}/global/event" }
-        conversation.dispatch(SessionCommand.Load(sessionId, ApiClient.currentBaseUrl()))
+        AppLog.d(APP_LOG_TAG) { "startSse: session=$sessionId url=${backendSession.currentBaseUrl()}/global/event" }
+        conversation.dispatch(SessionCommand.Load(sessionId, backendSession.currentBaseUrl()))
     }
 
     /**
@@ -1253,7 +1260,7 @@ _uiState.update { current ->
     fun loadTodos(sessionId: String) {
         viewModelScope.launch {
             try {
-                val todos = ApiClient.api.getTodos(sessionId)
+                val todos = api.getTodos(sessionId)
                 _uiState.update { it.copy(todos = todos) }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "getTodos failed: ${e.message}")
@@ -1399,7 +1406,7 @@ _uiState.update { current ->
             try {
                 val (providerId, modelId) = resolveModelRef(modelRef, _uiState.value.models)
                 if (providerId.isBlank() || modelId.isBlank()) return@launch
-                val response = ApiClient.api.setModel(
+                val response = api.setModel(
                     sessionId,
                     ModelRefRequest(
                         model = ModelRef(
@@ -1439,7 +1446,7 @@ _uiState.update { current ->
         viewModelScope.launch {
             try {
                 if (agent.isNotBlank()) {
-                    val response = ApiClient.api.setAgent(sessionId, mapOf("agent" to agent))
+                    val response = api.setAgent(sessionId, mapOf("agent" to agent))
                     if (!response.isSuccessful) {
                         val detail = com.opencode.android.util.serverErrorMessage(
                             response.errorBody()?.string(),
@@ -1659,7 +1666,7 @@ _uiState.update { current ->
                 "Attachment too large: ${attachment.name} (${size / (1024 * 1024)} MB, max 50 MB)",
             )
         }
-        val response = ApiClient.api.uploadAttachment(
+        val response = api.uploadAttachment(
             attachment.name,
             mime,
             attachmentRequestBody(attachment),
@@ -1756,7 +1763,7 @@ _uiState.update { current ->
             // Only interrupt a turn that was actually still running.
             if (wasGenerating) {
                 try {
-                    ApiClient.api.interrupt(session.id)
+                    api.interrupt(session.id)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1881,7 +1888,7 @@ _uiState.update { current ->
                 AppLog.d(APP_LOG_TAG) { "sendMessage: prompt_async" }
                 try {
                     val guardRevision = selectionGuard.guardRevision(session.id)
-                    var asyncResponse = ApiClient.api.sendPromptAsync(
+                    var asyncResponse = api.sendPromptAsync(
                         session.id,
                         asyncBody,
                         guardRevision,
@@ -1891,7 +1898,7 @@ _uiState.update { current ->
                         // Retry once without stale revision; proxy rewrites the
                         // request to its current authoritative selection.
                         selectionGuard.clearGuardRevision(session.id)
-                        asyncResponse = ApiClient.api.sendPromptAsync(
+                        asyncResponse = api.sendPromptAsync(
                             session.id,
                             asyncBody,
                             null,
@@ -1933,7 +1940,7 @@ _uiState.update { current ->
                     // Fallback to the legacy prompt endpoint.
                     AppLog.e(APP_LOG_TAG, "sendMessage: prompt_async failed, fallback: ${e.message}")
                     UserMessages.post(R.string.could_not_send, "prompt_async failed, fallback: ${e.message}")
-                    ApiClient.api.sendPrompt(
+                    api.sendPrompt(
                         session.id,
                         PromptRequest(
                             prompt = PromptInput(text = finalText),
@@ -1977,7 +1984,7 @@ _uiState.update { current ->
         val sessionId = _uiState.value.session?.id ?: return
         viewModelScope.launch {
             try {
-                val response = ApiClient.api.adoptServerSelection(
+                val response = api.adoptServerSelection(
                     sessionId,
                     selectionGuard.guardRevision(sessionId),
                 )
@@ -2008,7 +2015,7 @@ _uiState.update { current ->
         val sessionId = _uiState.value.session?.id ?: return
         viewModelScope.launch {
             try {
-                val response = ApiClient.api.pushGuardSelection(
+                val response = api.pushGuardSelection(
                     sessionId,
                     selectionGuard.guardRevision(sessionId),
                 )
@@ -2040,7 +2047,7 @@ _uiState.update { current ->
         val sessionId = _uiState.value.session?.id ?: return
         viewModelScope.launch {
             try {
-                val response = ApiClient.api.removeGuardSelection(
+                val response = api.removeGuardSelection(
                     sessionId,
                     selectionGuard.guardRevision(sessionId),
                 )
@@ -2098,7 +2105,7 @@ _uiState.update { current ->
         viewModelScope.launch {
             if (messageId != null) {
                 try {
-                    ApiClient.api.revertMessage(
+                    api.revertMessage(
                         session.id,
                         RevertRequest(messageID = messageId),
                     ).close()
@@ -2125,10 +2132,10 @@ _uiState.update { current ->
         viewModelScope.launch {
             try {
                 // Web stop action: POST /session/{id}/abort -> 200 "true".
-                val response = ApiClient.api.abort(session.id)
+                val response = api.abort(session.id)
                 if (!response.isSuccessful) {
                     // Fallback for older servers.
-                    ApiClient.api.interrupt(session.id)
+                    api.interrupt(session.id)
                 }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "abort failed: ${e.message}")
@@ -2156,7 +2163,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                val updated = ApiClient.api.renameSession(session.id, mapOf("title" to newTitle))
+                val updated = api.renameSession(session.id, mapOf("title" to newTitle))
                 _uiState.update { it.copy(session = updated) }
                 onDone()
             } catch (e: Exception) {
@@ -2170,7 +2177,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                ApiClient.api.updateSession(
+                api.updateSession(
                     session.id,
                     SessionUpdateRequest(time = SessionTimeUpdate(archived = System.currentTimeMillis())),
                 )
@@ -2186,7 +2193,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                ApiClient.api.deleteSession(session.id)
+                api.deleteSession(session.id)
                 onDone()
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "deleteSession failed: ${e.message}")
@@ -2201,7 +2208,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                ApiClient.api.revertMessage(session.id, RevertRequest(messageID = messageId)).close()
+                api.revertMessage(session.id, RevertRequest(messageID = messageId)).close()
                 refreshMessages(session.id)
                 onDone(true)
             } catch (e: Exception) {
@@ -2216,7 +2223,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                ApiClient.api.unrevertSession(session.id).close()
+                api.unrevertSession(session.id).close()
                 refreshMessages(session.id)
                 onDone(true)
             } catch (e: Exception) {
@@ -2231,7 +2238,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                val result = ApiClient.api.forkSession(session.id, ForkRequest(messageID = messageId))
+                val result = api.forkSession(session.id, ForkRequest(messageID = messageId))
                 // Response shape: { id } or { data: { id } } or { sessionID }.
                 // Only accept real string primitives: `toString().trim('"')`
                 // turned JsonNull into the literal id "null".
@@ -2262,7 +2269,7 @@ _uiState.update { current ->
         ) }
         viewModelScope.launch {
             try {
-                val content = ApiClient.api.getFileContent(path)
+                val content = api.getFileContent(path)
                 _uiState.update { it.copy(
                     fileViewer = FileViewerState(path = path, content = content.content, isLoading = false)
                 ) }
@@ -2284,7 +2291,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                val shared = ApiClient.api.shareSession(session.id)
+                val shared = api.shareSession(session.id)
                 onDone(shared.slug)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "shareSession failed: ${e.message}")
@@ -2298,7 +2305,7 @@ _uiState.update { current ->
         val session = _uiState.value.session ?: return
         viewModelScope.launch {
             try {
-                val history = ApiClient.api.getHistory(session.id)
+                val history = api.getHistory(session.id)
                 // Build a readable export from the history events
                 val sb = StringBuilder()
                 sb.appendLine("# Session: ${session.title ?: session.id}")

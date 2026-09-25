@@ -19,12 +19,16 @@ import kotlinx.coroutines.delay
  * fake API and an in-memory [MessageStore]; Hilt supplies the real ones.
  */
 class ChatRepository(
-    // Resolved per call, NOT captured: ApiClient swaps its Retrofit instance
-    // when the backend URL changes, and a frozen reference kept pointing at the
+    // Resolved per call, NOT captured: the backend swaps its Retrofit instance
+    // when the URL changes, and a frozen reference kept pointing at the
     // previous server (session/messages/VCS all hit the old host after a
     // backend switch).
-    private val apiProvider: () -> OpenCodeApi = { ApiClient.api },
+    private val apiProvider: () -> OpenCodeApi,
     private val messageStore: MessageStore = MessageCache,
+    // Streamed message decode lives on BackendSession; injected so this class
+    // never reaches the legacy `ApiClient` facade. Null in tests that only
+    // exercise the api-provider seam.
+    private val streamedMessages: (suspend (String, Int?) -> List<Message>?)? = null,
 ) {
     private val api: OpenCodeApi get() = apiProvider()
 
@@ -62,22 +66,25 @@ class ChatRepository(
      */
     suspend fun loadMessages(sessionId: String, limit: Int): List<Message> {
         var web: List<Message> = emptyList()
-        for (attempt in 1..3) {
-            val fetched = try {
-                // Streamed decode: never materialises the body as a String.
-                ApiClient.getMessagesStreamed(sessionId, limit)
-            } catch (e: Exception) {
-                AppLog.e(APP_LOG_TAG, "getMessages failed (attempt $attempt): ${e.message}")
-                null
+        val streamer = streamedMessages
+        if (streamer != null) {
+            for (attempt in 1..3) {
+                val fetched = try {
+                    // Streamed decode: never materialises the body as a String.
+                    streamer(sessionId, limit)
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "getMessages failed (attempt $attempt): ${e.message}")
+                    null
+                }
+                // null means the streamed decode hit OutOfMemoryError. Do not
+                // retry: memory is already exhausted.
+                if (fetched == null) return emptyList()
+                web = fetched
+                if (web.isNotEmpty()) break
+                if (attempt < 3) delay(300L * attempt)
             }
-            // null means the streamed decode hit OutOfMemoryError. Do not retry:
-            // memory is already exhausted.
-            if (fetched == null) return emptyList()
-            web = fetched
-            if (web.isNotEmpty()) break
-            if (attempt < 3) delay(300L * attempt)
+            if (web.isNotEmpty()) return web.sortedBy { messageTime(it) }
         }
-        if (web.isNotEmpty()) return web.sortedBy { messageTime(it) }
 
         val legacy = try {
             api.getApiMessages(sessionId, limit = limit).data
