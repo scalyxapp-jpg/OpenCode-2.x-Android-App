@@ -8,6 +8,7 @@ import com.opencode.android.data.BackendStore
 import com.opencode.android.data.HomePrefs
 import com.opencode.android.data.LastSessionStore
 import com.opencode.android.data.ModelVisibilityStore
+import com.opencode.android.data.RecentModelsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +39,7 @@ object AppStartup {
                 LastSessionStore.init(app)
                 ModelVisibilityStore.init(app)
                 HomePrefs.init(app)
+                RecentModelsStore.init(app)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "AppStartup init failed: ${e.message}")
             } finally {

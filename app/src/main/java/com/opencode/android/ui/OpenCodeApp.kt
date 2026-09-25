@@ -106,7 +106,7 @@ private fun compactTabTitle(title: String): String {
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-internal fun OpenCodeApp() {
+internal fun OpenCodeApp(deepLinkSessionId: String? = null) {
     val backendSession = LocalBackendSession.current
     val providerDirectory = LocalProviderDirectory.current
     // The disk-backed stores load on a background thread (see AppStartup).
@@ -396,7 +396,7 @@ internal fun OpenCodeApp() {
         val savedBackend = remember { BackendStore.mostRecent() }
         val savedSessionId = remember { LastSessionStore.sessionId() }
         val savedSessionTitle = remember { LastSessionStore.title() }
-        LaunchedEffect(Unit) {
+        LaunchedEffect(deepLinkSessionId) {
             val backend = savedBackend ?: return@LaunchedEffect
             try {
                 backendSession.setBaseUrl(backend.url)
@@ -410,8 +410,9 @@ internal fun OpenCodeApp() {
                 }
                 providerDirectory.invalidate()
                 providerDirectory.prefetch()
-                // Restore the last conversation, if the server still has it.
-                val sessionId = savedSessionId
+                // A notification tap wins over the last conversation: open the
+                // session the event belongs to.
+                val sessionId = deepLinkSessionId ?: savedSessionId
                 if (sessionId != null) {
                     openSession(sessionId, savedSessionTitle ?: "Session")
                 }

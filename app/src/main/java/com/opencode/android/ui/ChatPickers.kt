@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.opencode.android.data.ModelVisibilityStore
+import com.opencode.android.data.RecentModelsStore
 import com.opencode.android.domain.Model
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.settings.SectionHeader
@@ -248,6 +249,15 @@ internal fun ModelPickerDialog(
         }.filterValues { it.isNotEmpty() }
     }
 
+    // Recently used models, resolved against the currently visible set so a
+    // model hidden in "Manage models" or absent from this backend disappears.
+    val recentModels = remember(visibleModels) {
+        val byRef = visibleModels.associateBy {
+            com.opencode.android.util.sessionModelRef(it.id, it.providerId)
+        }
+        RecentModelsStore.recent().mapNotNull { byRef[it] }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.choose_model)) },
@@ -268,6 +278,30 @@ internal fun ModelPickerDialog(
                     // Bottom clearance so the last model id is not clipped.
                     contentPadding = PaddingValues(bottom = MaterialTheme.spacing.medium),
                 ) {
+                    // Short recent-first section, only when not searching.
+                    if (searchQuery.isBlank() && recentModels.isNotEmpty()) {
+                        item(key = "recent-header") { SectionHeader("Recent") }
+                        items(recentModels, key = { "recent-${it.providerId}/${it.id}" }) { model ->
+                            val ref = com.opencode.android.util.sessionModelRef(
+                                model.id,
+                                model.providerId,
+                            )
+                            PickerRow(
+                                title = model.name ?: model.id,
+                                subtitle = model.id,
+                                selected = ref == selectedModel,
+                                onClick = {
+                                    RecentModelsStore.record(ref)
+                                    onSelect(ref)
+                                },
+                            )
+                        }
+                        item(key = "recent-divider") {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
+                            )
+                        }
+                    }
                     filtered.forEach { (provider, providerModels) ->
                         item(key = "header-$provider") {
                             SectionHeader(providerNames[provider] ?: provider)
@@ -291,7 +325,14 @@ internal fun ModelPickerDialog(
                                 title = model.name ?: model.id,
                                 subtitle = model.id,
                                 selected = isSelected,
-                                onClick = { onSelect(com.opencode.android.util.sessionModelRef(model.id, model.providerId ?: provider)) },
+                                onClick = {
+                                    val ref = com.opencode.android.util.sessionModelRef(
+                                        model.id,
+                                        model.providerId ?: provider,
+                                    )
+                                    RecentModelsStore.record(ref)
+                                    onSelect(ref)
+                                },
                             )
                         }
                     }

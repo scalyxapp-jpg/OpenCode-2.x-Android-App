@@ -20,6 +20,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.BackendSession
+import com.opencode.android.data.Notifier
 import com.opencode.android.data.ProviderDirectory
 import com.opencode.android.ui.LocalBackendSession
 import com.opencode.android.ui.LocalProviderDirectory
@@ -35,8 +36,19 @@ class MainActivity : ComponentActivity() {
     @javax.inject.Inject
     lateinit var providerDirectory: ProviderDirectory
 
+    // A notification tap carries the session to open. Kept as Compose state so
+    // onNewIntent (app already running) updates the UI without a recreate.
+    private val deepLinkSessionId = mutableStateOf<String?>(null)
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        deepLinkSessionId.value = intent.getStringExtra(Notifier.EXTRA_SESSION_ID)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        deepLinkSessionId.value = intent?.getStringExtra(Notifier.EXTRA_SESSION_ID)
         enableEdgeToEdge()
         setContent {
             // Apply the persisted appearance settings (color scheme, theme,
@@ -85,7 +97,7 @@ class MainActivity : ComponentActivity() {
                     LocalBackendSession provides backendSession,
                     LocalProviderDirectory provides providerDirectory,
                 ) {
-                    OpenCodeApp()
+                    OpenCodeApp(deepLinkSessionId = deepLinkSessionId.value)
                 }
                 // The first frame is on screen, so the content is usable.
                 // Without this the platform only records time-to-INITIAL-display

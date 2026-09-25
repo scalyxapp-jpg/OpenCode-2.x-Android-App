@@ -1388,6 +1388,7 @@ modifier = Modifier
             isUploading = uiState.isUploading,
             uploadDone = uiState.uploadDone,
             uploadTotal = uiState.uploadTotal,
+            uploadingUris = uiState.uploadingUris,
             statusError = uiState.statusError,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,

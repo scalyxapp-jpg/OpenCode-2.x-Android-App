@@ -152,6 +152,9 @@ data class ChatUiState(
     val isUploading: Boolean = false,
     val uploadDone: Int = 0,
     val uploadTotal: Int = 0,
+    // Attachment URIs currently being uploaded, so each chip can show its own
+    // spinner (uploads run in parallel).
+    val uploadingUris: Set<String> = emptySet(),
     // "/compact" is running (server summarizes the session).
     val isCompacting: Boolean = false,
     // The model finished but the persisted assistant message has not landed in
@@ -257,6 +260,7 @@ class ChatViewModel @javax.inject.Inject constructor(
             com.opencode.android.data.Notifier.permission(
                 "Permission required",
                 "The agent needs your approval to continue",
+                _uiState.value.session?.id,
             )
         }
 
@@ -266,6 +270,7 @@ class ChatViewModel @javax.inject.Inject constructor(
             com.opencode.android.data.Notifier.error(
                 "OpenCode error",
                 message ?: "The session reported an error",
+                _uiState.value.session?.id,
             )
         }
 
@@ -1121,7 +1126,7 @@ _uiState.update { current ->
      */
     private fun notifyAgentDone() {
         val title = _uiState.value.session?.title ?: "OpenCode"
-        com.opencode.android.data.Notifier.agent(title, "The agent finished")
+        com.opencode.android.data.Notifier.agent(title, "The agent finished", _uiState.value.session?.id)
     }
 
     // Both message schemas exist side by side (verified via API):
@@ -1716,7 +1721,20 @@ _uiState.update { current ->
     private suspend fun uploadAttachments(attachments: List<Attachment>): List<UploadResponse> =
         coroutineScope {
             // Parallel uploads; awaitAll preserves input order for the prompt.
-            attachments.map { attachment -> async { uploadAttachment(attachment) } }.awaitAll()
+            attachments.map { attachment ->
+                async {
+                    _uiState.update {
+                        it.copy(uploadingUris = it.uploadingUris + attachment.uri)
+                    }
+                    try {
+                        uploadAttachment(attachment)
+                    } finally {
+                        _uiState.update {
+                            it.copy(uploadingUris = it.uploadingUris - attachment.uri)
+                        }
+                    }
+                }
+            }.awaitAll()
         }
 
     fun sendMessage() = conversation.dispatch(SessionCommand.Send)
@@ -1850,12 +1868,13 @@ _uiState.update { current ->
                             isUploading = false,
                             uploadDone = 0,
                             uploadTotal = 0,
+                            uploadingUris = emptySet(),
                             statusError = "Attachment upload failed: ${e.message}",
                         )
                     }
                     return@launch
                 }
-                _uiState.update { it.copy(isUploading = false, uploadDone = 0, uploadTotal = 0) }
+                _uiState.update { it.copy(isUploading = false, uploadDone = 0, uploadTotal = 0, uploadingUris = emptySet()) }
                 val finalText = buildPromptText(text, uploaded.map { it.path })
                 if (finalText != displayText) {
                     _uiState.update { current ->
@@ -1925,6 +1944,7 @@ _uiState.update { current ->
                     isUploading = false,
                     uploadDone = 0,
                     uploadTotal = 0,
+                    uploadingUris = emptySet(),
                     statusError = sendError,
                     // Drop the optimistic echo — it will never be persisted, so
                     // leaving it made the conversation show a message that the

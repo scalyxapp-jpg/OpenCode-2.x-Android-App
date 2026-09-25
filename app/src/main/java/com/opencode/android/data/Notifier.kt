@@ -30,6 +30,9 @@ object Notifier {
     private const val ID_PERMISSIONS = 1002
     private const val ID_ERRORS = 1003
 
+    /** Extra on the tap intent so the app opens the session the event belongs to. */
+    const val EXTRA_SESSION_ID = "com.opencode.android.extra.SESSION_ID"
+
     @Volatile
     private var appContext: Context? = null
 
@@ -59,33 +62,36 @@ object Notifier {
     }
 
     /** The agent finished a turn or needs attention. */
-    fun agent(title: String, text: String) {
+    fun agent(title: String, text: String, sessionId: String? = null) {
         val settings = AppSettingsStore.state.value
-        if (settings.notifyAgent) post(CH_AGENT, ID_AGENT, title, text)
+        if (settings.notifyAgent) post(CH_AGENT, ID_AGENT, title, text, sessionId)
         if (settings.soundAgentEnabled) playSound(settings.soundAgent)
     }
 
     /** A tool permission is required. */
-    fun permission(title: String, text: String) {
+    fun permission(title: String, text: String, sessionId: String? = null) {
         val settings = AppSettingsStore.state.value
-        if (settings.notifyPermissions) post(CH_PERMISSIONS, ID_PERMISSIONS, title, text)
+        if (settings.notifyPermissions) post(CH_PERMISSIONS, ID_PERMISSIONS, title, text, sessionId)
         if (settings.soundPermissionsEnabled) playSound(settings.soundPermissions)
     }
 
     /** A provider/session error occurred. */
-    fun error(title: String, text: String) {
+    fun error(title: String, text: String, sessionId: String? = null) {
         val settings = AppSettingsStore.state.value
-        if (settings.notifyErrors) post(CH_ERRORS, ID_ERRORS, title, text)
+        if (settings.notifyErrors) post(CH_ERRORS, ID_ERRORS, title, text, sessionId)
         if (settings.soundErrorsEnabled) playSound(settings.soundErrors)
     }
 
-    private fun post(channel: String, id: Int, title: String, text: String) {
+    private fun post(channel: String, id: Int, title: String, text: String, sessionId: String?) {
         val context = appContext ?: return
         val openApp = PendingIntent.getActivity(
             context,
-            0,
+            // Distinct request code per session so two notifications do not
+            // overwrite each other's intent extras.
+            sessionId?.hashCode() ?: 0,
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                if (!sessionId.isNullOrBlank()) putExtra(EXTRA_SESSION_ID, sessionId)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

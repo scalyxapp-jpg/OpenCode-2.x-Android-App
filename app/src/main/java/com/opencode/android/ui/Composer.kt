@@ -155,6 +155,7 @@ internal fun Composer(
     isUploading: Boolean = false,
     uploadDone: Int = 0,
     uploadTotal: Int = 0,
+    uploadingUris: Set<String> = emptySet(),
     statusError: String? = null,
     showAgent: Boolean = true,
     agents: List<Agent>,
@@ -369,7 +370,16 @@ internal fun Composer(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 },
-                                leadingIcon = { AttachmentLeadingIcon(attachment) },
+                                leadingIcon = {
+                                    if (attachment.uri in uploadingUris) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        AttachmentLeadingIcon(attachment)
+                                    }
+                                },
                                 trailingIcon = {
                                     Icon(
                                         Icons.Default.Close,
