@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.OpenCode" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <!-- android:windowSplashScreenBackground is API 31+ and lives in
+             res/values-v31/themes.xml to keep minSdk 26 happy. -->
+    </style>
+</resources>

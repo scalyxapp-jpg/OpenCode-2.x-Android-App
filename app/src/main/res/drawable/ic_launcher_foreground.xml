@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- OpenCode logo: terminal prompt symbol -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M384,416H128V96H384V416ZM320,160H192V352H320V160Z" />
+    <path
+        android:fillColor="#5A5858"
+        android:pathData="M320,224V352H192V224H320Z" />
+</vector>

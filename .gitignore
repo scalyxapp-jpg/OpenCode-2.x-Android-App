@@ -1,0 +1,11 @@
+.gradle/
+build/
+app/build/
+.idea/
+local.properties
+*.iml
+.DS_Store
+__pycache__/
+*.pyc
+.playwright-mcp/
+.opencode/

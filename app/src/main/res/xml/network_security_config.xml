@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  `opencode serve` speaks plain HTTP on the user's own LAN / Tailscale network
+  and the host is chosen by the user, so cleartext cannot be pinned to a fixed
+  domain list. It is permitted explicitly here (rather than relying on the
+  blanket manifest flag) so the decision is auditable, and system trust anchors
+  stay the only trusted CAs — no user-installed CA is honoured.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <!-- Deliberate: opencode serve is plain HTTP on the user's own network.
+         Suppressed so this known, documented decision does not mask new
+         security findings elsewhere. -->
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

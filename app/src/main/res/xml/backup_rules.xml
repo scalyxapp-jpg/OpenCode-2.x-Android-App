@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and below backup rules.
+
+  Credential stores are excluded: "opencode.backends" holds the server list
+  (passwords are encrypted with the Android Keystore, whose key is not
+  restorable on another device anyway), and "opencode.global.dat" holds
+  model/provider selections. Everything else (settings, project list) may be
+  restored.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="opencode.backends.xml" />
+    <exclude domain="sharedpref" path="opencode.global.dat.xml" />
+    <!-- Cached conversation text. Tool output is stripped before caching, but
+         assistant answers can still quote file contents or secrets the agent
+         touched, so it must not leave the device via cloud backup. -->
+    <exclude domain="file" path="session_cache/" />
+</full-backup-content>

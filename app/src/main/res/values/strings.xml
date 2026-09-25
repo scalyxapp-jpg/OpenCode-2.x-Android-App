@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Restored from the pre-refactor APK (aapt2 dump). -->
+    <string name="app_name">OpenCode</string>
+    <string name="rename" formatted="false">Rename…</string>
+    <string name="share" formatted="false">Share…</string>
+    <string name="export" formatted="false">Export…</string>
+    <string name="archive" formatted="false">Archive</string>
+    <!-- Distinct from "Restore" (un-archive): this restores the local message cache. -->
+    <string name="restore_messages" formatted="false">Restore messages…</string>
+    <string name="delete" formatted="false">Delete…</string>
+    <string name="delete_session" formatted="false">Delete session?</string>
+    <string name="delete_2" formatted="false">Delete</string>
+    <string name="cancel" formatted="false">Cancel</string>
+    <string name="session" formatted="false">Session</string>
+    <string name="review" formatted="false">Review</string>
+    <string name="changes" formatted="false">Changes</string>
+    <string name="rename_session" formatted="false">Rename session</string>
+
+    <string name="compacting_session" formatted="false">Compacting session…</string>
+    <string name="compacting" formatted="false">Compacting</string>
+    <string name="mcp_title" formatted="false">MCPs</string>
+    <plurals name="mcp_enabled_of_total">
+        <item quantity="one">%1$d of %2$d enabled</item>
+        <item quantity="other">%1$d of %2$d enabled</item>
+    </plurals>
+    <string name="mcp_empty" formatted="false">No MCPs configured</string>
+    <string name="mcp_search" formatted="false">Search</string>
+    <string name="mcp_click_to_authenticate" formatted="false">Click to authenticate</string>
+    <string name="permission_required" formatted="false">Permission required</string>
+    <string name="permission_deny" formatted="false">Deny</string>
+    <string name="permission_allow_always" formatted="false">Allow always</string>
+    <string name="permission_allow_once" formatted="false">Allow once</string>
+    <string name="copied" formatted="false">Copied</string>
+    <string name="message_reverted" formatted="false">Message reverted</string>
+    <string name="revert_failed" formatted="false">Revert failed</string>
+    <string name="forked">Forked: %1$s</string>
+    <string name="fork_failed" formatted="false">Fork failed</string>
+    <string name="answer_sent" formatted="false">Answer sent</string>
+    <string name="answer_failed" formatted="false">Answer failed</string>
+    <string name="question_rejected" formatted="false">Question rejected</string>
+    <string name="reject_failed" formatted="false">Reject failed</string>
+    <string name="reconnecting" formatted="false">Reconnecting…</string>
+    <string name="retry" formatted="false">Retry</string>
+    <string name="empty_chat_title" formatted="false">Start a conversation</string>
+    <string name="empty_chat_hint" formatted="false">Type a message below. Use / for commands and @ for context.</string>
+    <string name="empty_home_title" formatted="false">Nothing here yet</string>
+    <string name="empty_home_hint" formatted="false">Create a session to get started.</string>
+    <string name="no_sessions_found">No sessions found for “%1$s”</string>
+    <string name="server_hint" formatted="false">Make sure opencode serve is running and the app is connected to the server.</string>
+    <string name="reading_folder" formatted="false">Reading folder…</string>
+    <string name="folder_error">Could not read folder: %1$s</string>
+    <string name="no_subfolders" formatted="false">No subfolders here</string>
+    <string name="thinking" formatted="false">Thinking</string>
+    <string name="file_tree_collapsed" formatted="false">File tree collapsed</string>
+    <string name="no_files" formatted="false">No files</string>
+    <string name="no_changes" formatted="false">No changes</string>
+    <string name="no_usage_yet" formatted="false">No usage yet — send a message to see token and cost figures.</string>
+    <string name="shortcuts_desktop_note" formatted="false">These are the desktop/web keyboard shortcuts. The Android app has no keyboard shortcuts.</string>
+    <string name="keyboard_shortcuts" formatted="false">Keyboard shortcuts</string>
+    <string name="error_prefix">Error: %1$s</string>
+    <string name="backend_title" formatted="false">OpenCode Backend</string>
+    <string name="close" formatted="false">Close</string>
+    <string name="type_your_answer" formatted="false">Type your answer…</string>
+    <string name="submit" formatted="false">Submit</string>
+    <string name="reject" formatted="false">Reject</string>
+    <string name="load_older_messages" formatted="false">Load older messages</string>
+    <string name="tool" formatted="false">Tool</string>
+    <string name="copy" formatted="false">Copy</string>
+    <string name="choose_model" formatted="false">Choose model</string>
+    <string name="search_models" formatted="false">Search models…</string>
+    <string name="choose_agent" formatted="false">Choose agent</string>
+    <string name="search_agents" formatted="false">Search agents…</string>
+    <string name="search_commands" formatted="false">Search commands…</string>
+    <string name="manage_models" formatted="false">Manage models</string>
+    <string name="back" formatted="false">Back</string>
+    <string name="context_usage" formatted="false">Context usage</string>
+    <string name="more_options" formatted="false">More options</string>
+    <string name="jump_to_latest" formatted="false">Jump to latest</string>
+    <string name="selected_label" formatted="false">Selected</string>
+    <string name="fork_to_new_session" formatted="false">Fork to new session</string>
+    <string name="revert_message" formatted="false">Revert message</string>
+    <string name="ask_anything_for_commands" formatted="false">Ask anything…</string>
+    <string name="remove" formatted="false">Remove</string>
+    <string name="clear_all" formatted="false">Clear all</string>
+    <string name="add_images_and_files" formatted="false">Add images and files</string>
+    <string name="stop" formatted="false">Stop</string>
+    <string name="send" formatted="false">Send</string>
+    <string name="filter_files" formatted="false">Filter files</string>
+    <string name="previous" formatted="false">‹ Previous</string>
+    <string name="next" formatted="false">Next ›</string>
+    <string name="loading_file" formatted="false">Loading file…</string>
+    <string name="opencode" formatted="false">OpenCode</string>
+    <string name="add_project" formatted="false">Add project</string>
+    <string name="rename_project" formatted="false">Rename project</string>
+    <string name="delete_project" formatted="false">Delete project</string>
+    <string name="add" formatted="false">Add</string>
+    <string name="open_project" formatted="false">Open project</string>
+    <string name="search_folders" formatted="false">Search folders</string>
+    <string name="open" formatted="false">Open</string>
+    <string name="switch_backend" formatted="false">Switch backend</string>
+    <string name="refresh" formatted="false">Refresh</string>
+    <string name="new_session" formatted="false">New session</string>
+    <string name="settings" formatted="false">Settings</string>
+    <string name="reset_to_defaults" formatted="false">Reset to defaults</string>
+    <string name="switch_server" formatted="false">Switch server</string>
+    <string name="add_server" formatted="false">Add server</string>
+    <string name="name_optional" formatted="false">Name (optional)</string>
+    <string name="e_g_home_server" formatted="false">e.g. Home server</string>
+    <string name="server_url" formatted="false">Server URL</string>
+    <string name="http_host_4096" formatted="false">http://host:4096</string>
+    <string name="rename_server" formatted="false">Rename server</string>
+    <string name="name" formatted="false">Name</string>
+    <string name="save" formatted="false">Save</string>
+    <string name="disconnect" formatted="false">Disconnect</string>
+    <string name="connect" formatted="false">Connect</string>
+    <string name="connect_provider">Connect %1$s</string>
+    <string name="show_more_providers" formatted="false">Show more providers</string>
+    <string name="api_key" formatted="false">API key</string>
+    <string name="continue_label" formatted="false">Continue</string>
+    <string name="choose_backend" formatted="false">Choose backend</string>
+    <string name="add_backend" formatted="false">Add backend</string>
+    <string name="http_192_168_1_100" formatted="false">http://192.168.1.100:4096</string>
+    <string name="add_connect" formatted="false">Add &amp; connect</string>
+    <string name="rename_backend" formatted="false">Rename backend</string>
+    <string name="password_required" formatted="false">Password required</string>
+    <string name="username" formatted="false">Username</string>
+    <string name="password" formatted="false">Password</string>
+    <string name="connected" formatted="false">Connected</string>
+    <string name="home" formatted="false">Home</string>
+    <string name="close_tab" formatted="false">Close tab</string>
+    <string name="settings_advanced" formatted="false">Advanced</string>
+    <string name="settings_session_guard" formatted="false">Session Guard</string>
+    <string name="settings_guard_token" formatted="false">Guard token</string>
+    <string name="settings_auto_adopt" formatted="false">Auto-adopt drift</string>
+    <string name="settings_auto_adopt_sub" formatted="false">Adopt server model/agent when guard drift is detected</string>
+    <string name="settings_session_guard_active" formatted="false">Active</string>
+    <string name="settings_session_guard_inactive" formatted="false">Not configured</string>
+    <string name="settings_session_guard_offline" formatted="false">Offline</string>
+    <string name="settings_session_guard_metrics" formatted="false">Requests %1$d · errors %2$d · avg %3$.0f ms · max %4$.0f ms</string>
+    <string name="settings_session_guard_sessions" formatted="false">Guarded sessions: %1$d</string>
+    <string name="settings_agent" formatted="false">Agent</string>
+    <string name="settings_appearance" formatted="false">Appearance</string>
+    <string name="settings_auto_accept_permissions" formatted="false">Auto-accept permissions</string>
+    <string name="settings_choose_whether_opencode_follows_the_system_light" formatted="false">Choose whether OpenCode follows the system, light, or dark theme</string>
+    <string name="settings_code_font" formatted="false">Code Font</string>
+    <string name="settings_color_scheme" formatted="false">Color scheme</string>
+    <string name="settings_connected_providers" formatted="false">Connected providers</string>
+    <string name="settings_customise_how_opencode_is_themed" formatted="false">Customise how OpenCode is themed</string>
+    <string name="settings_customise_the_font_used_in_code_blocks" formatted="false">Customise the font used in code blocks</string>
+    <string name="settings_customise_the_font_used_throughout_the_interface" formatted="false">Customise the font used throughout the interface</string>
+    <string name="settings_display_model_reasoning_summaries_in_the_timelin" formatted="false">Display model reasoning summaries in the timeline</string>
+    <string name="settings_errors" formatted="false">Errors</string>
+    <string name="settings_expand_edit_tool_parts" formatted="false">Expand edit tool parts</string>
+    <string name="settings_expand_shell_tool_parts" formatted="false">Expand shell tool parts</string>
+    <string name="settings_general" formatted="false">General</string>
+    <string name="settings_permission_requests_will_be_automatically_approv" formatted="false">Permission requests will be automatically approved</string>
+    <string name="settings_permissions" formatted="false">Permissions</string>
+    <string name="settings_play_sound_when_a_permission_is_required" formatted="false">Play sound when a permission is required</string>
+    <string name="settings_play_sound_when_an_error_occurs" formatted="false">Play sound when an error occurs</string>
+    <string name="settings_play_sound_when_the_agent_is_complete_or_needs_a" formatted="false">Play sound when the agent is complete or needs attention</string>
+    <string name="settings_popular_providers" formatted="false">Popular providers</string>
+    <string name="settings_show_edit_write_and_patch_tool_parts_expanded_by" formatted="false">Show edit, write, and patch tool parts expanded by default in the timeline</string>
+    <string name="settings_show_reasoning_summaries" formatted="false">Show reasoning summaries</string>
+    <string name="settings_show_shell_tool_parts_expanded_by_default_in_the" formatted="false">Show shell tool parts expanded by default in the timeline</string>
+    <string name="settings_sound_effects" formatted="false">Sound effects</string>
+    <string name="settings_system_mono" formatted="false">System Mono</string>
+    <string name="settings_system_notifications" formatted="false">System notifications</string>
+    <string name="settings_system_sans" formatted="false">System Sans</string>
+    <string name="settings_theme" formatted="false">Theme</string>
+    <string name="settings_ui_font" formatted="false">UI Font</string>
+    <string name="server_unhealthy" formatted="false">Server is not healthy</string>
+    <string name="connection_failed_prefix" formatted="false">Connection failed: </string>
+    <plurals name="session_files_changed">
+        <item quantity="one">%1$d file</item>
+        <item quantity="other">%1$d files</item>
+    </plurals>
+    <string name="waiting_for_model" formatted="false">Waiting for the model…</string>
+    <string name="suggestion_explain" formatted="false">Explain this codebase</string>
+    <string name="suggestion_bug" formatted="false">Find and fix a bug</string>
+    <string name="suggestion_tests" formatted="false">Add tests for a file</string>
+    <string name="suggestion_review" formatted="false">Review my latest changes</string>
+    <string name="pin_session" formatted="false">Pin</string>
+    <string name="unpin_session" formatted="false">Unpin</string>
+    <string name="copy_message" formatted="false">Copy message</string>
+    <string name="copy_response" formatted="false">Copy response</string>
+    <string name="regenerate" formatted="false">Regenerate</string>
+    <string name="settings_notify_agent_sub" formatted="false">Show system notification when the agent is complete or needs attention</string>
+    <string name="settings_notify_permissions_sub" formatted="false">Show system notification when a permission is required</string>
+    <string name="settings_notify_errors_sub" formatted="false">Show system notification when an error occurs</string>
+    <string name="settings_file_tree" formatted="false">File tree</string>
+    <string name="settings_file_tree_sub" formatted="false">Show the file tree panel in sessions</string>
+    <string name="settings_command_palette" formatted="false">Command palette</string>
+    <string name="settings_command_palette_sub" formatted="false">Show the search and command palette button in the title bar</string>
+    <string name="settings_server_status" formatted="false">Server status</string>
+    <string name="settings_server_status_sub" formatted="false">Show the server status button in the title bar</string>
+    <string name="settings_show_agent" formatted="false">Show agent</string>
+    <string name="settings_show_agent_sub" formatted="false">Switch between agents in the composer. When hidden, defaults to Build agent.</string>
+    <string name="settings_backup" formatted="false">Backup</string>
+    <string name="settings_export" formatted="false">Export</string>
+    <string name="settings_import" formatted="false">Import</string>
+    <string name="settings_backup_hint" formatted="false">Export writes your settings to a JSON file; Import applies one. Useful when moving to a new device.</string>
+    <string name="project_added" formatted="false">Project added</string>
+    <plurals name="diff_lines_truncated">
+        <item quantity="one">… %1$d more line (truncated)</item>
+        <item quantity="other">… %1$d more lines (truncated)</item>
+    </plurals>
+    <plurals name="changed_files">
+        <item quantity="one">%1$d changed file</item>
+        <item quantity="other">%1$d changed files</item>
+    </plurals>
+    <string name="running" formatted="false">running…</string>
+    <string name="status_label">Status: %1$s</string>
+    <string name="session_info" formatted="false">Session info</string>
+    <string name="context_breakdown" formatted="false">Context breakdown</string>
+    <string name="messages" formatted="false">Messages</string>
+    <string name="question_fallback" formatted="false">(question)</string>
+    <string name="select_all_answers" formatted="false">Select all answers that apply</string>
+    <string name="select_one_answer" formatted="false">Select one answer</string>
+    <string name="expanded" formatted="false">Expanded</string>
+    <string name="collapsed" formatted="false">Collapsed</string>
+    <string name="no_matching_files" formatted="false">No matching files</string>
+    <string name="hide_non_diff_lines" formatted="false">Hide non-diff lines</string>
+    <string name="show_all_lines" formatted="false">Show all lines</string>
+    <string name="model_label">Model: %1$s</string>
+    <string name="thinking_expanded" formatted="false">Thinking ▲</string>
+    <string name="thinking_collapsed" formatted="false">Thinking ▼</string>
+    <string name="search_in">Search in %1$s</string>
+    <string name="up_one_level" formatted="false">… up</string>
+    <string name="backend_choose_hint" formatted="false">Choose an opencode serve server or add a new URL.</string>
+    <string name="backends" formatted="false">Backends</string>
+    <string name="no_backend_saved" formatted="false">No backend saved yet.</string>
+    <string name="backend_password_protected">%1$s is password-protected.</string>
+    <string name="cost" formatted="false">Cost</string>
+    <string name="cache" formatted="false">Cache</string>
+    <string name="could_not_load_agents" formatted="false">Could not load agents: %1$s</string>
+    <string name="could_not_load_models" formatted="false">Could not load models: %1$s</string>
+    <string name="could_not_load_session" formatted="false">Could not load the session: %1$s</string>
+    <string name="could_not_load_context" formatted="false">Could not load the context usage: %1$s</string>
+    <string name="could_not_load_files" formatted="false">Could not load files: %1$s</string>
+    <string name="could_not_load_commands" formatted="false">Could not load commands: %1$s</string>
+    <string name="could_not_load_mcp" formatted="false">Could not load MCP servers: %1$s</string>
+    <string name="mcp_toggle_failed" formatted="false">Could not change the MCP server: %1$s</string>
+    <string name="mcp_auth_failed" formatted="false">MCP sign-in failed: %1$s</string>
+    <string name="compact_failed" formatted="false">Compacting failed: %1$s</string>
+    <string name="could_not_send" formatted="false">Could not send the message: %1$s</string>
+    <string name="could_not_interrupt" formatted="false">Could not stop the response: %1$s</string>
+    <string name="could_not_rename" formatted="false">Could not rename: %1$s</string>
+    <string name="could_not_delete" formatted="false">Could not delete: %1$s</string>
+    <string name="could_not_archive" formatted="false">Could not archive: %1$s</string>
+    <string name="could_not_fork" formatted="false">Could not fork the session: %1$s</string>
+    <string name="could_not_revert" formatted="false">Could not revert: %1$s</string>
+    <string name="could_not_load_todos" formatted="false">Could not load the todo list: %1$s</string>
+    <string name="could_not_load_diff" formatted="false">Could not load the diff: %1$s</string>
+    <string name="could_not_load_projects" formatted="false">Could not load projects: %1$s</string>
+    <string name="could_not_load_sessions" formatted="false">Could not load sessions: %1$s</string>
+    <string name="could_not_rename_project" formatted="false">Could not rename the project: %1$s</string>
+    <string name="action_failed" formatted="false">Action failed: %1$s</string>
+    <string name="could_not_import_settings" formatted="false">Could not import settings: %1$s</string>
+    <string name="could_not_export_settings" formatted="false">Could not export settings: %1$s</string>
+    <string name="settings_imported" formatted="false">Settings imported</string>
+    <string name="settings_exported" formatted="false">Settings exported</string>
+    <string name="secure_storage_unavailable" formatted="false">Secure storage unavailable — saved passwords may be lost: %1$s</string>
+    <string name="collapse" formatted="false">Collapse</string>
+    <string name="expand" formatted="false">Expand</string>
+    <string name="files" formatted="false">Files</string>
+    <string name="collapse_tree" formatted="false">Collapse tree</string>
+    <string name="expand_tree" formatted="false">Expand tree</string>
+    <string name="manage_models_hint" formatted="false">Customize which models appear in the model selector.</string>
+    <string name="loading_providers" formatted="false">Loading providers…</string>
+    <string name="connected_from_env" formatted="false">Connected from your environment variables</string>
+    <string name="loading_models" formatted="false">Loading models…</string>
+    <string name="hide_all" formatted="false">Hide all</string>
+    <string name="show_all" formatted="false">Show all</string>
+    <string name="saved_servers" formatted="false">Saved servers</string>
+    <string name="no_servers_saved" formatted="false">No servers saved yet.</string>
+    <string name="active" formatted="false">Active</string>
+    <string name="sign_in_on_start" formatted="false">Sign-in and switching happen on the start screen.</string>
+    <string name="desktop_version">OpenCode server · v%1$s</string>
+    <string name="delete_session_confirm">“%1$s” will be permanently deleted.</string>
+    <string name="generating" formatted="false">Generating…</string>
+    <string name="context_limit">Context limit</string>
+    <string name="context_limit_usage">Limit / usage</string>
+    <string name="usage">Usage</string>
+    <string name="total_cost">Total cost</string>
+    <string name="share_failed" formatted="false">Share failed</string>
+    <string name="shared_fmt">Shared: %1$s</string>
+    <string name="export_failed" formatted="false">Export failed</string>
+    <plurals name="exported_chars">
+        <item quantity="one">Exported (%1$d char)</item>
+        <item quantity="other">Exported (%1$d chars)</item>
+    </plurals>
+    <string name="messages_restored" formatted="false">Messages restored</string>
+    <string name="restore_failed" formatted="false">Restore failed</string>
+    <string name="password_saved" formatted="false">Password saved</string>
+    <string name="no_password" formatted="false">No password</string>
+    <string name="could_not_load_providers">Could not load providers: %1$s</string>
+    <string name="no_providers_connected" formatted="false">No providers connected.</string>
+    <string name="healthy" formatted="false">Healthy</string>
+    <string name="unreachable" formatted="false">Unreachable</string>
+    <plurals name="todos_completed">
+        <item quantity="one">%1$d of %2$d todo completed</item>
+        <item quantity="other">%1$d of %2$d todos completed</item>
+    </plurals>
+</resources>

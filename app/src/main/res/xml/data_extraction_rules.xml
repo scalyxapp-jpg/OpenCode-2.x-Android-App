@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ backup / device-transfer rules.
+
+  Credential stores are excluded from both cloud backup and device transfer:
+  "opencode.backends" holds the server list (passwords encrypted with the
+  Android Keystore, whose key cannot be restored elsewhere) and
+  "opencode.global.dat" holds model/provider selections. Settings and the
+  project list are still backed up.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="opencode.backends.xml" />
+        <exclude domain="sharedpref" path="opencode.global.dat.xml" />
+        <!-- Cached conversation text: tool output is stripped, but assistant
+             answers can quote file contents/secrets the agent touched. -->
+        <exclude domain="file" path="session_cache/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="opencode.backends.xml" />
+        <exclude domain="sharedpref" path="opencode.global.dat.xml" />
+        <exclude domain="file" path="session_cache/" />
+    </device-transfer>
+</data-extraction-rules>
