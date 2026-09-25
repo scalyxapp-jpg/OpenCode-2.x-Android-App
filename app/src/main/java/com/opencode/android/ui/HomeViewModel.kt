@@ -5,11 +5,13 @@ import com.opencode.android.util.AppLog
 import androidx.compose.runtime.Immutable
 import com.opencode.android.util.APP_LOG_TAG
 
-import android.app.Application
 import androidx.core.content.edit
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.opencode.android.data.ApiClient
+import com.opencode.android.data.OpenCodeApi
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import javax.inject.Provider
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionCreateRequest
 import com.opencode.android.domain.SessionLocation
@@ -51,7 +53,13 @@ data class HomeUiState(
     val isRefreshing: Boolean = false,
 )
 
-class HomeViewModel(application: Application) : AndroidViewModel(application) {
+@HiltViewModel
+class HomeViewModel @Inject constructor(
+    // Resolved per call: the active backend can change mid-process.
+    private val apiProvider: Provider<OpenCodeApi>,
+) : ViewModel() {
+
+    private val api: OpenCodeApi get() = apiProvider.get()
 
     private companion object {
         const val PINNED_KEY = "pinned_sessions"
@@ -99,7 +107,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val server = try {
-                    ApiClient.api.getProjects()
+                    api.getProjects()
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "getProjects failed: ${e.message}")
                     UserMessages.post(R.string.could_not_load_projects, "${e.message}")
@@ -245,7 +253,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                ApiClient.api.renameProject(id, mapOf("name" to newName))
+                api.renameProject(id, mapOf("name" to newName))
                 loadProjects()
                 onDone()
             } catch (e: Exception) {
@@ -303,7 +311,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             ) }
             try {
                 // Mirror web home list: GET /session?directory=&roots=true&limit=55.
-                val sessions = ApiClient.api.getProjectSessions(project.directory)
+                val sessions = api.getProjectSessions(project.directory)
                     .filter { it.time?.archived == null }
                     .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
                 // Drop a stale result: another project was selected meanwhile.
@@ -341,7 +349,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val dir = directory ?: _uiState.value.selectedProject?.directory
-                val session = ApiClient.api.createSessionIn(
+                val session = api.createSessionIn(
                     SessionCreateRequest(location = dir?.let { SessionLocation(it) })
                 ).data
                 onCreated(session)
@@ -354,7 +362,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun renameSession(session: Session, newTitle: String, onDone: () -> Unit = {}) {
         viewModelScope.launch {
             try {
-                ApiClient.api.renameSession(session.id, mapOf("title" to newTitle))
+                api.renameSession(session.id, mapOf("title" to newTitle))
                 _uiState.value.selectedProject?.let { loadSessions(it) }
                 onDone()
             } catch (e: Exception) {
@@ -367,7 +375,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun archiveSession(session: Session) {
         viewModelScope.launch {
             try {
-                ApiClient.api.updateSession(
+                api.updateSession(
                     session.id,
                     SessionUpdateRequest(time = SessionTimeUpdate(archived = System.currentTimeMillis())),
                 )
@@ -382,7 +390,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteSession(session: Session) {
         viewModelScope.launch {
             try {
-                ApiClient.api.deleteSession(session.id)
+                api.deleteSession(session.id)
                 _uiState.value.selectedProject?.let { loadSessions(it) }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "deleteSession failed: ${e.message}")
