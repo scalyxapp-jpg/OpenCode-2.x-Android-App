@@ -49,6 +49,8 @@ class SessionConversationTest {
     private class FakeTransport : SessionTransport {
         var aborts = 0
         var interrupts = 0
+        var abortSuccessful = true
+        var abortThrows = false
         override suspend fun promptAsync(
             sessionId: String,
             body: PromptAsyncRequest,
@@ -56,11 +58,23 @@ class SessionConversationTest {
         ): Response<okhttp3.ResponseBody> = Response.success("ok".toResponseBody(null))
         override suspend fun abort(sessionId: String): Response<okhttp3.ResponseBody> {
             aborts++
-            return Response.success("true".toResponseBody(null))
+            if (abortThrows) throw java.io.IOException("abort boom")
+            return if (abortSuccessful) {
+                Response.success("true".toResponseBody(null))
+            } else {
+                Response.error(500, "".toResponseBody(null))
+            }
         }
         override suspend fun interrupt(sessionId: String) { interrupts++ }
         override fun guardRevision(sessionId: String): Long? = null
         override fun clearGuardRevision(sessionId: String) {}
+    }
+
+    private class FailingPort(
+        val base: FakePort = FakePort(),
+    ) : ConversationPort by base {
+        var interruptFailures = 0
+        override fun notifyInterruptFailed(message: String?) { interruptFailures++ }
     }
 
     private val noError: (JsonElement?) -> String? = { null }
@@ -85,8 +99,36 @@ class SessionConversationTest {
     }
 
     @Test
-    fun `load sets the session and stream events project into state`() = runTest {
+    fun `interrupt falls back to the legacy endpoint when abort is not successful`() = runTest {
         val port = FakePort()
+        val transport = FakeTransport().apply { abortSuccessful = false }
+        val conversation = SessionConversation(
+            EventSource { _, _ -> emptyFlow() }, this, noModels, noError, transport, port,
+        )
+        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+        conversation.dispatch(SessionCommand.Interrupt)
+        advanceUntilIdle()
+        assertEquals(1, transport.aborts)
+        assertEquals(1, transport.interrupts)
+        assertEquals(1, port.refreshes)
+    }
+
+    @Test
+    fun `interrupt failure notifies the port and still refreshes`() = runTest {
+        val port = FailingPort()
+        val transport = FakeTransport().apply { abortThrows = true }
+        val conversation = SessionConversation(
+            EventSource { _, _ -> emptyFlow() }, this, noModels, noError, transport, port,
+        )
+        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+        conversation.dispatch(SessionCommand.Interrupt)
+        advanceUntilIdle()
+        assertEquals(1, port.interruptFailures)
+        assertEquals(1, port.base.refreshes)
+    }
+
+    @Test
+    fun `load sets the session and stream events project into state`() = runTest {        val port = FakePort()
         val transport = FakeTransport()
         val source = EventSource { _, _ ->
             flowOf(
