@@ -340,6 +340,19 @@ data class Agent(
     val mode: String? = null,
 )
 
+/**
+ * Web-shape agent entry from `GET /agent?directory=`: the identifier field is
+ * `name` (the legacy `GET /api/agent` uses `id`). Mapped to [Agent] with
+ * `id = name`.
+ */
+@Serializable
+@Immutable
+data class ProjectAgent(
+    val name: String,
+    val description: String? = null,
+    val mode: String? = null,
+)
+
 @Serializable
 @Immutable
 data class ModelLimit(

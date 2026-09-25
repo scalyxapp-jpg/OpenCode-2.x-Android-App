@@ -345,8 +345,9 @@ class ChatViewModel @javax.inject.Inject constructor(
     // flushes do not recompose the whole screen. Owned by SessionStreamer.
     val liveState: StateFlow<LiveStreamState> = conversation.liveState
 
-    // Server-global agent list, fetched once per process (see loadSession).
-    private var cachedAgents: List<com.opencode.android.domain.Agent>? = null
+    // Project-scoped agent list, cached per directory: agents can be defined in
+    // a project's own opencode config, so one global list is wrong.
+    private val cachedAgentsByDirectory = mutableMapOf<String, List<com.opencode.android.domain.Agent>>()
     // Tracked so a fast session switch cancels the previous load instead of
     // letting two loads race and write interleaved state (last writer won,
     // which could show session A's messages under session B's title).
@@ -397,7 +398,6 @@ class ChatViewModel @javax.inject.Inject constructor(
                 val sessionBase: Session
                 val fullSession: Session?
                 val messages: List<Message>
-                val agents: List<Agent>
                 coroutineScope {
                     val sessionD = async { repo.session(sessionId) }
                     // /api/session omits `directory`; the web endpoint includes it.
@@ -411,22 +411,9 @@ class ChatViewModel @javax.inject.Inject constructor(
                     val messagesD = async {
                         repo.loadMessages(sessionId, messageLimit)
                     }
-                    val agentsD = async {
-                        // Server-global and rarely changes: fetch once per process.
-                        cachedAgents ?: try {
-                            api.getAgents().data.also {
-                                if (it.isNotEmpty()) cachedAgents = it
-                            }
-                        } catch (e: Exception) {
-                            AppLog.e(APP_LOG_TAG, "getAgents failed: ${e.message}")
-                            UserMessages.post(R.string.could_not_load_agents, "${e.message}")
-                            emptyList()
-                        }
-                    }
                     sessionBase = sessionD.await()
                     fullSession = fullD.await()
                     messages = messagesD.await()
-                    agents = agentsD.await()
                 }
                 val session = if (fullSession != null && !fullSession.directory.isNullOrBlank()) {
                     sessionBase.copy(
@@ -443,6 +430,8 @@ class ChatViewModel @javax.inject.Inject constructor(
                     )
                 }
                 AppLog.d(APP_LOG_TAG) { "loadSession: session=${session.id} dir=${session.directory} agent=${session.agent} model=${session.model?.id}" }
+                // Directory-scoped: a project can define its own agents.
+                val agents = loadAgents(session.directory)
                 // Remember the project so the home screen reopens on it after a
                 // process death instead of an arbitrary one. Only when known:
                 // /api/session omits `directory`, so a failed full-session fetch
@@ -1114,6 +1103,36 @@ _uiState.update { current ->
                 // Session metadata refresh is best-effort; next SSE/poll retries.
             }
         }
+    }
+
+    /**
+     * Project-scoped agent list, cached per directory. Uses `GET /agent?directory=`
+     * (the web endpoint) because the legacy `GET /api/agent` ignores the
+     * directory and therefore never surfaced a project's own agents. Falls back
+     * to the legacy endpoint when the web one fails.
+     */
+    private suspend fun loadAgents(directory: String?): List<Agent> {
+        val key = directory ?: ""
+        cachedAgentsByDirectory[key]?.let { return it }
+        val scoped = try {
+            api.getProjectAgents(directory).map { p ->
+                Agent(id = p.name, name = p.name, description = p.description, mode = p.mode)
+            }
+        } catch (e: Exception) {
+            AppLog.e(APP_LOG_TAG, "getProjectAgents failed: ${e.message}")
+            emptyList()
+        }
+        val list = scoped.ifEmpty {
+            try {
+                api.getAgents().data
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "getAgents failed: ${e.message}")
+                UserMessages.post(R.string.could_not_load_agents, "${e.message}")
+                emptyList()
+            }
+        }
+        if (list.isNotEmpty()) cachedAgentsByDirectory[key] = list
+        return list
     }
 
     private fun startPolling(sessionId: String) {

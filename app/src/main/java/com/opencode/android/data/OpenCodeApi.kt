@@ -1,6 +1,7 @@
 package com.opencode.android.data
 
 import com.opencode.android.domain.Agent
+import com.opencode.android.domain.ProjectAgent
 import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.ContextUsage
 import com.opencode.android.domain.McpStatus
@@ -240,6 +241,19 @@ interface OpenCodeApi {
 
     @GET("api/agent")
     suspend fun getAgents(): DataListResponse<Agent>
+
+    /**
+     * Project-scoped agent list (the endpoint the web UI uses).
+     *
+     * `GET /api/agent` ignores `?directory=` (verified: its `location` stays the
+     * global config dir), so an agent defined in a project's own opencode config
+     * never appeared in the app. `GET /agent?directory=` returns it, in the web
+     * shape where the identifier field is `name`, not `id`.
+     */
+    @GET("agent")
+    suspend fun getProjectAgents(
+        @Query("directory") directory: String? = null,
+    ): List<ProjectAgent>
 
     @GET("api/model")
     suspend fun getModels(): DataListResponse<Model>
