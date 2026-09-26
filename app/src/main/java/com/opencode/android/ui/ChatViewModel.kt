@@ -1131,6 +1131,10 @@ _uiState.update { current ->
             api.getProjectAgents(directory).map { p ->
                 Agent(id = p.name, name = p.name, description = p.description, mode = p.mode)
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Never swallow cancellation: doing so broke structured concurrency
+            // and left the agent list empty when the user navigated mid-load.
+            throw e
         } catch (e: Exception) {
             AppLog.e(APP_LOG_TAG, "getProjectAgents failed: ${e.message}")
             emptyList()
@@ -1138,6 +1142,8 @@ _uiState.update { current ->
         val list = scoped.ifEmpty {
             try {
                 api.getAgents().data
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "getAgents failed: ${e.message}")
                 UserMessages.post(R.string.could_not_load_agents, "${e.message}")

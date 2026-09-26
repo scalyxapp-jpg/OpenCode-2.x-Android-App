@@ -314,7 +314,23 @@ class HomeViewModel @Inject constructor(
             ) }
             try {
                 // Mirror web home list: GET /session?directory=&roots=true&limit=55.
-                val sessions = api.getProjectSessions(project.directory)
+                // One retry: a dropped connection or a server restart otherwise
+                // showed "Could not load sessions" for a list that loads fine a
+                // moment later.
+                var fetched: List<com.opencode.android.domain.Session>? = null
+                var lastError: Exception? = null
+                for (attempt in 1..2) {
+                    try {
+                        fetched = api.getProjectSessions(project.directory)
+                        break
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        lastError = e
+                        if (attempt < 2) kotlinx.coroutines.delay(400L)
+                    }
+                }
+                val sessions = (fetched ?: throw (lastError ?: IllegalStateException("load failed")))
                     .filter { it.time?.archived == null }
                     .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
                 // Drop a stale result: another project was selected meanwhile.

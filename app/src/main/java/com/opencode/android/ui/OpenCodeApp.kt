@@ -414,7 +414,25 @@ internal fun OpenCodeApp(deepLinkSessionId: String? = null) {
                 // session the event belongs to.
                 val sessionId = deepLinkSessionId ?: savedSessionId
                 if (sessionId != null) {
-                    openSession(sessionId, savedSessionTitle ?: "Session")
+                    // The stored session can be gone (deleted elsewhere, or it
+                    // belongs to a different backend). Opening it showed
+                    // "Could not load sessions" and an empty chat; verify first
+                    // and fall back to Home instead.
+                    val exists = try {
+                        backendSession.api.getSessionFull(sessionId)
+                        true
+                    } catch (e: retrofit2.HttpException) {
+                        e.code() != 404
+                    } catch (_: Exception) {
+                        // Network error: do not erase a session that may exist.
+                        true
+                    }
+                    if (exists) {
+                        openSession(sessionId, savedSessionTitle ?: "Session")
+                    } else {
+                        AppLog.e(APP_LOG_TAG, "restore: session $sessionId not found, staying on Home")
+                        LastSessionStore.clear()
+                    }
                 }
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "auto-connect failed: ${e.message}")
