@@ -173,6 +173,11 @@ data class ChatUiState(
     // Review/Changes tab: git branch + changed files (GET /vcs, /vcs/diff).
     val vcsBranch: String? = null,
     val vcsDiff: List<VcsDiffFile> = emptyList(),
+    // Changes tab: the working-tree diff is computed by the server and can be
+    // slow for a large repo, so the tab shows a spinner (or a clear timeout
+    // message with Retry) instead of a silent blank panel.
+    val vcsDiffLoading: Boolean = false,
+    val vcsDiffError: String? = null,
     // SSE connection health (drives a subtle "reconnecting" hint).
     val sseConnected: Boolean = false,
     // Session-guard proxy status and conflict UX.
@@ -615,14 +620,26 @@ _uiState.update { current ->
                 // assistant message, not the session's cumulative aggregate
                 // (which after a long session can be many times the window and
                 // made the app read "100%" where the web read "9%").
-                val lastAssistant = messages
-                    .filter { roleOf(it) == "assistant" }
+                // The newest assistant row can be a zero-token placeholder (a
+                // summary/compaction row), which made the figures read 0 or
+                // stay on the previous session's numbers. Prefer the newest
+                // assistant message that actually has usage.
+                fun usageOf(m: Message) = m.tokens ?: m.info?.tokens
+                val assistantMessages = messages.filter { roleOf(it) == "assistant" }
+                val lastAssistant = assistantMessages
+                    .filter { m ->
+                        val t = usageOf(m)
+                        t != null && ((t.input ?: 0L) + (t.output ?: 0L) +
+                            (t.reasoning ?: 0L) + (t.cache?.read ?: 0L) +
+                            (t.cache?.write ?: 0L)) > 0L
+                    }
                     .maxByOrNull {
                         it.time?.created ?: it.info?.time?.created ?: 0L
                     }
-                val tokens = lastAssistant?.tokens
-                    ?: lastAssistant?.info?.tokens
-                    ?: full.tokens
+                    ?: assistantMessages.maxByOrNull {
+                        it.time?.created ?: it.info?.time?.created ?: 0L
+                    }
+                val tokens = lastAssistant?.let { usageOf(it) } ?: full.tokens
                 val input = tokens?.input ?: 0L
                 val output = tokens?.output ?: 0L
                 val reasoning = tokens?.reasoning ?: 0L
@@ -1308,47 +1325,54 @@ _uiState.update { current ->
     // 15s socket timeout, saturating the connection and making streaming feel
     // sluggish. A non-git directory now costs one short probe per 30s.
     private var vcsJob: kotlinx.coroutines.Job? = null
-    private var vcsFailedAt: Long = 0L
 
     fun loadVcsDiff(directory: String) {
-        if (System.currentTimeMillis() - vcsFailedAt < 30_000L) return
+        // Single-flight: a new request cancels the previous one. No failure
+        // cooldown: it used to make the tab silently do nothing for 30 s after
+        // one timeout, which read as "Changes always empty".
         vcsJob?.cancel()
         vcsJob = viewModelScope.launch {
+            _uiState.update { it.copy(vcsDiffLoading = true, vcsDiffError = null) }
             try {
                 val info = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
                     repo.vcs(directory)
                 }
-                // /vcs/diff returns every changed file WITH its full patch —
-                // measured 1.1 MB / 50 files on a real session. The old 8 s cap
-                // expired on that, and a null diff silently kept the previous
-                // numbers on screen, so the Review tab never appeared to update.
+                // /vcs/diff returns every changed file WITH its full patch. For
+                // a huge working tree (this home repo once had ~607k untracked
+                // files) the server can take longer than the cap and never
+                // answers, so the timeout is surfaced as a real message with a
+                // Retry instead of an empty panel.
                 val diff = kotlinx.coroutines.withTimeoutOrNull(30_000L) {
                     repo.vcsDiff(directory)
                 }
-                if (diff == null) {
-                    // Background refresh only: keep previous stats, retry on
-                    // the next refresh. No user toast — the timeout fires ~30s
-                    // after opening a chat and read as a mystery "Action
-                    // failed" with no context.
-                    AppLog.e(APP_LOG_TAG, "getVcsDiff timed out after 30s — keeping previous stats")
+                // Ignore a stale result if the user switched session.
+                if (_uiState.value.session?.directory != directory) return@launch
+                when {
+                    diff != null -> _uiState.update { current -> current.copy(
+                        vcsBranch = info?.branch ?: current.vcsBranch,
+                        vcsDiff = diff,
+                        vcsDiffLoading = false,
+                        vcsDiffError = null,
+                    ) }
+                    info != null -> _uiState.update { current -> current.copy(
+                        vcsBranch = info.branch ?: current.vcsBranch,
+                        vcsDiffLoading = false,
+                        vcsDiffError = "Server timed out computing the diff for this repository",
+                    ) }
+                    else -> _uiState.update { current -> current.copy(
+                        vcsDiffLoading = false,
+                        vcsDiffError = "Could not read the repository status",
+                    ) }
                 }
-                if (info == null && diff == null) {
-                    vcsFailedAt = System.currentTimeMillis()
-                    return@launch
-                }
-                _uiState.update { current -> current.copy(
-                    vcsBranch = info?.branch ?: current.vcsBranch,
-                    vcsDiff = diff ?: current.vcsDiff,
-                ) }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                // Single-flight cancels the previous call on purpose. Rethrow so
-                // structured concurrency works, and do not poison the failure
-                // cooldown with a normal cancellation.
+                // Single-flight cancels the previous call on purpose.
                 throw e
             } catch (e: Exception) {
-                vcsFailedAt = System.currentTimeMillis()
                 AppLog.e(APP_LOG_TAG, "getVcsDiff failed: ${e.message}")
-                UserMessages.post(R.string.could_not_load_diff, "${e.message}")
+                _uiState.update { current -> current.copy(
+                    vcsDiffLoading = false,
+                    vcsDiffError = e.message ?: "Could not load changes",
+                ) }
             }
         }
     }

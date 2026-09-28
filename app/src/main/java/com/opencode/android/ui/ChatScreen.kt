@@ -686,11 +686,16 @@ internal fun ChatScreen(
                     fileViewer = uiState.fileViewer,
                     vcsBranch = uiState.vcsBranch,
                     vcsDiff = uiState.vcsDiff,
+                    vcsDiffLoading = uiState.vcsDiffLoading,
+                    vcsDiffError = uiState.vcsDiffError,
                     initialPath = uiState.session?.directory,
                     showFileTree = appSettings.showFileTree,
                     onLoadFiles = viewModel::loadFiles,
                     onOpenFile = viewModel::openFileViewer,
                     onDismissViewer = viewModel::dismissFileViewer,
+                    onRetryDiff = {
+                        uiState.session?.directory?.let { viewModel.loadVcsDiff(it) }
+                    },
                 )
             }
             }

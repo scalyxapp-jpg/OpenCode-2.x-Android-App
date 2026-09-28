@@ -65,6 +65,12 @@ internal fun ChangesTab(
     fileViewer: FileViewerState?,
     vcsBranch: String? = null,
     vcsDiff: List<VcsDiffFile> = emptyList(),
+    // True while the server computes the working-tree diff; error carries a
+    // timeout/failure message. Without these the tab showed a blank panel and
+    // looked broken whenever the diff was slow.
+    vcsDiffLoading: Boolean = false,
+    vcsDiffError: String? = null,
+    onRetryDiff: () -> Unit = {},
     // Session directory (server path). Null until the session payload resolves
     // it; never a hardcoded developer path.
     initialPath: String? = null,
@@ -123,17 +129,47 @@ internal fun ChangesTab(
     ) {
         // Nothing to show (no VCS diff and no browsable directory): render an
         // explicit empty state instead of a blank panel.
-        if (vcsDiff.isEmpty() && (!showFileTree || currentPath == null)) {
-            item {
-                Box(
-                    modifier = Modifier.fillParentMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    EmptyState(
-                        title = stringResource(R.string.no_changes),
-                        icon = Icons.Default.CheckCircle,
-                        compact = true,
-                    )
+        if (vcsDiff.isEmpty()) {
+            when {
+                vcsDiffLoading -> item {
+                    Box(
+                        modifier = Modifier.fillParentMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) { InlineSpinner() }
+                }
+                vcsDiffError != null -> item {
+                    Box(
+                        modifier = Modifier.fillParentMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                        ) {
+                            Text(
+                                text = vcsDiffError ?: "",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = MaterialTheme.spacing.large),
+                            )
+                            OutlinedButton(onClick = onRetryDiff) {
+                                Text(stringResource(R.string.retry))
+                            }
+                        }
+                    }
+                }
+                (!showFileTree || currentPath == null) -> item {
+                    Box(
+                        modifier = Modifier.fillParentMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            title = stringResource(R.string.no_changes),
+                            icon = Icons.Default.CheckCircle,
+                            compact = true,
+                        )
+                    }
                 }
             }
         }
