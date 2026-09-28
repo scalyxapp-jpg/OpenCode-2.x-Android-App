@@ -61,8 +61,10 @@ class SessionStreamer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // Transport failures are self-healing (SseClient reconnects with
+                // backoff) and the UI already shows the "reconnecting" banner.
+                // Notifying here made every blip a user-visible error.
                 AppLog.e(APP_LOG_TAG, "SessionStreamer: stream error: ${e.message}")
-                onSignal(StreamEffect.NotifyError(e.message))
             }
         }
     }

@@ -313,4 +313,6 @@
     <string name="settings_update_failed">Update failed</string>
     <string name="settings_skills">Skills</string>
     <string name="settings_no_skills">No skills installed</string>
+    <string name="connection_active">OpenCode connected</string>
+    <string name="connection_active_sub">Keeping the session connection alive</string>
 </resources>

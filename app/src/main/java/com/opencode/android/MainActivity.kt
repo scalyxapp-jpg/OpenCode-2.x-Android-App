@@ -51,6 +51,13 @@ class MainActivity : ComponentActivity() {
         deepLinkSessionId.value = intent?.getStringExtra(Notifier.EXTRA_SESSION_ID)
         // Route client errors to the server log (POST /log). Best-effort.
         com.opencode.android.data.ClientLog.install { backendSession.api }
+        // Keep the process (and the session SSE connection) alive while the app
+        // is open, so backgrounding does not force a reconnect. Started here,
+        // in the foreground, because Android 12+ forbids a background start.
+        androidx.core.content.ContextCompat.startForegroundService(
+            this,
+            android.content.Intent(this, ConnectionService::class.java),
+        )
         enableEdgeToEdge()
         setContent {
             // Apply the persisted appearance settings (color scheme, theme,
@@ -110,5 +117,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onDestroy() {
+        // The app is closing: the connection no longer needs to be kept alive.
+        stopService(android.content.Intent(this, ConnectionService::class.java))
+        super.onDestroy()
     }
 }

@@ -25,10 +25,12 @@ object Notifier {
     private const val CH_AGENT = "agent"
     private const val CH_PERMISSIONS = "permissions"
     private const val CH_ERRORS = "errors"
+    private const val CH_CONNECTION = "connection"
 
     private const val ID_AGENT = 1001
     private const val ID_PERMISSIONS = 1002
     private const val ID_ERRORS = 1003
+    const val ID_CONNECTION = 1004
 
     /** Extra on the tap intent so the app opens the session the event belongs to. */
     const val EXTRA_SESSION_ID = "com.opencode.android.extra.SESSION_ID"
@@ -53,12 +55,50 @@ object Notifier {
     }
 
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
-    private fun createChannel(manager: NotificationManager, id: String, name: String) {
-        val channel = NotificationChannel(id, name, NotificationManager.IMPORTANCE_DEFAULT)
+    private fun createChannel(
+        manager: NotificationManager,
+        id: String,
+        name: String,
+        importance: Int = NotificationManager.IMPORTANCE_DEFAULT,
+    ) {
+        val channel = NotificationChannel(id, name, importance)
         // Sound is played explicitly (see playSound) so it stays independent of
         // the notification switch.
         channel.setSound(null, null)
         manager.createNotificationChannel(channel)
+    }
+
+    /**
+     * Channel for the ongoing "connected" notification of [ConnectionService].
+     * IMPORTANCE_MIN: it must exist but must not make a sound or pop up.
+     */
+    fun ensureConnectionChannel() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+        val context = appContext ?: return
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        createChannel(manager, CH_CONNECTION, "Connection", NotificationManager.IMPORTANCE_MIN)
+    }
+
+    /** The ongoing notification that keeps the foreground service alive. */
+    fun connectionNotification(): android.app.Notification {
+        val context = appContext ?: error("Notifier.init was not called")
+        val openApp = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Builder(context, CH_CONNECTION)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(context.getString(R.string.connection_active))
+            .setContentText(context.getString(R.string.connection_active_sub))
+            .setOngoing(true)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setContentIntent(openApp)
+            .build()
     }
 
     /** The agent finished a turn or needs attention. */
