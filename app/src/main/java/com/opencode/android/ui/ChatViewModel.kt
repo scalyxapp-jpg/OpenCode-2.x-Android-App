@@ -1334,15 +1334,17 @@ _uiState.update { current ->
         vcsJob = viewModelScope.launch {
             _uiState.update { it.copy(vcsDiffLoading = true, vcsDiffError = null) }
             try {
-                val info = kotlinx.coroutines.withTimeoutOrNull(10_000L) {
+                val info = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
                     repo.vcs(directory)
                 }
-                // /vcs/diff returns every changed file WITH its full patch. For
-                // a huge working tree (this home repo once had ~607k untracked
-                // files) the server can take longer than the cap and never
-                // answers, so the timeout is surfaced as a real message with a
-                // Retry instead of an empty panel.
-                val diff = kotlinx.coroutines.withTimeoutOrNull(30_000L) {
+                // /vcs/diff returns every changed file WITH its full patch. The
+                // web waits for this request indefinitely (the panel just shows
+                // "Loading ..." until it lands) and so does the app, but bounded:
+                // measured 22 s for /agent and minutes for a 347-file diff on a
+                // loaded host, so a 30 s cap timed out on a request that would
+                // have succeeded. 120 s mirrors the web's patience and still
+                // ends with a clear message + Retry if the server is stuck.
+                val diff = kotlinx.coroutines.withTimeoutOrNull(120_000L) {
                     repo.vcsDiff(directory)
                 }
                 // Ignore a stale result if the user switched session.
