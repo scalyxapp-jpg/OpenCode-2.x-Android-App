@@ -159,7 +159,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
 
     // Compose + Material 3
-    implementation(platform("androidx.compose:compose-bom:2024.09.03"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -194,10 +194,10 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     // The Compose BOM must be applied per-configuration, otherwise the
     // androidTest/debug Compose artefacts resolve without a version.
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.03"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation(platform("androidx.compose:compose-bom:2024.09.03"))
+    debugImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
