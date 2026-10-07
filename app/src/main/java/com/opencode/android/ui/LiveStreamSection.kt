@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import com.opencode.android.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.opencode.android.R
 import com.opencode.android.ui.theme.spacing
 
 @Composable
@@ -47,42 +47,37 @@ internal fun LiveStatusItem(
         // Nothing has arrived yet: the request is out but the model has not
         // started producing. Without this the row read "build · deepseek…" and
         // looked like it was already working.
-        waiting = live.response.isBlank() &&
-            live.reasoning.isBlank() &&
-            live.parts.isEmpty(),
+        waiting =
+            live.response.isBlank() &&
+                live.reasoning.isBlank() &&
+                live.parts.isEmpty(),
     )
 }
 
 @Composable
-internal fun LiveReasoningItem(
-    liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>,
-    // The live section also stays mounted for a short `pendingPersist` window
-    // after the turn ends; the caret must not keep blinking then.
-    streaming: Boolean,
-) {
+internal fun LiveReasoningItem(liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>) {
     val live by liveState.collectAsStateWithLifecycle()
     if (live.reasoning.isNotBlank()) {
         LiveReasoningBubble(
             text = live.reasoning,
             agent = live.agent,
             model = live.model,
-            streaming = streaming,
+            // The live section also stays mounted for a short `pendingPersist`
+            // window after a step ends; the caret must not keep blinking then.
+            streaming = live.streaming,
         )
     }
 }
 
 @Composable
-internal fun LiveResponseItem(
-    liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>,
-    streaming: Boolean,
-) {
+internal fun LiveResponseItem(liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>) {
     val live by liveState.collectAsStateWithLifecycle()
     if (live.response.isNotBlank()) {
         LiveResponseBubble(
             text = live.response,
             agent = live.agent,
             model = live.model,
-            streaming = streaming,
+            streaming = live.streaming,
         )
     }
 }
@@ -97,48 +92,55 @@ internal fun LiveToolsItem(
     val live by liveState.collectAsStateWithLifecycle()
     if (live.parts.isNotEmpty()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Tool rows arrive one by one; animate the height so the
-                // list below glides instead of jumping per row.
-                .animateContentSize(),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    // Tool rows arrive one by one; animate the height so the
+                    // list below glides instead of jumping per row.
+                    .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
         ) {
             // Consecutive same-tool calls collapse into one row with a ×N
             // badge, so a "read ten files" storm does not produce ten rows and
             // ten recompositions of this column.
-            androidx.compose.runtime.remember(live.parts) {
-                coalesceConsecutiveTools(live.parts)
-            }.forEach { (part, count) ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        ToolCallRow(
-                            part = part,
-                            onOpenSession = onOpenSession,
-                            initiallyExpanded = defaultToolExpanded(
-                                part,
-                                shellExpanded = shellToolPartsExpanded,
-                                editExpanded = editToolPartsExpanded,
-                            ),
-                        )
-                    }
-                    if (count > 1) {
-                        // Count ticks up as calls coalesce; crossfade the
-                        // digit instead of swapping it mid-stream.
-                        androidx.compose.animation.Crossfade(
-                            targetState = count,
-                            animationSpec = tween(durationMillis = 180),
-                            label = "toolCount",
-                        ) { n ->
-                            Text(
-                                text = "×$n",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+            androidx.compose.runtime
+                .remember(live.parts) {
+                    coalesceConsecutiveTools(live.parts)
+                }.forEachIndexed { index, (part, count) ->
+                    // Stable per-row identity so a new tool row does not recompose
+                    // (and re-animate) every existing row.
+                    androidx.compose.runtime.key(part.id ?: "tool-$index") {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                ToolCallRow(
+                                    part = part,
+                                    onOpenSession = onOpenSession,
+                                    initiallyExpanded =
+                                        defaultToolExpanded(
+                                            part,
+                                            shellExpanded = shellToolPartsExpanded,
+                                            editExpanded = editToolPartsExpanded,
+                                        ),
+                                )
+                            }
+                            if (count > 1) {
+                                // Count ticks up as calls coalesce; crossfade the
+                                // digit instead of swapping it mid-stream.
+                                androidx.compose.animation.Crossfade(
+                                    targetState = count,
+                                    animationSpec = tween(durationMillis = 180),
+                                    label = "toolCount",
+                                ) { n ->
+                                    Text(
+                                        text = "×$n",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-            }
         }
     }
 }
@@ -153,22 +155,24 @@ internal fun LiveStatusIndicator(
     compacting: Boolean = false,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MaterialTheme.spacing.extraSmall),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = MaterialTheme.spacing.extraSmall),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
         InlineSpinner()
         // One Crossfade across the status phases: the label used to
         // hard-swap on every phase change (waiting → thinking → tools).
-        val phase = when {
-            compacting -> 0
-            thinking -> 1
-            !connected -> 2
-            waiting -> 3
-            else -> 4
-        }
+        val phase =
+            when {
+                compacting -> 0
+                thinking -> 1
+                !connected -> 2
+                waiting -> 3
+                else -> 4
+            }
         androidx.compose.animation.Crossfade(
             targetState = phase,
             animationSpec = tween(durationMillis = 180),
@@ -190,6 +194,7 @@ internal fun LiveStatusIndicator(
                         )
                         DotsPulse()
                     }
+
                     1 -> {
                         // Web shows a "Thinking" label with animated dots while reasoning.
                         Text(
@@ -199,6 +204,7 @@ internal fun LiveStatusIndicator(
                         )
                         DotsPulse()
                     }
+
                     2 -> {
                         // Stream dropped mid-generation — the client auto-reconnects with
                         // backoff, so surface it instead of looking frozen. Animated dots
@@ -210,6 +216,7 @@ internal fun LiveStatusIndicator(
                         )
                         DotsPulse()
                     }
+
                     3 -> {
                         Text(
                             text = stringResource(R.string.waiting_for_model),
@@ -218,6 +225,7 @@ internal fun LiveStatusIndicator(
                         )
                         DotsPulse()
                     }
+
                     else -> {
                         val generatingLabel = stringResource(R.string.generating)
                         Text(
@@ -239,9 +247,10 @@ private fun DotsPulse() {
     val phase by transition.animateFloat(
         initialValue = 0f,
         targetValue = 3f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 1200, easing = LinearEasing),
+            ),
         label = "statusDotsPhase",
     )
     Text(
@@ -263,22 +272,25 @@ internal fun LiveResponseBubble(
         horizontalAlignment = Alignment.Start,
     ) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            ),
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = 4.dp,
-                bottomEnd = 16.dp,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ),
+            shape =
+                RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 4.dp,
+                    bottomEnd = 16.dp,
+                ),
         ) {
             Column(
-                modifier = Modifier
-                    .padding(MaterialTheme.spacing.cardPadding)
-                    // Each flush replaces the text; animating the size makes the
-                    // bubble grow smoothly instead of jumping a line at a time.
-                    .animateContentSize(),
+                modifier =
+                    Modifier
+                        .padding(MaterialTheme.spacing.cardPadding)
+                        // Each flush replaces the text; animating the size makes the
+                        // bubble grow smoothly instead of jumping a line at a time.
+                        .animateContentSize(),
             ) {
                 (agent ?: model)?.let {
                     Text(
@@ -290,26 +302,21 @@ internal fun LiveResponseBubble(
                 // Progressive markdown: the finished message renders markdown,
                 // so rendering the live text as plain text made the whole bubble
                 // reflow (headings/lists/code popping into place) the moment it
-                // was persisted. Parsing is memoised per text and skipped past
-                // LIVE_MARKDOWN_MAX_CHARS so a long stream cannot turn every
-                // flush into a full re-parse.
-                if (text.length <= LIVE_MARKDOWN_MAX_CHARS) {
-                    MarkdownText(
-                        text = text,
-                        modifier = Modifier.animateContentSize(),
-                    )
-                } else {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                // was persisted. `MarkdownText` parses incrementally now (the
+                // finished prefix is memoised, only the growing tail is
+                // re-parsed), so the live bubble can always use the SAME renderer
+                // as the persisted one — no style jump when the text is persisted
+                // and no full re-parse per flush.
+                MarkdownText(
+                    text = text,
+                    modifier = Modifier.animateContentSize(),
+                )
                 if (streaming) StreamingCaret()
             }
         }
     }
 }
- 
+
 @Composable
 internal fun LiveReasoningBubble(
     text: String,
@@ -322,22 +329,25 @@ internal fun LiveReasoningBubble(
         horizontalAlignment = Alignment.Start,
     ) {
         Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            ),
-            shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = 4.dp,
-                bottomEnd = 16.dp,
-            ),
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ),
+            shape =
+                RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 4.dp,
+                    bottomEnd = 16.dp,
+                ),
         ) {
             Column(
-                modifier = Modifier
-                    .padding(MaterialTheme.spacing.cardPadding)
-                    // Each flush replaces the text; animating the size makes the
-                    // bubble grow smoothly instead of jumping a line at a time.
-                    .animateContentSize(),
+                modifier =
+                    Modifier
+                        .padding(MaterialTheme.spacing.cardPadding)
+                        // Each flush replaces the text; animating the size makes the
+                        // bubble grow smoothly instead of jumping a line at a time.
+                        .animateContentSize(),
             ) {
                 (agent ?: model)?.let {
                     Text(
@@ -346,17 +356,10 @@ internal fun LiveReasoningBubble(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                if (text.length <= LIVE_MARKDOWN_MAX_CHARS) {
-                    MarkdownText(
-                        text = text,
-                        modifier = Modifier.animateContentSize(),
-                    )
-                } else {
-                    Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                MarkdownText(
+                    text = text,
+                    modifier = Modifier.animateContentSize(),
+                )
                 if (streaming) StreamingCaret()
             }
         }
@@ -365,25 +368,23 @@ internal fun LiveReasoningBubble(
 
 // Extract a readable detail from a tool part's state (e.g. filePath from input)
 
-
 /**
  * Tail indicator shown for as long as tokens are still arriving. The UI Craft
  * guidance is blunt about this: "no caret = 'is it broken?' panic". It is its
  * own composable so the per-frame alpha animation never recomposes the
  * (potentially long) response text next to it.
  */
-private const val LIVE_MARKDOWN_MAX_CHARS = 4_000
-
 @Composable
 internal fun StreamingCaret() {
     val transition = rememberInfiniteTransition(label = "caret")
     val alpha by transition.animateFloat(
         initialValue = 1f,
         targetValue = 0.15f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 620, easing = LinearEasing),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(durationMillis = 620, easing = LinearEasing),
+                repeatMode = androidx.compose.animation.core.RepeatMode.Reverse,
+            ),
         label = "caretAlpha",
     )
     Row(
@@ -392,16 +393,18 @@ internal fun StreamingCaret() {
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
     ) {
         Box(
-            modifier = Modifier
-                .size(width = 3.dp, height = 14.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)),
+            modifier =
+                Modifier
+                    .size(width = 3.dp, height = 14.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = alpha)),
         )
         repeat(3) {
             Box(
-                modifier = Modifier
-                    .size(6.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant),
+                modifier =
+                    Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant),
             )
         }
     }

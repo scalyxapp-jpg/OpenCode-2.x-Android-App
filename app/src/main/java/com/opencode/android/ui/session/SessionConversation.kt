@@ -2,6 +2,8 @@ package com.opencode.android.ui.session
 
 import com.opencode.android.data.SessionTransport
 import com.opencode.android.domain.Model
+import com.opencode.android.domain.SessionQuestion
+import com.opencode.android.domain.TodoItem
 import com.opencode.android.ui.LiveStreamState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,9 +30,15 @@ import kotlinx.serialization.json.JsonElement
  */
 sealed interface SessionCommand {
     /** Open [sessionId] at [baseUrl] and begin streaming it. */
-    data class Load(val sessionId: String, val baseUrl: String) : SessionCommand
+    data class Load(
+        val sessionId: String,
+        val baseUrl: String,
+    ) : SessionCommand
+
     data object Send : SessionCommand
+
     data object Interrupt : SessionCommand
+
     data object Retry : SessionCommand
 }
 
@@ -52,26 +60,52 @@ data class ConversationState(
  */
 interface ConversationPort {
     fun send()
+
     fun retry()
+
     fun reconcile(includeMeta: Boolean)
+
     fun loadPendingQuestions()
+
+    fun onQuestionAsked(question: SessionQuestion)
+
+    fun onQuestionResolved(requestId: String)
+
     fun loadPermissions()
+
     fun notifyPermission()
+
     fun notifyDone()
+
     fun notifyError(message: String?)
+
+    fun notifyQuestion(question: SessionQuestion)
+
     fun notifyInterruptFailed(message: String?)
+
     fun refreshMessages(sessionId: String)
+
     /** Re-read the server session status after a stream reconnect. */
     fun resyncSessionStatus()
+
     fun refreshSessionModel()
+
     fun loadVcsDiff()
 
     fun setGenerating(value: Boolean)
+
     fun setPendingPersist(value: Boolean)
+
     fun setCompacting(value: Boolean)
+
     fun setStatusError(value: String?)
+
     fun setSseConnected(value: Boolean)
+
     fun setSelectedModel(value: String)
+
+    /** A `todo.updated` event carried the session's current todo list. */
+    fun setTodos(todos: List<TodoItem>)
 }
 
 class SessionConversation(
@@ -106,11 +140,32 @@ class SessionConversation(
                 // Reset conversation flags for the new session; the ViewModel
                 // re-seeds isGenerating/selected* from the loaded session.
                 _state.value = ConversationState(sessionId = command.sessionId)
+                // Push the reset through the mirror too: otherwise the previous
+                // session's generating/persist/compacting flags stayed in
+                // `ChatUiState` and bled into the newly opened session.
+                port.setGenerating(false)
+                port.setPendingPersist(false)
+                port.setCompacting(false)
+                port.setStatusError(null)
+                port.setSseConnected(false)
                 streamer.start(command.sessionId, command.baseUrl)
             }
-            SessionCommand.Send -> port.send()
-            SessionCommand.Interrupt -> interrupt()
-            SessionCommand.Retry -> port.retry()
+
+            SessionCommand.Send -> {
+                // Optimistic: the composer already flipped to "stop". Keep this
+                // module's authoritative state in sync so a read right after the
+                // send is never stale (see "Conversation flags ownership").
+                _state.update { it.copy(isGenerating = true) }
+                port.send()
+            }
+
+            SessionCommand.Interrupt -> {
+                interrupt()
+            }
+
+            SessionCommand.Retry -> {
+                port.retry()
+            }
         }
     }
 
@@ -119,9 +174,13 @@ class SessionConversation(
      * answer stays on screen (plainly clearing isGenerating hid it), then ask
      * the server to abort, falling back to the older interrupt endpoint, and
      * finally reload the messages so the aborted state is shown.
+     *
+     * `endTurn()` (not `finalize()`) clears the turn-level running flag: the
+     * user pressed stop, so the composer must flip back to "send" immediately
+     * instead of waiting for the server's `session.idle`.
      */
     private fun interrupt() {
-        finalize()
+        endTurn()
         val sessionId = _state.value.sessionId ?: return
         scope.launch {
             try {
@@ -146,47 +205,112 @@ class SessionConversation(
 
     fun finalize() = streamer.finalize()
 
+    /** Ends the whole turn: the only path that clears the running flag. */
+    fun endTurn() = streamer.endTurn()
+
     /** Clears the generating flag when the server confirms the turn is over. */
-    fun forceIdle() = streamer.finalize()
+    fun forceIdle() = streamer.endTurn()
+
+    /**
+     * Seeds the generating flag from the server when a session is loaded, so
+     * [ConversationState] and the ViewModel mirror agree. Writing
+     * `_uiState.isGenerating` directly left the two out of sync after a load
+     * that raced a stream event.
+     */
+    fun seedGenerating(value: Boolean) {
+        _state.update { it.copy(isGenerating = value) }
+        port.setGenerating(value)
+    }
 
     fun completePersist() = streamer.completePersist()
 
     private fun handleEffect(effect: StreamEffect) {
         when (effect) {
-            is StreamEffect.Reconcile -> port.reconcile(effect.includeMeta)
-            StreamEffect.LoadPendingQuestions -> port.loadPendingQuestions()
-            StreamEffect.LoadPermissions -> port.loadPermissions()
-            StreamEffect.NotifyPermission -> port.notifyPermission()
-            StreamEffect.NotifyDone -> port.notifyDone()
-            is StreamEffect.NotifyError -> port.notifyError(effect.message)
-            StreamEffect.ResyncSessionStatus -> port.resyncSessionStatus()
-            StreamEffect.RefreshSessionModel -> port.refreshSessionModel()
-            StreamEffect.LoadVcsDiff -> port.loadVcsDiff()
+            is StreamEffect.Reconcile -> {
+                port.reconcile(effect.includeMeta)
+            }
+
+            StreamEffect.LoadPendingQuestions -> {
+                port.loadPendingQuestions()
+            }
+
+            is StreamEffect.QuestionAsked -> {
+                port.onQuestionAsked(effect.question)
+            }
+
+            is StreamEffect.QuestionResolved -> {
+                port.onQuestionResolved(effect.requestId)
+            }
+
+            StreamEffect.LoadPermissions -> {
+                port.loadPermissions()
+            }
+
+            StreamEffect.NotifyPermission -> {
+                port.notifyPermission()
+            }
+
+            StreamEffect.NotifyDone -> {
+                port.notifyDone()
+            }
+
+            is StreamEffect.NotifyError -> {
+                port.notifyError(effect.message)
+            }
+
+            is StreamEffect.NotifyQuestion -> {
+                port.notifyQuestion(effect.question)
+            }
+
+            StreamEffect.ResyncSessionStatus -> {
+                port.resyncSessionStatus()
+            }
+
+            StreamEffect.RefreshSessionModel -> {
+                port.refreshSessionModel()
+            }
+
+            StreamEffect.LoadVcsDiff -> {
+                port.loadVcsDiff()
+            }
+
+            is StreamEffect.TodosUpdated -> {
+                port.setTodos(effect.todos)
+            }
+
             is StreamEffect.GeneratingChanged -> {
                 _state.update { it.copy(isGenerating = effect.value) }
                 port.setGenerating(effect.value)
             }
+
             is StreamEffect.PendingPersistChanged -> {
                 _state.update { it.copy(pendingPersist = effect.value) }
                 port.setPendingPersist(effect.value)
             }
+
             is StreamEffect.CompactingChanged -> {
                 _state.update { it.copy(isCompacting = effect.value) }
                 port.setCompacting(effect.value)
             }
+
             is StreamEffect.StatusErrorChanged -> {
                 _state.update { it.copy(statusError = effect.value) }
                 port.setStatusError(effect.value)
             }
+
             is StreamEffect.SseConnectedChanged -> {
                 _state.update { it.copy(sseConnected = effect.value) }
                 port.setSseConnected(effect.value)
             }
+
             is StreamEffect.SelectedModelChanged -> {
                 _state.update { it.copy(selectedModel = effect.value) }
                 port.setSelectedModel(effect.value)
             }
-            StreamEffect.ScheduleFlush, StreamEffect.Finalize -> Unit
+
+            StreamEffect.ScheduleFlush, StreamEffect.Finalize, StreamEffect.EndTurn -> {
+                Unit
+            }
         }
     }
 }

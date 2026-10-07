@@ -15,4 +15,7 @@
          assistant answers can still quote file contents or secrets the agent
          touched, so it must not leave the device via cloud backup. -->
     <exclude domain="file" path="session_cache/" />
+    <!-- Crash reports: stack traces / exception messages can embed prompts,
+         URLs and tool output, so they must not leave the device. -->
+    <exclude domain="file" path="crash_last.txt" />
 </full-backup-content>

@@ -53,18 +53,29 @@ object BackendStore {
                 Backend(
                     url = url,
                     name = o.optString("name", "").ifBlank { null },
-                    username = o.optString("username", DEFAULT_USERNAME)
-                        .ifBlank { DEFAULT_USERNAME },
+                    username =
+                        o
+                            .optString("username", DEFAULT_USERNAME)
+                            .ifBlank { DEFAULT_USERNAME },
                     // Stored encrypted (SecretBox); a legacy plaintext value is
                     // returned unchanged and re-encrypted on the next save.
-                    password = o.optString("password", "")
-                        .ifBlank { null }
-                        ?.let { SecretBox.decrypt(it) }
-                        ?.ifBlank { null },
+                    password =
+                        o
+                            .optString("password", "")
+                            .ifBlank { null }
+                            ?.let { SecretBox.decrypt(it) }
+                            ?.ifBlank { null },
                     lastUsed = o.optLong("lastUsed", 0L),
                 )
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // A malformed blob used to vanish the whole backend list with no
+            // trace. Log it so a corrupt store is diagnosable instead of
+            // looking like the user's backends were deleted.
+            com.opencode.android.util.AppLog.e(
+                com.opencode.android.util.APP_LOG_TAG,
+                "BackendStore: could not parse saved backends: ${e.message}",
+            )
             emptyList()
         }
     }
@@ -95,19 +106,26 @@ object BackendStore {
     }
 
     /** Adds (or replaces) a backend URL, keeping its credentials if known. */
-    fun add(url: String, name: String? = null): Backend {
+    fun add(
+        url: String,
+        name: String? = null,
+    ): Backend {
         val normalized = normalize(url)
         val existing = backends().firstOrNull { it.url == normalized }
-        val backend = existing?.copy(
-            name = name?.trim()?.ifBlank { null } ?: existing.name,
-        ) ?: Backend(url = normalized, name = name?.trim()?.ifBlank { null })
+        val backend =
+            existing?.copy(
+                name = name?.trim()?.ifBlank { null } ?: existing.name,
+            ) ?: Backend(url = normalized, name = name?.trim()?.ifBlank { null })
         val list = backends().filterNot { it.url == normalized } + backend
         write(list)
         return backend
     }
 
     /** Sets (or clears) the free-form display label of a backend. */
-    fun rename(url: String, name: String?) {
+    fun rename(
+        url: String,
+        name: String?,
+    ) {
         val normalized = normalize(url)
         write(
             backends().map { b ->
@@ -121,19 +139,24 @@ object BackendStore {
     }
 
     /** Stores credentials after a successful authenticated connect. */
-    fun saveCredentials(url: String, username: String, password: String?) {
+    fun saveCredentials(
+        url: String,
+        username: String,
+        password: String?,
+    ) {
         val normalized = normalize(url)
-        val list = backends().map { b ->
-            if (b.url == normalized) {
-                b.copy(
-                    username = username.ifBlank { DEFAULT_USERNAME },
-                    password = password?.ifBlank { null },
-                    lastUsed = System.currentTimeMillis(),
-                )
-            } else {
-                b
+        val list =
+            backends().map { b ->
+                if (b.url == normalized) {
+                    b.copy(
+                        username = username.ifBlank { DEFAULT_USERNAME },
+                        password = password?.ifBlank { null },
+                        lastUsed = System.currentTimeMillis(),
+                    )
+                } else {
+                    b
+                }
             }
-        }
         write(list)
     }
 

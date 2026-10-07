@@ -1,0 +1,43 @@
+OpenCode Android
+Copyright 2025 OpenCode Android contributors
+
+This product is an unofficial, community-built Android client for the
+OpenCode server (https://github.com/sst/opencode). It is not affiliated with,
+endorsed by, or supported by the OpenCode project.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+-------------------------------------------------------------------------------
+Third-party components
+-------------------------------------------------------------------------------
+
+This application depends on open-source libraries, each distributed under its
+own license. The complete, authoritative list is produced by Gradle:
+
+    ./gradlew :app:dependencies
+
+Principal dependencies and their licenses:
+
+  - AndroidX / Jetpack Compose (Apache-2.0)
+      https://developer.android.com/jetpack
+  - Kotlin, kotlinx.coroutines, kotlinx.serialization (Apache-2.0)
+      https://github.com/JetBrains/kotlin
+  - OkHttp, Retrofit (Apache-2.0)
+      https://square.github.io/okhttp/, https://square.github.io/retrofit/
+  - Dagger Hilt (Apache-2.0)
+      https://dagger.dev/hilt/
+  - AndroidX Glance (Apache-2.0)
+      https://developer.android.com/jetpack/androidx/releases/glance
+
+The optional, separately hosted "session-guard proxy" is not part of this
+repository or of the distributed application.

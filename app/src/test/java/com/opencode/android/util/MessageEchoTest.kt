@@ -1,5 +1,8 @@
 package com.opencode.android.util
 
+import com.opencode.android.domain.ContentPart
+import com.opencode.android.domain.Message
+import com.opencode.android.domain.Part
 import com.opencode.android.util.MessageEcho.Row
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +15,6 @@ import org.junit.Test
  * (the local row is kept forever because the text never matches).
  */
 class MessageEchoTest {
-
     @Test
     fun `a local row with no server counterpart is kept`() {
         val local = listOf(Row("local_1", "user", "hello"))
@@ -43,6 +45,31 @@ class MessageEchoTest {
         val local = listOf(Row("local_1", "user", "hello"))
         val server = listOf(Row("msg_c", "assistant", "hello"))
         assertEquals(1, MessageEcho.pendingEchoes(local, server).size)
+    }
+
+    @Test
+    fun `the merge base drops every local echo so the prompt cannot duplicate`() {
+        // The refresh merges the server page onto this base and re-adds only the
+        // still-pending echoes. If local rows stayed in the base the prompt
+        // appeared twice, and the duplicate grew on every refresh.
+        val current =
+            listOf(
+                Message(id = "local_1", role = "user"),
+                Message(id = "msg_server", role = "assistant"),
+            )
+        val base = MessageEcho.withoutLocalEchoes(current)
+        assertEquals(listOf("msg_server"), base.map { it.id })
+    }
+
+    @Test
+    fun `first text reads both server schemas`() {
+        val classic = Message(id = "m1", parts = listOf(Part(type = "text", text = "  hello  ")))
+        val legacy = Message(id = "m2", content = listOf(ContentPart(type = "text", text = "legacy")))
+        val topLevel = Message(id = "m3", text = "raw")
+        assertEquals("hello", MessageEcho.firstText(classic))
+        assertEquals("legacy", MessageEcho.firstText(legacy))
+        assertEquals("raw", MessageEcho.firstText(topLevel))
+        assertEquals("", MessageEcho.firstText(Message(id = "m4")))
     }
 
     @Test

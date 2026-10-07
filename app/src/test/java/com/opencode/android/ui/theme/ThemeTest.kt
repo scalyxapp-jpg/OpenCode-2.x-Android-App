@@ -9,7 +9,6 @@ import org.junit.Test
  * if someone swaps in a dynamic (wallpaper) scheme or an unrelated accent.
  */
 class ThemeTest {
-
     @Test
     fun `light scheme uses brand wine red as the accent`() {
         assertEquals(Wine700, LightColors.primary)
@@ -26,8 +25,7 @@ class ThemeTest {
     fun `neutral surfaces stay neutral, not purple`() {
         // Red and blue channels of a neutral grey must be within a hair of each
         // other; a large spread means the surface drifted off-brand.
-        fun spread(c: androidx.compose.ui.graphics.Color): Float =
-            kotlin.math.abs(c.red - c.blue)
+        fun spread(c: androidx.compose.ui.graphics.Color): Float = kotlin.math.abs(c.red - c.blue)
 
         assertEquals(true, spread(LightColors.surface) < 0.02f)
         assertEquals(true, spread(DarkColors.surface) < 0.02f)
@@ -48,12 +46,35 @@ class ThemeTest {
 }
 
 /**
+ * The metal theme is derived from the app icon (charcoal + brushed silver), so
+ * it must stay achromatic and distinct from the default wine identity.
+ */
+class ThemeMetalTest {
+    @Test
+    fun `metal ids normalize and stay distinct from default`() {
+        assertEquals("metal", normalizeThemeId("metal"))
+        assertEquals("default", normalizeThemeId("oc-2"))
+        assertNotEquals(LightColors.primary, LightColorsMetal.primary)
+        assertNotEquals(DarkColors.primary, DarkColorsMetal.primary)
+    }
+
+    @Test
+    fun `metal accents are achromatic`() {
+        // The silver accent must not drift into a hue: the channel spread stays
+        // small, unlike the wine (red-dominant) default primary.
+        fun spread(c: androidx.compose.ui.graphics.Color): Float = maxOf(c.red, c.green, c.blue) - minOf(c.red, c.green, c.blue)
+
+        assertEquals(true, spread(LightColorsMetal.primary) < 0.12f)
+        assertEquals(true, spread(DarkColorsMetal.primary) < 0.12f)
+    }
+}
+
+/**
  * WCAG contrast guard. The palette was audited by hand once; without a test the
  * next colour tweak silently reintroduces unreadable text (the outline tone
  * already sat at 4.26:1 before it was corrected to 4.58:1).
  */
 class ThemeContrastTest {
-
     private fun luminance(c: androidx.compose.ui.graphics.Color): Double {
         fun channel(v: Float): Double {
             val d = v.toDouble()
@@ -108,5 +129,106 @@ class ThemeContrastTest {
         assertAa("error/surface", c.error, c.surface)
         assertAa("onError/error", c.onError, c.error)
         assertAa("outline/surface", c.outline, c.surface)
+    }
+
+    @Test
+    fun `metal light scheme text pairs meet WCAG AA`() {
+        val c = LightColorsMetal
+        assertAa("onSurface/surface", c.onSurface, c.surface)
+        assertAa("onSurfaceVariant/surface", c.onSurfaceVariant, c.surface)
+        assertAa("onSurfaceVariant/surfaceVariant", c.onSurfaceVariant, c.surfaceVariant)
+        assertAa("onSurfaceVariant/surfaceContainerHighest", c.onSurfaceVariant, c.surfaceContainerHighest)
+        assertAa("primary/surface", c.primary, c.surface)
+        assertAa("onPrimary/primary", c.onPrimary, c.primary)
+        assertAa("error/surface", c.error, c.surface)
+        assertAa("onError/error", c.onError, c.error)
+        assertAa("outline/surface", c.outline, c.surface)
+    }
+
+    @Test
+    fun `metal dark scheme text pairs meet WCAG AA`() {
+        val c = DarkColorsMetal
+        assertAa("onSurface/surface", c.onSurface, c.surface)
+        assertAa("onSurfaceVariant/surface", c.onSurfaceVariant, c.surface)
+        assertAa("onSurfaceVariant/surfaceVariant", c.onSurfaceVariant, c.surfaceVariant)
+        assertAa("onSurfaceVariant/surfaceContainerHighest", c.onSurfaceVariant, c.surfaceContainerHighest)
+        assertAa("primary/surface", c.primary, c.surface)
+        assertAa("onPrimary/primary", c.onPrimary, c.primary)
+        assertAa("error/surface", c.error, c.surface)
+        assertAa("onError/error", c.onError, c.error)
+        assertAa("outline/surface", c.outline, c.surface)
+    }
+
+    @Test
+    fun `hello kitty light scheme text pairs meet WCAG AA`() {
+        val c = LightColorsHelloKitty
+        assertAa("onSurface/surface", c.onSurface, c.surface)
+        assertAa("onSurfaceVariant/surface", c.onSurfaceVariant, c.surface)
+        assertAa("onSurfaceVariant/surfaceVariant", c.onSurfaceVariant, c.surfaceVariant)
+        assertAa("onSurfaceVariant/surfaceContainerHighest", c.onSurfaceVariant, c.surfaceContainerHighest)
+        assertAa("primary/surface", c.primary, c.surface)
+        assertAa("onPrimary/primary", c.onPrimary, c.primary)
+        assertAa("secondary/surface", c.secondary, c.surface)
+        assertAa("error/surface", c.error, c.surface)
+        assertAa("onError/error", c.onError, c.error)
+        assertAa("outline/surface", c.outline, c.surface)
+    }
+
+    @Test
+    fun `hello kitty dark scheme text pairs meet WCAG AA`() {
+        val c = DarkColorsHelloKitty
+        assertAa("onSurface/surface", c.onSurface, c.surface)
+        assertAa("onSurfaceVariant/surface", c.onSurfaceVariant, c.surface)
+        assertAa("onSurfaceVariant/surfaceVariant", c.onSurfaceVariant, c.surfaceVariant)
+        assertAa("onSurfaceVariant/surfaceContainerHighest", c.onSurfaceVariant, c.surfaceContainerHighest)
+        assertAa("primary/surface", c.primary, c.surface)
+        assertAa("onPrimary/primary", c.onPrimary, c.primary)
+        assertAa("secondary/surface", c.secondary, c.surface)
+        assertAa("error/surface", c.error, c.surface)
+        assertAa("onError/error", c.onError, c.error)
+        assertAa("outline/surface", c.outline, c.surface)
+    }
+}
+
+/**
+ * The Hello Kitty theme is derived from Sanrio's character palette (white face,
+ * red bow #E4002B, pastel-pink surfaces), so it must normalize correctly, stay
+ * distinct from the other themes, and keep the red bow as the accent.
+ */
+class ThemeHelloKittyTest {
+    @Test
+    fun `hello kitty id normalizes, including legacy spellings`() {
+        assertEquals("hello-kitty", normalizeThemeId("hello-kitty"))
+        assertEquals("hello-kitty", normalizeThemeId("hellokitty"))
+        assertEquals("hello-kitty", normalizeThemeId("kitty"))
+        assertEquals("default", normalizeThemeId("oc-2"))
+    }
+
+    @Test
+    fun `hello kitty stays distinct from the other themes`() {
+        assertNotEquals(LightColors.primary, LightColorsHelloKitty.primary)
+        assertNotEquals(DarkColors.primary, DarkColorsHelloKitty.primary)
+        assertNotEquals(LightColorsMetal.primary, LightColorsHelloKitty.primary)
+        assertNotEquals(LightColorsAqua.primary, LightColorsHelloKitty.primary)
+    }
+
+    @Test
+    fun `light accent is the kitty red bow`() {
+        // The bow is #E4002B; the light accent darkens it a touch to clear AA on
+        // the pink surface. Both must stay saturated red with a dominant red
+        // channel.
+        assertEquals(KittyRedInk, LightColorsHelloKitty.primary)
+        assertEquals(KittyRedInk, LightColorsHelloKitty.surfaceTint)
+        val bow = KittyRed
+        org.junit.Assert.assertTrue("bow must be red-dominant", bow.red > 0.8f && bow.green < 0.1f && bow.blue < 0.3f)
+        val p = LightColorsHelloKitty.primary
+        org.junit.Assert.assertTrue("accent must be red-dominant", p.red > 0.7f && p.green < 0.1f && p.blue < 0.3f)
+    }
+
+    @Test
+    fun `light surfaces lean pink, not neutral grey`() {
+        // A pink surface has a higher red than green channel by a clear margin.
+        val s = LightColorsHelloKitty.surface
+        org.junit.Assert.assertTrue("surface should be pink", s.red - s.green > 0.03f)
     }
 }

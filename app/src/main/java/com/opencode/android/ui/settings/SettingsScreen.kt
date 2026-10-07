@@ -1,6 +1,4 @@
 package com.opencode.android.ui.settings
-import com.opencode.android.util.UserMessages
-import com.opencode.android.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,20 +22,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import com.opencode.android.data.AppSettingsStore
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.TopBarTitle
-import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.opencode.android.R
+import com.opencode.android.data.AppSettingsStore
+import com.opencode.android.ui.TopBarTitle
+import com.opencode.android.ui.theme.spacing
+import com.opencode.android.util.UserMessages
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,11 +53,12 @@ internal fun SettingsScreen(
     var version by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        version = try {
-            backendSession.api.globalHealth().version
-        } catch (_: Exception) {
-            null
-        }
+        version =
+            try {
+                backendSession.api.globalHealth().version
+            } catch (_: Exception) {
+                null
+            }
     }
 
     Scaffold(
@@ -77,9 +79,10 @@ internal fun SettingsScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = MaterialTheme.spacing.small) {
                 tabs.forEachIndexed { index, title ->
@@ -111,15 +114,15 @@ internal fun SettingsScreen(
 
 // --- General ---------------------------------------------------------------
 
-
 @Composable
 internal fun GeneralTab() {
     val settings by AppSettingsStore.state.collectAsStateWithLifecycle()
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = MaterialTheme.spacing.medium),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = MaterialTheme.spacing.medium),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
     ) {
         item { SectionHeader(stringResource(R.string.settings_general)) }
@@ -176,11 +179,21 @@ internal fun GeneralTab() {
             SettingDropdown(
                 title = stringResource(R.string.settings_theme),
                 subtitle = stringResource(R.string.settings_customise_how_opencode_is_themed),
-                value = com.opencode.android.ui.theme.normalizeThemeId(settings.theme),
-                options = listOf("default" to "Default", "matrix" to "Matrix", "aqua" to "Aqua"),
+                value =
+                    com.opencode.android.ui.theme
+                        .normalizeThemeId(settings.theme),
+                options =
+                    listOf(
+                        "default" to "Default",
+                        "matrix" to "Matrix",
+                        "aqua" to "Aqua",
+                        "metal" to "Metal",
+                        "hello-kitty" to "Hello Kitty",
+                    ),
                 onSelect = { AppSettingsStore.setTheme(it) },
             )
         }
+
         // Web parity: three free-form font family fields (empty = system default).
         item {
             SettingTextInput(
@@ -205,13 +218,31 @@ internal fun GeneralTab() {
 
         item { SectionHeader(stringResource(R.string.settings_system_notifications)) }
         item {
-            SettingSwitch(stringResource(R.string.settings_agent), stringResource(R.string.settings_notify_agent_sub), settings.notifyAgent) { AppSettingsStore.setNotifyAgent(it) }
+            SettingSwitch(
+                stringResource(R.string.settings_agent),
+                stringResource(R.string.settings_notify_agent_sub),
+                settings.notifyAgent,
+            ) {
+                AppSettingsStore.setNotifyAgent(it)
+            }
         }
         item {
-            SettingSwitch(stringResource(R.string.settings_permissions), stringResource(R.string.settings_notify_permissions_sub), settings.notifyPermissions) { AppSettingsStore.setNotifyPermissions(it) }
+            SettingSwitch(
+                stringResource(R.string.settings_permissions),
+                stringResource(R.string.settings_notify_permissions_sub),
+                settings.notifyPermissions,
+            ) {
+                AppSettingsStore.setNotifyPermissions(it)
+            }
         }
         item {
-            SettingSwitch(stringResource(R.string.settings_errors), stringResource(R.string.settings_notify_errors_sub), settings.notifyErrors) { AppSettingsStore.setNotifyErrors(it) }
+            SettingSwitch(
+                stringResource(R.string.settings_errors),
+                stringResource(R.string.settings_notify_errors_sub),
+                settings.notifyErrors,
+            ) {
+                AppSettingsStore.setNotifyErrors(it)
+            }
         }
 
         item { SectionHeader(stringResource(R.string.settings_sound_effects)) }
@@ -222,21 +253,30 @@ internal fun GeneralTab() {
                 title = stringResource(R.string.settings_agent),
                 subtitle = stringResource(R.string.settings_play_sound_when_the_agent_is_complete_or_needs_a),
                 value = settings.soundAgent,
-            ) { AppSettingsStore.setSoundAgent(it); AppSettingsStore.setSoundAgentEnabled(true) }
+            ) {
+                AppSettingsStore.setSoundAgent(it)
+                AppSettingsStore.setSoundAgentEnabled(true)
+            }
         }
         item {
             SettingSoundDropdown(
                 title = stringResource(R.string.settings_permissions),
                 subtitle = stringResource(R.string.settings_play_sound_when_a_permission_is_required),
                 value = settings.soundPermissions,
-            ) { AppSettingsStore.setSoundPermissions(it); AppSettingsStore.setSoundPermissionsEnabled(true) }
+            ) {
+                AppSettingsStore.setSoundPermissions(it)
+                AppSettingsStore.setSoundPermissionsEnabled(true)
+            }
         }
         item {
             SettingSoundDropdown(
                 title = stringResource(R.string.settings_errors),
                 subtitle = stringResource(R.string.settings_play_sound_when_an_error_occurs),
                 value = settings.soundErrors,
-            ) { AppSettingsStore.setSoundErrors(it); AppSettingsStore.setSoundErrorsEnabled(true) }
+            ) {
+                AppSettingsStore.setSoundErrors(it)
+                AppSettingsStore.setSoundErrorsEnabled(true)
+            }
         }
 
         item { SectionHeader(stringResource(R.string.settings_session_guard)) }
@@ -250,10 +290,42 @@ internal fun GeneralTab() {
         }
 
         item { SectionHeader(stringResource(R.string.settings_advanced)) }
-        item { SettingSwitch(stringResource(R.string.settings_file_tree), stringResource(R.string.settings_file_tree_sub), settings.showFileTree) { AppSettingsStore.setShowFileTree(it) } }
-        item { SettingSwitch(stringResource(R.string.settings_command_palette), stringResource(R.string.settings_command_palette_sub), settings.showCommandPalette) { AppSettingsStore.setShowCommandPalette(it) } }
-        item { SettingSwitch(stringResource(R.string.settings_server_status), stringResource(R.string.settings_server_status_sub), settings.showServerStatus) { AppSettingsStore.setShowServerStatus(it) } }
-        item { SettingSwitch(stringResource(R.string.settings_show_agent), stringResource(R.string.settings_show_agent_sub), settings.showCustomAgents) { AppSettingsStore.setShowCustomAgents(it) } }
+        item {
+            SettingSwitch(
+                stringResource(R.string.settings_file_tree),
+                stringResource(R.string.settings_file_tree_sub),
+                settings.showFileTree,
+            ) {
+                AppSettingsStore.setShowFileTree(it)
+            }
+        }
+        item {
+            SettingSwitch(
+                stringResource(R.string.settings_command_palette),
+                stringResource(R.string.settings_command_palette_sub),
+                settings.showCommandPalette,
+            ) {
+                AppSettingsStore.setShowCommandPalette(it)
+            }
+        }
+        item {
+            SettingSwitch(
+                stringResource(R.string.settings_server_status),
+                stringResource(R.string.settings_server_status_sub),
+                settings.showServerStatus,
+            ) {
+                AppSettingsStore.setShowServerStatus(it)
+            }
+        }
+        item {
+            SettingSwitch(
+                stringResource(R.string.settings_show_agent),
+                stringResource(R.string.settings_show_agent_sub),
+                settings.showCustomAgents,
+            ) {
+                AppSettingsStore.setShowCustomAgents(it)
+            }
+        }
 
         item { SectionHeader(stringResource(R.string.settings_server)) }
         item { ServerSection() }
@@ -263,43 +335,50 @@ internal fun GeneralTab() {
             val context = androidx.compose.ui.platform.LocalContext.current
             // SAF document contracts: no storage permission and no FileProvider
             // entry needed, so the feature cannot destabilise the manifest.
-            val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
-                    "application/json",
-                ),
-            ) { uri ->
-                if (uri != null) {
-                    runCatching {
-                        context.contentResolver.openOutputStream(uri)?.use { out ->
-                            out.write(AppSettingsStore.exportJson().toByteArray())
+            val exportLauncher =
+                androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
+                        "application/json",
+                    ),
+                ) { uri ->
+                    if (uri != null) {
+                        runCatching {
+                            context.contentResolver.openOutputStream(uri)?.use { out ->
+                                out.write(AppSettingsStore.exportJson().toByteArray())
+                            }
+                        }.onSuccess {
+                            UserMessages.post(R.string.settings_exported)
+                        }.onFailure { e ->
+                            UserMessages.post(R.string.could_not_export_settings, e.message ?: "")
                         }
-                    }.onSuccess {
-                        UserMessages.post(R.string.settings_exported)
-                    }.onFailure { e ->
-                        UserMessages.post(R.string.could_not_export_settings, e.message ?: "")
                     }
                 }
-            }
-            val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
-            ) { uri ->
-                if (uri != null) {
-                    val text = runCatching {
-                        context.contentResolver.openInputStream(uri)?.bufferedReader()
-                            ?.use { it.readText() }
-                    }.getOrNull()
-                    val failure = if (text == null) {
-                        "could not read the file"
-                    } else {
-                        AppSettingsStore.importJson(text)
-                    }
-                    if (failure == null) {
-                        UserMessages.post(R.string.settings_imported)
-                    } else {
-                        UserMessages.post(R.string.could_not_import_settings, failure)
+            val importLauncher =
+                androidx.activity.compose.rememberLauncherForActivityResult(
+                    androidx.activity.result.contract.ActivityResultContracts
+                        .OpenDocument(),
+                ) { uri ->
+                    if (uri != null) {
+                        val text =
+                            runCatching {
+                                context.contentResolver
+                                    .openInputStream(uri)
+                                    ?.bufferedReader()
+                                    ?.use { it.readText() }
+                            }.getOrNull()
+                        val failure =
+                            if (text == null) {
+                                "could not read the file"
+                            } else {
+                                AppSettingsStore.importJson(text)
+                            }
+                        if (failure == null) {
+                            UserMessages.post(R.string.settings_imported)
+                        } else {
+                            UserMessages.post(R.string.could_not_import_settings, failure)
+                        }
                     }
                 }
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
@@ -346,40 +425,17 @@ private fun ServerSection() {
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(stringResource(R.string.settings_update_server))
-            androidx.compose.material3.TextButton(
-                enabled = !busy,
-                onClick = {
-                    busy = true
-                    scope.launch {
-                        val ok = runCatching {
-                            backendSession.api.globalUpgrade(
-                                kotlinx.serialization.json.JsonObject(emptyMap()),
-                            ).close()
-                        }.isSuccess
-                        busy = false
-                        UserMessages.post(
-                            if (ok) R.string.settings_update_requested else R.string.settings_update_failed,
-                        )
-                    }
-                },
-            ) { Text(stringResource(R.string.settings_update_server)) }
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
             Text(stringResource(R.string.settings_skills))
             androidx.compose.material3.TextButton(onClick = {
                 scope.launch {
-                    skills = runCatching {
-                        backendSession.api.getSkills().mapNotNull { el ->
-                            (el as? kotlinx.serialization.json.JsonObject)
-                                ?.get("name")
-                                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-                        }
-                    }.getOrDefault(emptyList())
+                    skills =
+                        runCatching {
+                            backendSession.api.getSkills().mapNotNull { el ->
+                                (el as? kotlinx.serialization.json.JsonObject)
+                                    ?.get("name")
+                                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                            }
+                        }.getOrDefault(emptyList())
                     showSkills = true
                 }
             }) { Text(stringResource(R.string.settings_skills)) }
@@ -410,20 +466,23 @@ private fun ServerSection() {
 private fun SessionGuardSection() {
     val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val health by produceState<com.opencode.android.domain.SessionGuardHealth?>(initialValue = null) {
-        value = runCatching { backendSession.api.sessionGuardHealth() }
-            .getOrNull()
-            ?.takeIf { it.isSuccessful }
-            ?.body()
+        value =
+            runCatching { backendSession.api.sessionGuardHealth() }
+                .getOrNull()
+                ?.takeIf { it.isSuccessful }
+                ?.body()
     }
-    val status = when {
-        health == null -> stringResource(R.string.settings_session_guard_inactive)
-        health?.ok == true -> stringResource(R.string.settings_session_guard_active)
-        else -> stringResource(R.string.settings_session_guard_offline)
-    }
+    val status =
+        when {
+            health == null -> stringResource(R.string.settings_session_guard_inactive)
+            health?.ok == true -> stringResource(R.string.settings_session_guard_active)
+            else -> stringResource(R.string.settings_session_guard_offline)
+        }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MaterialTheme.spacing.extraSmall),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = MaterialTheme.spacing.extraSmall),
     ) {
         Text(
             text = status,
@@ -432,13 +491,14 @@ private fun SessionGuardSection() {
         )
         health?.metrics?.let { metrics ->
             Text(
-                text = stringResource(
-                    R.string.settings_session_guard_metrics,
-                    metrics.requests,
-                    metrics.errors,
-                    metrics.avgMs,
-                    metrics.maxMs,
-                ),
+                text =
+                    stringResource(
+                        R.string.settings_session_guard_metrics,
+                        metrics.requests,
+                        metrics.errors,
+                        metrics.avgMs,
+                        metrics.maxMs,
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -464,11 +524,12 @@ internal fun SettingSoundDropdown(
         title = title,
         subtitle = subtitle,
         value = value,
-        options = listOf(
-            "staplebops-01" to "Staplebops 01",
-            "staplebops-02" to "Staplebops 02",
-            "nope-03" to "Nope 03",
-        ),
+        options =
+            listOf(
+                "staplebops-01" to "Staplebops 01",
+                "staplebops-02" to "Staplebops 02",
+                "nope-03" to "Nope 03",
+            ),
         onSelect = onSelect,
     )
 }

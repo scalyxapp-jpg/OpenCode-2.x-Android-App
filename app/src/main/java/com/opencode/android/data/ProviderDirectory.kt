@@ -33,11 +33,15 @@ class ProviderDirectory(
 ) {
     sealed interface State {
         data object Loading : State
+
         data class Ready(
             val providers: List<ProviderEntry>,
             val connectedIds: Set<String>,
         ) : State
-        data class Failed(val message: String) : State
+
+        data class Failed(
+            val message: String,
+        ) : State
     }
 
     private val mutex = Mutex()
@@ -48,14 +52,26 @@ class ProviderDirectory(
     // Shared by concurrent load() callers so a burst of them issues one fetch.
     private var inflight: Deferred<Unit>? = null
 
+    // Bumped by invalidate(). A load() that started before the bump must not
+    // reuse the (now-stale) inflight/Ready state, or the forced refresh is
+    // silently skipped and the catalog stays on Loading forever.
+    private val invalidation =
+        java.util.concurrent.atomic
+            .AtomicLong(0L)
+
     /** Models of connected providers only — what the pickers may offer. */
     val connectedProviders: List<ProviderEntry>
-        get() = (_state.value as? State.Ready)?.let { ready ->
-            ready.providers.filter { ready.connectedIds.contains(it.id) }
-        }.orEmpty()
+        get() =
+            (_state.value as? State.Ready)
+                ?.let { ready ->
+                    ready.providers.filter { ready.connectedIds.contains(it.id) }
+                }.orEmpty()
 
     /** True if the given provider/model pair is available among connected providers. */
-    fun isAvailable(providerId: String, modelId: String): Boolean {
+    fun isAvailable(
+        providerId: String,
+        modelId: String,
+    ): Boolean {
         val state = _state.value as? State.Ready ?: return false
         return state.providers.any { provider ->
             provider.id == providerId &&
@@ -70,32 +86,46 @@ class ProviderDirectory(
      * refresh (e.g. after connecting/disconnecting a provider).
      */
     suspend fun load() {
-        val job = mutex.withLock {
-            val current = inflight
-            when {
-                current != null -> current
-                _state.value is State.Ready -> null
-                else -> scope.async { doFetch() }.also { inflight = it }
+        val generation = invalidation.get()
+        val job =
+            mutex.withLock {
+                val current = inflight
+                val stillCurrent = generation == invalidation.get()
+                when {
+                    current != null && stillCurrent -> current
+                    _state.value is State.Ready && stillCurrent -> null
+                    else -> scope.async { doFetch() }.also { inflight = it }
+                }
             }
-        }
-        job?.await()
-        if (job != null) {
-            mutex.withLock { if (inflight === job) inflight = null }
+        try {
+            job?.await()
+        } finally {
+            // Must run even when await() is cancelled: otherwise inflight keeps
+            // pointing at a dead deferred and every later load() awaits it and
+            // never refetches.
+            if (job != null) {
+                mutex.withLock { if (inflight === job) inflight = null }
+            }
         }
     }
 
     private suspend fun doFetch() {
         _state.value = State.Loading
-        _state.value = try {
-            val resp = fetch()
-            State.Ready(resp.all, resp.connected.toSet())
-        } catch (e: Exception) {
-            State.Failed(e.message ?: e::class.java.simpleName)
-        }
+        _state.value =
+            try {
+                val resp = fetch()
+                State.Ready(resp.all, resp.connected.toSet())
+            } catch (e: Exception) {
+                State.Failed(e.message ?: e::class.java.simpleName)
+            }
     }
 
     /** Drops the cache; the next [load] refetches. */
     fun invalidate() {
+        // Bump the generation so a concurrent/previous inflight load is not
+        // reused by the next load() — that short-circuit left the catalog
+        // stuck on Loading and never refetched.
+        invalidation.incrementAndGet()
         _state.value = State.Loading
     }
 

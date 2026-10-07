@@ -2,6 +2,8 @@ package com.opencode.android.di
 
 import com.opencode.android.data.BackendSession
 import com.opencode.android.data.ChatRepository
+import com.opencode.android.data.HomeCache
+import com.opencode.android.data.HomeStore
 import com.opencode.android.data.MessageCache
 import com.opencode.android.data.MessageStore
 import com.opencode.android.data.OpenCodeApi
@@ -31,7 +33,6 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
-
     @Provides
     @Singleton
     fun provideBackendSession(): BackendSession = BackendSession()
@@ -43,15 +44,20 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideProviderDirectory(session: BackendSession): ProviderDirectory = ProviderDirectory(
-        // Resolved per fetch: the directory outlives a backend switch.
-        fetch = { session.api.getProviderList() },
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-    )
+    fun provideProviderDirectory(session: BackendSession): ProviderDirectory =
+        ProviderDirectory(
+            // Resolved per fetch: the directory outlives a backend switch.
+            fetch = { session.api.getProviderList() },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + com.opencode.android.util.LogAndSwallow),
+        )
 
     @Provides
     @Singleton
     fun provideMessageStore(): MessageStore = MessageCache
+
+    @Provides
+    @Singleton
+    fun provideHomeStore(): HomeStore = HomeCache
 
     @Provides
     @Singleton
@@ -61,9 +67,12 @@ object AppModule {
         // call, so switching backend is picked up without restarting the app.
         api: javax.inject.Provider<OpenCodeApi>,
         messageStore: MessageStore,
-    ): ChatRepository = ChatRepository(
-        apiProvider = { api.get() },
-        messageStore = messageStore,
-        streamedMessages = { sessionId, limit -> session.getMessagesStreamed(sessionId, limit) },
-    )
+    ): ChatRepository =
+        ChatRepository(
+            apiProvider = { api.get() },
+            messageStore = messageStore,
+            streamedMessages = { sessionId, limit, before ->
+                session.getMessagesStreamed(sessionId, limit, before)
+            },
+        )
 }

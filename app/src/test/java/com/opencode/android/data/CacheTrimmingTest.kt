@@ -15,7 +15,6 @@ import org.junit.Test
  * exists for, so the rule is pinned here.
  */
 class CacheTrimmingTest {
-
     private fun message(
         parts: List<Part> = emptyList(),
         content: List<ContentPart> = emptyList(),
@@ -23,60 +22,93 @@ class CacheTrimmingTest {
 
     @Test
     fun `tool state is dropped`() {
-        val trimmed = CacheTrimming.trim(
-            listOf(message(parts = listOf(Part(id = "p1", type = "tool", state = JsonPrimitive("x".repeat(500_000)))))),
+        val trimmed =
+            CacheTrimming.trim(
+                listOf(message(parts = listOf(Part(id = "p1", type = "tool", state = JsonPrimitive("x".repeat(500_000)))))),
+            )
+        assertNull(
+            trimmed
+                .single()
+                .parts
+                .single()
+                .state,
         )
-        assertNull(trimmed.single().parts.single().state)
     }
 
     @Test
     fun `legacy content is kept when there are no parts`() {
         // A legacy-only message has content but no parts; dropping the content
         // used to cache an empty bubble for it.
-        val trimmed = CacheTrimming.trim(
-            listOf(message(content = listOf(ContentPart(type = "text", text = "legacy")))),
+        val trimmed =
+            CacheTrimming.trim(
+                listOf(message(content = listOf(ContentPart(type = "text", text = "legacy")))),
+            )
+        assertEquals(
+            "legacy",
+            trimmed
+                .single()
+                .content
+                .single()
+                .text,
         )
-        assertEquals("legacy", trimmed.single().content.single().text)
     }
 
     @Test
     fun `duplicate content is dropped when parts are present`() {
-        val trimmed = CacheTrimming.trim(
-            listOf(
-                message(
-                    parts = listOf(Part(id = "p1", type = "text", text = "modern")),
-                    content = listOf(ContentPart(type = "text", text = "modern")),
+        val trimmed =
+            CacheTrimming.trim(
+                listOf(
+                    message(
+                        parts = listOf(Part(id = "p1", type = "text", text = "modern")),
+                        content = listOf(ContentPart(type = "text", text = "modern")),
+                    ),
                 ),
-            ),
-        )
+            )
         assertTrue(trimmed.single().content.isEmpty())
-        assertEquals("modern", trimmed.single().parts.single().text)
+        assertEquals(
+            "modern",
+            trimmed
+                .single()
+                .parts
+                .single()
+                .text,
+        )
     }
 
     @Test
     fun `long part text is capped and short text is untouched`() {
         val long = "a".repeat(CacheTrimming.MAX_PART_TEXT + 5_000)
         val short = "hello"
-        val trimmed = CacheTrimming.trim(
-            listOf(
-                message(
-                    parts = listOf(
-                        Part(id = "p1", type = "text", text = long),
-                        Part(id = "p2", type = "text", text = short),
+        val trimmed =
+            CacheTrimming.trim(
+                listOf(
+                    message(
+                        parts =
+                            listOf(
+                                Part(id = "p1", type = "text", text = long),
+                                Part(id = "p2", type = "text", text = short),
+                            ),
                     ),
                 ),
-            ),
+            )
+        assertEquals(
+            CacheTrimming.MAX_PART_TEXT,
+            trimmed
+                .single()
+                .parts[0]
+                .text!!
+                .length,
         )
-        assertEquals(CacheTrimming.MAX_PART_TEXT, trimmed.single().parts[0].text!!.length)
         assertEquals(short, trimmed.single().parts[1].text)
     }
 
     @Test
     fun `message identity and ordering are preserved`() {
-        val input = listOf(
-            message(parts = listOf(Part(id = "a", type = "text", text = "one"))),
-            message(parts = listOf(Part(id = "b", type = "text", text = "two"))),
-        ).mapIndexed { i, m -> m.copy(id = "m$i") }
+        val input =
+            listOf(
+                message(parts = listOf(Part(id = "a", type = "text", text = "one"))),
+                message(parts = listOf(Part(id = "b", type = "text", text = "two"))),
+            ).mapIndexed { i, m -> m.copy(id = "m$i") }
 
         val trimmed = CacheTrimming.trim(input)
         assertEquals(listOf("m0", "m1"), trimmed.map { it.id })
@@ -86,5 +118,32 @@ class CacheTrimmingTest {
     @Test
     fun `empty input stays empty`() {
         assertTrue(CacheTrimming.trim(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `newestFitting keeps everything when it already fits`() {
+        val messages = List(5) { Message(id = "m$it") }
+        val fitted = CacheTrimming.newestFitting(messages, maxBytes = 1_000) { 10 }
+        assertEquals(messages.map { it.id }, fitted.map { it.id })
+    }
+
+    @Test
+    fun `newestFitting drops the oldest half until it fits`() {
+        val messages = List(8) { Message(id = "m$it") }
+        // 8 -> 4 -> 2 fit; the newest survive, the oldest are dropped.
+        val fitted = CacheTrimming.newestFitting(messages, maxBytes = 2) { it.size }
+        assertEquals(listOf("m6", "m7"), fitted.map { it.id })
+    }
+
+    @Test
+    fun `newestFitting always keeps at least the newest message`() {
+        val messages = List(4) { Message(id = "m$it") }
+        val fitted = CacheTrimming.newestFitting(messages, maxBytes = 0) { 1_000 }
+        assertEquals(listOf("m3"), fitted.map { it.id })
+    }
+
+    @Test
+    fun `newestFitting on empty input stays empty`() {
+        assertTrue(CacheTrimming.newestFitting(emptyList(), maxBytes = 0) { 0 }.isEmpty())
     }
 }

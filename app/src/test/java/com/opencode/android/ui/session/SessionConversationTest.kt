@@ -19,32 +19,68 @@ import retrofit2.Response
 
 /** Candidate 1 — SessionConversation command surface + projection, with fakes. */
 class SessionConversationTest {
-
     private class FakePort : ConversationPort {
         var sends = 0
         var retries = 0
         var reconciles = 0
         var generatingSets = 0
         var refreshes = 0
-        override fun send() { sends++ }
-        override fun retry() { retries++ }
-        override fun reconcile(includeMeta: Boolean) { reconciles++ }
+
+        override fun send() {
+            sends++
+        }
+
+        override fun retry() {
+            retries++
+        }
+
+        override fun reconcile(includeMeta: Boolean) {
+            reconciles++
+        }
+
         override fun loadPendingQuestions() {}
+
+        override fun onQuestionAsked(question: com.opencode.android.domain.SessionQuestion) {}
+
+        override fun onQuestionResolved(requestId: String) {}
+
         override fun loadPermissions() {}
+
         override fun notifyPermission() {}
+
         override fun notifyDone() {}
+
         override fun notifyError(message: String?) {}
+
+        override fun notifyQuestion(question: com.opencode.android.domain.SessionQuestion) {}
+
         override fun notifyInterruptFailed(message: String?) {}
-        override fun refreshMessages(sessionId: String) { refreshes++ }
+
+        override fun refreshMessages(sessionId: String) {
+            refreshes++
+        }
+
         override fun resyncSessionStatus() {}
+
         override fun refreshSessionModel() {}
+
         override fun loadVcsDiff() {}
-        override fun setGenerating(value: Boolean) { generatingSets++ }
+
+        override fun setGenerating(value: Boolean) {
+            generatingSets++
+        }
+
         override fun setPendingPersist(value: Boolean) {}
+
         override fun setCompacting(value: Boolean) {}
+
         override fun setStatusError(value: String?) {}
+
         override fun setSseConnected(value: Boolean) {}
+
         override fun setSelectedModel(value: String) {}
+
+        override fun setTodos(todos: List<com.opencode.android.domain.TodoItem>) {}
     }
 
     private class FakeTransport : SessionTransport {
@@ -52,11 +88,13 @@ class SessionConversationTest {
         var interrupts = 0
         var abortSuccessful = true
         var abortThrows = false
+
         override suspend fun promptAsync(
             sessionId: String,
             body: PromptAsyncRequest,
             guardRevision: Long?,
         ): Response<okhttp3.ResponseBody> = Response.success("ok".toResponseBody(null))
+
         override suspend fun abort(sessionId: String): Response<okhttp3.ResponseBody> {
             aborts++
             if (abortThrows) throw java.io.IOException("abort boom")
@@ -66,8 +104,13 @@ class SessionConversationTest {
                 Response.error(500, "".toResponseBody(null))
             }
         }
-        override suspend fun interrupt(sessionId: String) { interrupts++ }
+
+        override suspend fun interrupt(sessionId: String) {
+            interrupts++
+        }
+
         override fun guardRevision(sessionId: String): Long? = null
+
         override fun clearGuardRevision(sessionId: String) {}
     }
 
@@ -75,75 +118,108 @@ class SessionConversationTest {
         val base: FakePort = FakePort(),
     ) : ConversationPort by base {
         var interruptFailures = 0
-        override fun notifyInterruptFailed(message: String?) { interruptFailures++ }
+
+        override fun notifyInterruptFailed(message: String?) {
+            interruptFailures++
+        }
     }
 
     private val noError: (JsonElement?) -> String? = { null }
     private val noModels: () -> List<Model> = { emptyList() }
 
     @Test
-    fun `dispatch routes send and retry to the port and interrupt to the transport`() = runTest {
-        val port = FakePort()
-        val transport = FakeTransport()
-        val conversation = SessionConversation(
-            EventSource { _, _ -> emptyFlow() }, this, noModels, noError, transport, port,
-        )
-        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
-        conversation.dispatch(SessionCommand.Send)
-        conversation.dispatch(SessionCommand.Interrupt)
-        conversation.dispatch(SessionCommand.Retry)
-        advanceUntilIdle()
-        assertEquals(1, port.sends)
-        assertEquals(1, port.retries)
-        assertEquals(1, transport.aborts)
-        assertEquals(1, port.refreshes)
-    }
-
-    @Test
-    fun `interrupt falls back to the legacy endpoint when abort is not successful`() = runTest {
-        val port = FakePort()
-        val transport = FakeTransport().apply { abortSuccessful = false }
-        val conversation = SessionConversation(
-            EventSource { _, _ -> emptyFlow() }, this, noModels, noError, transport, port,
-        )
-        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
-        conversation.dispatch(SessionCommand.Interrupt)
-        advanceUntilIdle()
-        assertEquals(1, transport.aborts)
-        assertEquals(1, transport.interrupts)
-        assertEquals(1, port.refreshes)
-    }
-
-    @Test
-    fun `interrupt failure notifies the port and still refreshes`() = runTest {
-        val port = FailingPort()
-        val transport = FakeTransport().apply { abortThrows = true }
-        val conversation = SessionConversation(
-            EventSource { _, _ -> emptyFlow() }, this, noModels, noError, transport, port,
-        )
-        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
-        conversation.dispatch(SessionCommand.Interrupt)
-        advanceUntilIdle()
-        assertEquals(1, port.interruptFailures)
-        assertEquals(1, port.base.refreshes)
-    }
-
-    @Test
-    fun `load sets the session and stream events project into state`() = runTest {        val port = FakePort()
-        val transport = FakeTransport()
-        val source = EventSource { _, _ ->
-            flowOf(
-                Event(
-                    type = "session.status",
-                    properties = EventProperties(status = SessionStatus(type = "busy")),
-                ),
-            )
+    fun `dispatch routes send and retry to the port and interrupt to the transport`() =
+        runTest {
+            val port = FakePort()
+            val transport = FakeTransport()
+            val conversation =
+                SessionConversation(
+                    EventSource { _, _ -> emptyFlow() },
+                    this,
+                    noModels,
+                    noError,
+                    transport,
+                    port,
+                )
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+            conversation.dispatch(SessionCommand.Send)
+            conversation.dispatch(SessionCommand.Interrupt)
+            conversation.dispatch(SessionCommand.Retry)
+            advanceUntilIdle()
+            assertEquals(1, port.sends)
+            assertEquals(1, port.retries)
+            assertEquals(1, transport.aborts)
+            assertEquals(1, port.refreshes)
         }
-        val conversation = SessionConversation(source, this, noModels, noError, transport, port)
-        conversation.dispatch(SessionCommand.Load("s1", "http://x"))
-        advanceUntilIdle()
-        assertEquals("s1", conversation.state.value.sessionId)
-        assertTrue(conversation.state.value.isGenerating)
-        assertTrue(port.generatingSets > 0)
-    }
+
+    @Test
+    fun `interrupt falls back to the legacy endpoint when abort is not successful`() =
+        runTest {
+            val port = FakePort()
+            val transport = FakeTransport().apply { abortSuccessful = false }
+            val conversation =
+                SessionConversation(
+                    EventSource { _, _ -> emptyFlow() },
+                    this,
+                    noModels,
+                    noError,
+                    transport,
+                    port,
+                )
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+            conversation.dispatch(SessionCommand.Interrupt)
+            advanceUntilIdle()
+            assertEquals(1, transport.aborts)
+            assertEquals(1, transport.interrupts)
+            assertEquals(1, port.refreshes)
+        }
+
+    @Test
+    fun `interrupt failure notifies the port and still refreshes`() =
+        runTest {
+            val port = FailingPort()
+            val transport = FakeTransport().apply { abortThrows = true }
+            val conversation =
+                SessionConversation(
+                    EventSource { _, _ -> emptyFlow() },
+                    this,
+                    noModels,
+                    noError,
+                    transport,
+                    port,
+                )
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+            conversation.dispatch(SessionCommand.Interrupt)
+            advanceUntilIdle()
+            assertEquals(1, port.interruptFailures)
+            assertEquals(1, port.base.refreshes)
+        }
+
+    @Test
+    fun `load sets the session and stream events project into state`() =
+        runTest {
+            val port = FakePort()
+            val transport = FakeTransport()
+            val source =
+                EventSource { _, _ ->
+                    flowOf(
+                        Event(
+                            type = "session.status",
+                            // Session-scoped events carry the id on the wire;
+                            // SseFilter drops session-less non-broadcast events.
+                            properties =
+                                EventProperties(
+                                    sessionId = "s1",
+                                    status = SessionStatus(type = "busy"),
+                                ),
+                        ),
+                    )
+                }
+            val conversation = SessionConversation(source, this, noModels, noError, transport, port)
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+            advanceUntilIdle()
+            assertEquals("s1", conversation.state.value.sessionId)
+            assertTrue(conversation.state.value.isGenerating)
+            assertTrue(port.generatingSets > 0)
+        }
 }

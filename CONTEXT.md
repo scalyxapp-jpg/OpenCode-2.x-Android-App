@@ -1,6 +1,6 @@
 # Context
 
-Domain glossary for the OpenCode Android client and its session-guard proxy.
+Domain glossary for the OpenCode Android client.
 
 ## Glossary
 
@@ -35,14 +35,23 @@ Domain glossary for the OpenCode Android client and its session-guard proxy.
   fields through `ConversationPort` synchronously, so a ViewModel read right
   after a write is never stale. The mirror stays until the send workflow moves
   wholesale and `ChatUiState` becomes a pure projection.
-- **Session Guard** — the optional proxy that pins a session's
-  provider/model/variant/agent and rewrites prompts to that selection.
+- **Session running state (turn vs step)** — `isGenerating` is TURN-level: it is
+  set by a send or by the server reporting `busy`/`retry` and is cleared ONLY by
+  `session.idle`, status `idle`, `session.error`, an explicit abort, or the
+  status-endpoint resync/watchdog. It is the single source of truth for the
+  composer's send/stop button, the live status row, the widget and the
+  polling/caching gates. `isStreaming` is STEP-level: it says the current step is
+  actively producing content and only drives the streaming caret; it drops at
+  every `step-finish` while the turn keeps running. `StreamEffect.Finalize`
+  finalizes one step (stops the caret, arms the persist timeout) and
+  `StreamEffect.EndTurn` ends the turn (clears `isGenerating`) — step boundaries
+  must never end the turn, which was the "stop button loses its state between
+  steps" bug.
+- **Session Guard** — an optional, separately self-hosted proxy that pins a
+  session's provider/model/variant/agent and rewrites prompts to that selection.
+  It is not part of this repository; the app detects it and works without it.
 - **Guard Drift** — the state where the upstream session selection differs from
   the guard selection.
-- **GuardRequestRouter** — the proxy module that maps a request path to one
-  route handler through a route table; each route owns one concern.
-- **RequestContext** — the per-request value passed to guard routes: config,
-  store, upstream client, headers, body, and parsed query.
 - **SessionStreamer** — the module that consumes a session event flow and owns
   live streaming state, coalescing, and reconciliation triggers.
 - **StreamReducer** — the pure part of SessionStreamer: event sequence to state
@@ -51,14 +60,6 @@ Domain glossary for the OpenCode Android client and its session-guard proxy.
   a synthetic event list is another.
 - **ReconnectPolicy** — the pure backoff, stability, and watchdog rules for a
   dropped event stream.
-- **BodyChunkReader** — the proxy module that decodes an HTTP request body
-  (Content-Length or chunked) into byte chunks with one size/error policy.
-- **BodyReadError** — typed body-decoding failure (`too_large`, `invalid_chunk`,
-  `client_closed`, `empty`) mapped to an HTTP status by the router.
-- **GuardCas** — the single module that checks an expected guard revision and
-  produces the canonical conflict response; every mutating route uses it.
-- **GuardConflict** — the typed result of a failed revision check: conflict
-  error plus the current guard metadata.
 - **BackendSession** — the singleton that owns the active backend base URL,
   credentials, and Retrofit instance, and swaps them atomically. Created by
   Hilt (`AppModule`) and read in Compose through `LocalBackendSession`; the
@@ -71,3 +72,21 @@ Domain glossary for the OpenCode Android client and its session-guard proxy.
   the screen to SessionTab, replacing the flat 28-parameter list.
 - **ComposerActions** — the stable bundle of composer callbacks passed to
   Composer, replacing the flat 30-parameter list.
+- **OpenCodeV2Api** — the Retrofit definition of the OpenCode 2.x `/api`
+  surface: every path namespaced with `api/`, wire DTOs, and directory scoping
+  through the `x-opencode-directory` **header** (the V1 `?directory=` query
+  param is ignored by the server). `data/OpenCodeV2Api.kt`.
+- **OpenCodeApiAdapter** — the single V1→V2 shape bridge. Implements the
+  app-facing `OpenCodeApi` (a plain interface, no Retrofit annotations) over
+  `OpenCodeV2Api`, mapping wire shapes back onto the stable domain models so the
+  UI, ViewModels and repositories did not change. All endpoint, envelope,
+  message-shape, form/permission and provider-credential differences live here.
+  `data/OpenCodeApiAdapter.kt`.
+- **V2EventNormalizer** — rewrites an OpenCode 2.x `/api/event` frame
+  (`{id,type,data,durable}`, payload under `data`) onto the app's existing event
+  vocabulary (`session.next.*`, `message.part.*`, `session.status`, …) and fills
+  the `EventData`/`EventProperties` the `StreamReducer` already understands.
+  `ui/session/V2EventNormalizer.kt`.
+- **V2 wire contract** — the observed 2.x endpoint map, envelopes, message
+  shape, SSE event catalogue and provider/model split, captured from the live
+  server. `docs/OPENCODE-API.md`.

@@ -1,10 +1,9 @@
 package com.opencode.android.data
-import com.opencode.android.util.AppLog
-import com.opencode.android.util.APP_LOG_TAG
-
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.opencode.android.util.APP_LOG_TAG
+import com.opencode.android.util.AppLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -110,9 +109,11 @@ object AppSettingsStore {
             showCommandPalette = prefs.getBoolean("showCommandPalette", false),
             showServerStatus = prefs.getBoolean("showServerStatus", false),
             showCustomAgents = prefs.getBoolean("showCustomAgents", true),
-            guardToken = prefs.getString("guardToken", "")
-                ?.let { if (it.isBlank()) "" else SecretBox.decrypt(it) }
-                ?: "",
+            guardToken =
+                prefs
+                    .getString("guardToken", "")
+                    ?.let { if (it.isBlank()) "" else SecretBox.decrypt(it) }
+                    ?: "",
             autoAdoptGuard = prefs.getBoolean("autoAdoptGuard", false),
         )
     }
@@ -124,37 +125,65 @@ object AppSettingsStore {
     }
 
     fun setLanguage(v: String) = update { it.putString("language", v) }
+
     fun setAutoApprove(v: Boolean) = update { it.putBoolean("autoApprove", v) }
+
     fun setTerminalShell(v: String) = update { it.putString("terminalShell", v) }
+
     fun setShowReasoningSummaries(v: Boolean) = update { it.putBoolean("showReasoningSummaries", v) }
+
     fun setShellToolPartsExpanded(v: Boolean) = update { it.putBoolean("shellToolPartsExpanded", v) }
+
     fun setEditToolPartsExpanded(v: Boolean) = update { it.putBoolean("editToolPartsExpanded", v) }
+
     fun setColorScheme(v: String) = update { it.putString("colorScheme", v) }
+
     fun setTheme(v: String) = update { it.putString("theme", v) }
+
     fun setFontSize(v: Int) = update { it.putInt("fontSize", v) }
+
     fun setSansFont(v: String) = update { it.putString("sansFont", v) }
+
     fun setMonoFont(v: String) = update { it.putString("monoFont", v) }
+
     fun setTerminalFont(v: String) = update { it.putString("terminalFont", v) }
+
     fun setNotifyAgent(v: Boolean) = update { it.putBoolean("notifyAgent", v) }
+
     fun setNotifyPermissions(v: Boolean) = update { it.putBoolean("notifyPermissions", v) }
+
     fun setNotifyErrors(v: Boolean) = update { it.putBoolean("notifyErrors", v) }
+
     fun setSoundAgentEnabled(v: Boolean) = update { it.putBoolean("soundAgentEnabled", v) }
+
     fun setSoundAgent(v: String) = update { it.putString("soundAgent", v) }
+
     fun setSoundPermissionsEnabled(v: Boolean) = update { it.putBoolean("soundPermissionsEnabled", v) }
+
     fun setSoundPermissions(v: String) = update { it.putString("soundPermissions", v) }
+
     fun setSoundErrorsEnabled(v: Boolean) = update { it.putBoolean("soundErrorsEnabled", v) }
+
     fun setSoundErrors(v: String) = update { it.putString("soundErrors", v) }
+
     fun setShowFileTree(v: Boolean) = update { it.putBoolean("showFileTree", v) }
+
     fun setShowCommandPalette(v: Boolean) = update { it.putBoolean("showCommandPalette", v) }
+
     fun setShowServerStatus(v: Boolean) = update { it.putBoolean("showServerStatus", v) }
+
     fun setShowCustomAgents(v: Boolean) = update { it.putBoolean("showCustomAgents", v) }
+
     fun setAutoAdoptGuard(v: Boolean) = update { it.putBoolean("autoAdoptGuard", v) }
+
     fun setGuardToken(v: String) {
         val trimmed = v.trim()
         update {
             it.putString(
                 "guardToken",
-                if (trimmed.isBlank()) "" else SecretBox.encrypt(trimmed),
+                // encrypt() is fail-closed (null when the Keystore is
+                // unavailable): store "" rather than a plaintext secret.
+                if (trimmed.isBlank()) "" else SecretBox.encrypt(trimmed) ?: "",
             )
         }
     }
@@ -171,15 +200,24 @@ object AppSettingsStore {
     // whole configuration. Deliberately file-based rather than cloud-based: no
     // credentials, no background sync, no conflict resolution to get wrong.
 
-    private val transferJson = kotlinx.serialization.json.Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        prettyPrint = true
-    }
+    private val transferJson =
+        kotlinx.serialization.json.Json {
+            ignoreUnknownKeys = true
+            encodeDefaults = true
+            prettyPrint = true
+        }
 
-    /** Current settings as a portable JSON document. */
-    fun exportJson(): String =
-        transferJson.encodeToString(AppSettings.serializer(), _state.value)
+    /**
+     * Current settings as a portable JSON document.
+     *
+     * The guard token is a shared secret and the export is meant to be
+     * shareable (bug reports, device moves), so it is redacted here. The
+     * decrypted token would otherwise land in a plaintext file.
+     */
+    fun exportJson(): String {
+        val redacted = _state.value.copy(guardToken = "")
+        return transferJson.encodeToString(AppSettings.serializer(), redacted)
+    }
 
     /**
      * Applies a document produced by [exportJson]. Unknown keys are ignored
@@ -188,12 +226,13 @@ object AppSettingsStore {
      * @return null on success, otherwise the failure reason (shown to the user).
      */
     fun importJson(text: String): String? {
-        val parsed = try {
-            transferJson.decodeFromString(AppSettings.serializer(), text)
-        } catch (e: Exception) {
-            AppLog.e(APP_LOG_TAG, "importJson failed: ${e.message}")
-            return e.message ?: "malformed file"
-        }
+        val parsed =
+            try {
+                transferJson.decodeFromString(AppSettings.serializer(), text)
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "importJson failed: ${e.message}")
+                return e.message ?: "malformed file"
+            }
         val prefs = p() ?: return "settings storage unavailable"
         prefs.edit {
             putString("language", parsed.language)
@@ -221,6 +260,12 @@ object AppSettingsStore {
             putBoolean("showCommandPalette", parsed.showCommandPalette)
             putBoolean("showServerStatus", parsed.showServerStatus)
             putBoolean("showCustomAgents", parsed.showCustomAgents)
+            // Previously omitted: the auto-adopt preference was silently lost
+            // on import.
+            putBoolean("autoAdoptGuard", parsed.autoAdoptGuard)
+            // The guard token is deliberately NOT imported: it is redacted in
+            // the export, and overwriting the device's working secret with the
+            // empty redacted value would break the guard connection.
         }
         _state.value = load()
         return null

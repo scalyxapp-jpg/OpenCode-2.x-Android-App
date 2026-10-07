@@ -15,10 +15,13 @@
         <!-- Cached conversation text: tool output is stripped, but assistant
              answers can quote file contents/secrets the agent touched. -->
         <exclude domain="file" path="session_cache/" />
+        <!-- Crash reports can embed prompts/URLs/tool output. -->
+        <exclude domain="file" path="crash_last.txt" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="opencode.backends.xml" />
         <exclude domain="sharedpref" path="opencode.global.dat.xml" />
         <exclude domain="file" path="session_cache/" />
+        <exclude domain="file" path="crash_last.txt" />
     </device-transfer>
 </data-extraction-rules>

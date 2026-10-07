@@ -120,7 +120,7 @@
     <string name="continue_label" formatted="false">Continue</string>
     <string name="choose_backend" formatted="false">Choose backend</string>
     <string name="add_backend" formatted="false">Add backend</string>
-    <string name="http_192_168_1_100" formatted="false">http://192.168.1.100:4096</string>
+    <string name="server_url_example" formatted="false">http://192.168.1.100:4096</string>
     <string name="add_connect" formatted="false">Add &amp; connect</string>
     <string name="rename_backend" formatted="false">Rename backend</string>
     <string name="password_required" formatted="false">Password required</string>
@@ -251,7 +251,6 @@
     <string name="could_not_fork" formatted="false">Could not fork the session: %1$s</string>
     <string name="could_not_revert" formatted="false">Could not revert: %1$s</string>
     <string name="could_not_load_todos" formatted="false">Could not load the todo list: %1$s</string>
-    <string name="could_not_load_diff" formatted="false">Could not load the diff: %1$s</string>
     <string name="could_not_load_projects" formatted="false">Could not load projects: %1$s</string>
     <string name="could_not_load_sessions" formatted="false">Could not load sessions: %1$s</string>
     <string name="could_not_rename_project" formatted="false">Could not rename the project: %1$s</string>
@@ -308,11 +307,11 @@
     <string name="initialized_ok">Project initialized</string>
     <string name="init_failed">Initialization failed</string>
     <string name="settings_server">Server</string>
-    <string name="settings_update_server">Update server</string>
-    <string name="settings_update_requested">Update requested</string>
-    <string name="settings_update_failed">Update failed</string>
     <string name="settings_skills">Skills</string>
     <string name="settings_no_skills">No skills installed</string>
     <string name="connection_active">OpenCode connected</string>
     <string name="connection_active_sub">Keeping the session connection alive</string>
+    <string name="widget_description">Last session status and a new-session shortcut</string>
+    <string name="tile_label">New OpenCode session</string>
+    <string name="shared_content_ready">Shared content added to the prompt</string>
 </resources>

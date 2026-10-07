@@ -24,17 +24,26 @@ fun buildPromptAsyncRequest(
     modelId: String,
     variant: String,
     finalText: String,
-): PromptAsyncRequest = PromptAsyncRequest(
-    messageID = messageId,
-    agent = agent.ifEmpty { null },
-    model = modelId.takeIf { it.isNotBlank() }?.let {
-        PromptAsyncModel(modelID = it, providerID = providerId)
-    },
-    // Web sends variant as a top-level field; omit "default".
-    variant = variant.takeIf { it.isNotBlank() && it != "default" },
-    parts = buildList {
-        if (finalText.isNotBlank()) {
-            add(PromptAsyncPart(id = partId, type = "text", text = finalText))
-        }
-    },
-)
+    // Portable attachments: one `file` part per attachment, each with a base64
+    // data URL (the web shape). Used when the optional guard proxy is absent, so
+    // a plain OpenCode server still receives the files. Empty when the guard
+    // uploaded them to the host and the paths went into [finalText].
+    fileParts: List<PromptAsyncPart> = emptyList(),
+): PromptAsyncRequest =
+    PromptAsyncRequest(
+        messageID = messageId,
+        agent = agent.ifEmpty { null },
+        model =
+            modelId.takeIf { it.isNotBlank() }?.let {
+                PromptAsyncModel(modelID = it, providerID = providerId)
+            },
+        // Web sends variant as a top-level field; omit "default".
+        variant = variant.takeIf { it.isNotBlank() && it != "default" },
+        parts =
+            buildList {
+                if (finalText.isNotBlank()) {
+                    add(PromptAsyncPart(id = partId, type = "text", text = finalText))
+                }
+                addAll(fileParts)
+            },
+    )

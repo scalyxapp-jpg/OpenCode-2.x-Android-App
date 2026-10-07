@@ -14,8 +14,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.nativeCanvas
 import kotlin.math.PI
-import kotlin.math.sin
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.random.Random
 
 private data class Fish(
@@ -38,6 +38,24 @@ private data class Bubble(
 private const val AQUA_SEED = 4242
 
 /**
+ * Keeps a fish vertically inside the canvas, clamped against the fish radius.
+ *
+ * Pure and separate because the naive `value.coerceIn(size, h - size)` throws
+ * `IllegalArgumentException: Cannot coerce value to an empty range` whenever
+ * the canvas is shorter than twice a fish (small window, IME open, first
+ * layout frame) — a crash observed in the client reports.
+ */
+internal fun clampFishY(
+    value: Float,
+    size: Float,
+    h: Float,
+): Float {
+    val minY = size
+    val maxY = (h - size).coerceAtLeast(minY)
+    return value.coerceIn(minY, maxY)
+}
+
+/**
  * Animated fish backdrop for the Aqua theme: small fish swimming behind the
  * chat plus a few rising bubbles. Deliberately subtle (low alpha, slow) so
  * messages stay readable — wallpaper, not content.
@@ -51,32 +69,31 @@ internal fun AquaFishBackground(
 ) {
     var frameNs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
-        var last = 0L
+        // ~30 fps (see MatrixRain): delay between frames so the effect does not
+        // wake on every vsync.
         while (true) {
-            withFrameNanos { now ->
-                if (now - last >= 33_000_000L) {
-                    last = now
-                    frameNs = now
-                }
-            }
+            withFrameNanos { frameNs = it }
+            kotlinx.coroutines.delay(33)
         }
     }
 
-    val fishColors = remember {
-        intArrayOf(
-            android.graphics.Color.parseColor("#BDE9FA"),
-            android.graphics.Color.parseColor("#8FD8F2"),
-            android.graphics.Color.parseColor("#5CC3E6"),
-            android.graphics.Color.parseColor("#29A3D8"),
-            android.graphics.Color.parseColor("#FFFFFF"),
-        )
-    }
-    val paint = remember {
-        Paint().apply {
-            isAntiAlias = true
-            style = Paint.Style.FILL
+    val fishColors =
+        remember {
+            intArrayOf(
+                android.graphics.Color.parseColor("#BDE9FA"),
+                android.graphics.Color.parseColor("#8FD8F2"),
+                android.graphics.Color.parseColor("#5CC3E6"),
+                android.graphics.Color.parseColor("#29A3D8"),
+                android.graphics.Color.parseColor("#FFFFFF"),
+            )
         }
-    }
+    val paint =
+        remember {
+            Paint().apply {
+                isAntiAlias = true
+                style = Paint.Style.FILL
+            }
+        }
     val tailPath = remember { Path() }
     val rect = remember { RectF() }
     val fishes = remember { mutableListOf<Fish>() }
@@ -93,23 +110,25 @@ internal fun AquaFishBackground(
             val rng = Random(AQUA_SEED)
             val count = ((w * h) / 260_000f).roundToInt().coerceIn(6, 18)
             repeat(count) {
-                fishes += Fish(
-                    x = rng.nextFloat() * w,
-                    y = rng.nextFloat() * h,
-                    speed = 14f + rng.nextFloat() * 26f,
-                    size = 10f + rng.nextFloat() * 14f,
-                    dir = if (rng.nextBoolean()) 1 else -1,
-                    phase = rng.nextFloat() * (2f * PI.toFloat()),
-                    color = fishColors[rng.nextInt(fishColors.size)],
-                )
+                fishes +=
+                    Fish(
+                        x = rng.nextFloat() * w,
+                        y = rng.nextFloat() * h,
+                        speed = 14f + rng.nextFloat() * 26f,
+                        size = 10f + rng.nextFloat() * 14f,
+                        dir = if (rng.nextBoolean()) 1 else -1,
+                        phase = rng.nextFloat() * (2f * PI.toFloat()),
+                        color = fishColors[rng.nextInt(fishColors.size)],
+                    )
             }
             repeat((count / 2).coerceAtLeast(3)) {
-                bubbles += Bubble(
-                    x = rng.nextFloat() * w,
-                    y = rng.nextFloat() * h,
-                    radius = 1.5f + rng.nextFloat() * 3f,
-                    speed = 8f + rng.nextFloat() * 14f,
-                )
+                bubbles +=
+                    Bubble(
+                        x = rng.nextFloat() * w,
+                        y = rng.nextFloat() * h,
+                        radius = 1.5f + rng.nextFloat() * 3f,
+                        speed = 8f + rng.nextFloat() * 14f,
+                    )
             }
         }
 
@@ -133,7 +152,7 @@ internal fun AquaFishBackground(
         for (fish in fishes) {
             fish.x += fish.speed * fish.dir / 60f
             val bob = sin(t * 1.4f + fish.phase) * fish.size * 0.35f
-            val y = (fish.y + bob).coerceIn(fish.size, h - fish.size)
+            val y = clampFishY(fish.y + bob, fish.size, h)
             val halfW = fish.size * 0.85f
             val halfH = fish.size * 0.45f
             val left = if (fish.dir > 0) fish.x - halfW else fish.x - halfW

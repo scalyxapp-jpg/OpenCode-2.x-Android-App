@@ -46,27 +46,31 @@ class SessionStreamer(
     private var activeSession: String? = null
 
     /** Starts consuming [sessionId]; any prior stream is cancelled. */
-    fun start(sessionId: String, baseUrl: String) {
+    fun start(
+        sessionId: String,
+        baseUrl: String,
+    ) {
         stop()
         activeSession = sessionId
         state = StreamState()
         publish()
-        candidate = scope.launch {
-            try {
-                source.stream(baseUrl, sessionId).collect { event ->
-                    if (activeSession != sessionId) return@collect
-                    if (!SseFilter.shouldDeliver(event, sessionId)) return@collect
-                    accept(event)
+        candidate =
+            scope.launch {
+                try {
+                    source.stream(baseUrl, sessionId).collect { event ->
+                        if (activeSession != sessionId) return@collect
+                        if (!SseFilter.shouldDeliver(event, sessionId)) return@collect
+                        accept(event)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Transport failures are self-healing (SseClient reconnects with
+                    // backoff) and the UI already shows the "reconnecting" banner.
+                    // Notifying here made every blip a user-visible error.
+                    AppLog.e(APP_LOG_TAG, "SessionStreamer: stream error: ${e.message}")
                 }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Transport failures are self-healing (SseClient reconnects with
-                // backoff) and the UI already shows the "reconnecting" banner.
-                // Notifying here made every blip a user-visible error.
-                AppLog.e(APP_LOG_TAG, "SessionStreamer: stream error: ${e.message}")
             }
-        }
     }
 
     /** Cancels the stream and any pending flush/timeout. */
@@ -84,12 +88,23 @@ class SessionStreamer(
     fun resetLive() {
         flushJob?.cancel()
         flushJob = null
-        state = state.copy(
-            live = LiveStreamState(),
-            pendingReasoning = "",
-            pendingText = "",
-            partTypes = emptyMap(),
-        )
+        // The previous turn's persist timeout must not survive into the new
+        // turn: it would fire mid-stream, pass the pendingPersist guard, and
+        // clear the live buffers of the turn that is actively streaming.
+        persistTimeoutJob?.cancel()
+        persistTimeoutJob = null
+        state =
+            state.copy(
+                live = LiveStreamState(),
+                pendingReasoning = "",
+                pendingText = "",
+                partTypes = emptyMap(),
+                // A new send/interrupt/session switch starts a fresh turn.
+                turnEnded = false,
+                isStreaming = false,
+                pendingPersist = false,
+                isCompacting = false,
+            )
         publish()
     }
 
@@ -101,10 +116,22 @@ class SessionStreamer(
     fun accept(event: Event) {
         val before = state.projection()
         state = StreamReducer.reduce(state, event, models(), friendlyError)
+        // A new step/turn re-armed generation while the PREVIOUS step's persist
+        // timeout was still armed (step-finish finalizes every assistant step).
+        // That timer would fire mid-stream, pass the pendingPersist guard and
+        // clear the live buffers of the step now running — the "answer vanished
+        // mid-turn" bug. A step actively streaming and a pending persist are
+        // mutually exclusive, so cancel the stale timer and drop the flag.
+        if (state.isStreaming && state.pendingPersist) {
+            persistTimeoutJob?.cancel()
+            persistTimeoutJob = null
+            state = state.copy(pendingPersist = false)
+        }
         for (effect in state.effects) {
             when (effect) {
                 StreamEffect.ScheduleFlush -> scheduleFlush()
                 StreamEffect.Finalize -> finalize()
+                StreamEffect.EndTurn -> endTurn()
                 else -> onSignal(effect)
             }
         }
@@ -113,33 +140,57 @@ class SessionStreamer(
         if (after != before) StreamReducer.projectionEffects(before, after).forEach(onSignal)
     }
 
-    /** Matches the old `finalizeStream()`: stop live, arm the persist timeout. */
+    /**
+     * A STEP finished: stop the live stream and arm the persist timeout. The
+     * turn-level running flag is deliberately left untouched — a turn has many
+     * steps and the composer must keep showing "stop" between them.
+     */
     fun finalize() {
         val live = state.live
         if (live.response.isBlank() && live.reasoning.isBlank() && live.parts.isEmpty()) {
-            state = state.copy(
-                live = LiveStreamState(),
-                isGenerating = false,
-                pendingPersist = false,
-                isCompacting = false,
-            )
+            // Nothing to persist; make sure a timer from a previous turn cannot
+            // fire later and clear a subsequent turn's buffers.
+            persistTimeoutJob?.cancel()
+            persistTimeoutJob = null
+            state =
+                state.copy(
+                    live = LiveStreamState(),
+                    isStreaming = false,
+                    pendingPersist = false,
+                    isCompacting = false,
+                )
             publish()
             emitFlowFlags()
             return
         }
-        state = state.copy(isGenerating = false, pendingPersist = true, isCompacting = false)
+        state = state.copy(isStreaming = false, pendingPersist = true, isCompacting = false)
         publish()
         emitFlowFlags()
         persistTimeoutJob?.cancel()
-        persistTimeoutJob = scope.launch {
-            delay(PERSIST_TIMEOUT_MS)
-            completePersist()
-        }
+        persistTimeoutJob =
+            scope.launch {
+                delay(PERSIST_TIMEOUT_MS)
+                completePersist()
+            }
+    }
+
+    /**
+     * The TURN finished (`session.idle` / status idle / error / abort). This is
+     * the only transition that clears the turn-level running flag, so the
+     * composer flips back to "send" exactly once per turn instead of at every
+     * step boundary.
+     */
+    fun endTurn() {
+        state = state.copy(isGenerating = false, isStreaming = false, turnEnded = true)
+        finalize()
     }
 
     /** Called when the persisted assistant message lands (or after the timeout). */
     fun completePersist() {
         if (!state.pendingPersist) return
+        // A new step is already streaming while the previous step's persisted
+        // message lands; clearing now would blank the text that is arriving.
+        if (state.isStreaming) return
         val before = state.projection()
         persistTimeoutJob?.cancel()
         state = state.copy(live = LiveStreamState(), pendingPersist = false)
@@ -153,11 +204,12 @@ class SessionStreamer(
         val liveLen = state.pendingText.length + state.live.response.length
         val windowMs = LiveFlushPolicy.windowMs(liveLen)
         val sessionId = activeSession
-        flushJob = scope.launch {
-            delay(windowMs)
-            if (activeSession != sessionId) return@launch
-            flushNow()
-        }
+        flushJob =
+            scope.launch {
+                delay(windowMs)
+                if (activeSession != sessionId) return@launch
+                flushNow()
+            }
     }
 
     private fun flushNow() {
@@ -165,23 +217,25 @@ class SessionStreamer(
         val text = state.pendingText
         if (reasoning.isEmpty() && text.isEmpty()) return
         val before = state.projection()
-        state = state.copy(
-            pendingReasoning = "",
-            pendingText = "",
-            live = state.live.copy(
-                reasoning = capLive(state.live.reasoning + reasoning),
-                response = capLive(state.live.response + text),
-                thinking = reasoning.isNotEmpty(),
-            ),
-            statusError = null,
-        )
+        state =
+            state.copy(
+                pendingReasoning = "",
+                pendingText = "",
+                live =
+                    state.live.copy(
+                        reasoning = capLive(state.live.reasoning + reasoning),
+                        response = capLive(state.live.response + text),
+                        thinking = reasoning.isNotEmpty(),
+                    ),
+                statusError = null,
+            )
         publish()
         val after = state.projection()
         if (after != before) StreamReducer.projectionEffects(before, after).forEach(onSignal)
     }
 
     private fun publish() {
-        _liveState.value = state.live
+        _liveState.value = state.live.copy(streaming = state.isStreaming)
         _projection.value = state.projection()
     }
 
@@ -192,8 +246,7 @@ class SessionStreamer(
         onSignal(StreamEffect.CompactingChanged(state.isCompacting))
     }
 
-    private fun capLive(s: String): String =
-        if (s.length > LIVE_TEXT_MAX_CHARS) s.takeLast(LIVE_TEXT_MAX_CHARS) else s
+    private fun capLive(s: String): String = if (s.length > LIVE_TEXT_MAX_CHARS) s.takeLast(LIVE_TEXT_MAX_CHARS) else s
 
     companion object {
         const val PERSIST_TIMEOUT_MS = 3_000L

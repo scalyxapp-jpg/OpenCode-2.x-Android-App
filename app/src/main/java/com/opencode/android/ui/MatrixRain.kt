@@ -41,28 +41,26 @@ internal fun MatrixRainBackground(
 ) {
     var frameNs by remember { mutableLongStateOf(0L) }
     LaunchedEffect(Unit) {
-        var last = 0L
+        // ~30 fps: publish, then delay, so the effect does not schedule a frame
+        // on EVERY vsync (the old throttle discarded values but still woke the
+        // chassis 60-120x/s, draining battery whenever the theme was active).
         while (true) {
-            withFrameNanos { now ->
-                // Throttle to ~30 fps: full rate is wasted on a backdrop.
-                if (now - last >= 33_000_000L) {
-                    last = now
-                    frameNs = now
-                }
-            }
+            withFrameNanos { frameNs = it }
+            kotlinx.coroutines.delay(33)
         }
     }
     // Film colours: near-white head (#CCFFCC), phosphor mid, deep-green
     // tail dissolving into pure black — never grey.
     val headColor = android.graphics.Color.parseColor("#CCFFCC")
     val tailColor = android.graphics.Color.parseColor("#008F11")
-    val paint = remember {
-        Paint().apply {
-            isAntiAlias = true
-            typeface = Typeface.MONOSPACE
-            textAlign = Paint.Align.CENTER
+    val paint =
+        remember {
+            Paint().apply {
+                isAntiAlias = true
+                typeface = Typeface.MONOSPACE
+                textAlign = Paint.Align.CENTER
+            }
         }
-    }
     // Drops scale with the canvas size, so rotation/foldables just work.
     val drops = remember { mutableListOf<Drop>() }
     Canvas(modifier = modifier) {
@@ -77,13 +75,14 @@ internal fun MatrixRainBackground(
             drops.clear()
             val rng = Random(MATRIX_SEED)
             repeat(wantCols) { i ->
-                drops += Drop(
-                    xFrac = (i + 0.5f) / wantCols,
-                    y = rng.nextFloat() * h,
-                    speed = cell * rng.nextFloat().let { 1.5f + it * 4f },
-                    len = 6 + rng.nextInt(14),
-                    seed = rng.nextInt(1_000),
-                )
+                drops +=
+                    Drop(
+                        xFrac = (i + 0.5f) / wantCols,
+                        y = rng.nextFloat() * h,
+                        speed = cell * rng.nextFloat().let { 1.5f + it * 4f },
+                        len = 6 + rng.nextInt(14),
+                        seed = rng.nextInt(1_000),
+                    )
             }
         }
         val maxAlpha = if (dark) 0.22f else 0.14f

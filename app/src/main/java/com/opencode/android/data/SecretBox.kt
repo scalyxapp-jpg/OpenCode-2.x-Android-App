@@ -1,12 +1,11 @@
 package com.opencode.android.data
-import com.opencode.android.util.UserMessages
-import com.opencode.android.R
-import com.opencode.android.util.AppLog
-import com.opencode.android.util.APP_LOG_TAG
-
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.opencode.android.R
+import com.opencode.android.util.APP_LOG_TAG
+import com.opencode.android.util.AppLog
+import com.opencode.android.util.UserMessages
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -34,39 +33,44 @@ object SecretBox {
     private const val GCM_TAG_BITS = 128
     private const val GCM_IV_BYTES = 12
 
-    private fun key(): SecretKey? = synchronized(this) {
-        try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-            val existing = (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
-            existing ?: KeyGenerator
-                .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-                .apply {
-                    init(
-                        KeyGenParameterSpec.Builder(
-                            KEY_ALIAS,
-                            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+    private fun key(): SecretKey? =
+        synchronized(this) {
+            try {
+                val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+                val existing = (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
+                existing ?: KeyGenerator
+                    .getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+                    .apply {
+                        init(
+                            KeyGenParameterSpec
+                                .Builder(
+                                    KEY_ALIAS,
+                                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                                ).setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                                .build(),
                         )
-                            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                            .build(),
-                    )
-                }
-                .generateKey()
-        } catch (e: Exception) {
-            AppLog.e(APP_LOG_TAG, "SecretBox: keystore unavailable: ${e.message}")
-            UserMessages.post(R.string.secure_storage_unavailable, e.message ?: "")
-            null
+                    }.generateKey()
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "SecretBox: keystore unavailable: ${e.message}")
+                UserMessages.post(R.string.secure_storage_unavailable, e.message ?: "")
+                null
+            }
         }
-    }
 
     /**
-     * Returns the encrypted, prefixed form. Falls back to the plaintext value
-     * when the Keystore is unavailable, so authentication keeps working rather
-     * than silently losing the credential.
+     * Returns the encrypted, prefixed form, or null when the Keystore is
+     * unavailable.
+     *
+     * FAIL CLOSED: it must never return the plaintext. The old fallback wrote
+     * the raw password into SharedPreferences — exactly the exposure this class
+     * exists to remove — silently and permanently. Callers now drop the
+     * credential and surface the failure, so the user re-enters it rather than
+     * having it stored unprotected.
      */
-    fun encrypt(plain: String): String {
+    fun encrypt(plain: String): String? {
         if (plain.isEmpty()) return plain
-        val secretKey = key() ?: return plain
+        val secretKey = key() ?: return null
         return try {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, secretKey)
@@ -75,7 +79,7 @@ object SecretBox {
         } catch (e: Exception) {
             AppLog.e(APP_LOG_TAG, "SecretBox: encrypt failed: ${e.message}")
             UserMessages.post(R.string.secure_storage_unavailable, e.message ?: "")
-            plain
+            null
         }
     }
 

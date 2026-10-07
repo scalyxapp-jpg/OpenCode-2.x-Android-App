@@ -1,7 +1,4 @@
 package com.opencode.android.ui
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.text.style.TextOverflow
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -46,16 +44,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.opencode.android.data.BackendStore
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.settings.SectionHeader
-import kotlinx.coroutines.launch
-import androidx.compose.ui.res.stringResource
 import com.opencode.android.R
+import com.opencode.android.data.BackendStore
+import com.opencode.android.ui.settings.SectionHeader
+import com.opencode.android.ui.theme.spacing
+import kotlinx.coroutines.launch
 
 /**
  * Startup screen: pick / add / remove opencode serve backends.
@@ -66,9 +65,7 @@ import com.opencode.android.R
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun BackendPickerScreen(
-    onConnected: () -> Unit,
-) {
+internal fun BackendPickerScreen(onConnected: () -> Unit) {
     val backendSession = LocalBackendSession.current
     val providerDirectory = LocalProviderDirectory.current
     val scope = rememberCoroutineScope()
@@ -92,7 +89,10 @@ internal fun BackendPickerScreen(
     val serverUnhealthyMsg = stringResource(R.string.server_unhealthy)
     val connectionFailedPrefix = stringResource(R.string.connection_failed_prefix)
 
-    fun connect(backend: BackendStore.Backend, pass: String?) {
+    fun connect(
+        backend: BackendStore.Backend,
+        pass: String?,
+    ) {
         connectingUrl = backend.url
         errorText = null
         scope.launch {
@@ -156,10 +156,11 @@ internal fun BackendPickerScreen(
         },
     ) { padding ->
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(MaterialTheme.spacing.screenPadding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(MaterialTheme.spacing.screenPadding),
         ) {
             Text(
                 text = stringResource(R.string.backend_title),
@@ -170,10 +171,11 @@ internal fun BackendPickerScreen(
                 text = stringResource(R.string.backend_choose_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(
-                    top = MaterialTheme.spacing.extraSmall,
-                    bottom = MaterialTheme.spacing.cardPadding,
-                ),
+                modifier =
+                    Modifier.padding(
+                        top = MaterialTheme.spacing.extraSmall,
+                        bottom = MaterialTheme.spacing.cardPadding,
+                    ),
             )
 
             SectionHeader(
@@ -208,49 +210,56 @@ internal fun BackendPickerScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
                 items(backends, key = { it.url }) { backend ->
                     Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
+                        colors =
+                            CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                            ),
                         shape = MaterialTheme.shapes.large,
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = connectingUrl == null) { connect(backend, null) },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = connectingUrl == null) { connect(backend, null) },
                     ) {
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(MaterialTheme.spacing.cardPadding),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(MaterialTheme.spacing.cardPadding),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             // Tonal server avatar (visual anchor).
                             Box(
-                                modifier = Modifier
-                                    .padding(end = MaterialTheme.spacing.cardPadding)
-                                    .size(40.dp)
-                                    .background(
-                                        color = if (backend.password != null) {
-                                            MaterialTheme.colorScheme.tertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.secondaryContainer
-                                        },
-                                        shape = CircleShape,
-                                    ),
+                                modifier =
+                                    Modifier
+                                        .padding(end = MaterialTheme.spacing.cardPadding)
+                                        .size(40.dp)
+                                        .background(
+                                            color =
+                                                if (backend.password != null) {
+                                                    MaterialTheme.colorScheme.tertiaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.secondaryContainer
+                                                },
+                                            shape = CircleShape,
+                                        ),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    imageVector = if (backend.password != null) {
-                                        Icons.Default.Lock
-                                    } else {
-                                        Icons.Default.Dns
-                                    },
+                                    imageVector =
+                                        if (backend.password != null) {
+                                            Icons.Default.Lock
+                                        } else {
+                                            Icons.Default.Dns
+                                        },
                                     contentDescription = null,
-                                    tint = if (backend.password != null) {
-                                        MaterialTheme.colorScheme.onTertiaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
-                                    },
+                                    tint =
+                                        if (backend.password != null) {
+                                            MaterialTheme.colorScheme.onTertiaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSecondaryContainer
+                                        },
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
@@ -280,11 +289,12 @@ internal fun BackendPickerScreen(
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 }
-                                val hint = if (backend.password != null) {
-                                    stringResource(R.string.password_saved)
-                                } else {
-                                    stringResource(R.string.no_password)
-                                }
+                                val hint =
+                                    if (backend.password != null) {
+                                        stringResource(R.string.password_saved)
+                                    } else {
+                                        stringResource(R.string.no_password)
+                                    }
                                 Text(
                                     text = hint,
                                     style = MaterialTheme.typography.labelSmall,
@@ -294,24 +304,30 @@ internal fun BackendPickerScreen(
                             when {
                                 // Hero moment: checkmark pops in with an expressive spring.
                                 connectedUrl == backend.url -> {
-                                    val scale = remember { androidx.compose.animation.core.Animatable(0f) }
+                                    val scale =
+                                        remember {
+                                            androidx.compose.animation.core
+                                                .Animatable(0f)
+                                        }
                                     LaunchedEffect(backend.url) {
                                         scale.animateTo(
                                             targetValue = 1f,
-                                            animationSpec = com.opencode.android.ui.theme.Motion.expressive(),
+                                            animationSpec =
+                                                com.opencode.android.ui.theme.Motion
+                                                    .expressive(),
                                         )
                                     }
                                     Box(
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .graphicsLayer {
-                                                scaleX = scale.value
-                                                scaleY = scale.value
-                                            }
-                                            .background(
-                                                color = MaterialTheme.colorScheme.primaryContainer,
-                                                shape = CircleShape,
-                                            ),
+                                        modifier =
+                                            Modifier
+                                                .size(40.dp)
+                                                .graphicsLayer {
+                                                    scaleX = scale.value
+                                                    scaleY = scale.value
+                                                }.background(
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    shape = CircleShape,
+                                                ),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
@@ -322,9 +338,11 @@ internal fun BackendPickerScreen(
                                         )
                                     }
                                 }
+
                                 connectingUrl == backend.url -> {
                                     InlineSpinner()
                                 }
+
                                 else -> {
                                     // Rename the free-form label (no DNS semantics).
                                     IconButton(onClick = {
@@ -375,7 +393,7 @@ internal fun BackendPickerScreen(
                         value = newUrl,
                         onValueChange = { newUrl = it },
                         label = { Text(stringResource(R.string.server_url)) },
-                        placeholder = { Text(stringResource(R.string.http_192_168_1_100)) },
+                        placeholder = { Text(stringResource(R.string.server_url_example)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )

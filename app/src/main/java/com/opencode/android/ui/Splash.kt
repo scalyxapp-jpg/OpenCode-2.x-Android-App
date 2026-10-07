@@ -1,12 +1,11 @@
 package com.opencode.android.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloatAsState
-
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,8 +45,8 @@ import kotlinx.coroutines.delay
 /**
  * Branded launch moment: logo tile pops in, the name staggers letter by
  * letter, an accent bar sweeps underneath — then the whole thing fades.
- * Theme-aware (primary tile, themed text), so Default/Matrix/Aqua each get
- * their own flavour for free.
+ * Theme-aware (primary tile, themed text), so Default/Matrix/Aqua/Metal each
+ * get their own flavour for free.
  *
  * @param onDone Called after the exit animation finishes.
  */
@@ -67,34 +65,38 @@ internal fun SplashOverlay(onDone: () -> Unit) {
     val breatheScale by breathe.animateFloat(
         initialValue = 1f,
         targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1_400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1_400, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
         label = "splashBreatheScale",
     )
     val sweep by breathe.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1_100, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1_100, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
         label = "splashSweep",
     )
 
     // Popup scale for the logo tile (scale+fade pop-in).
-    val pop = animateFloatAsState(
-        targetValue = if (splashVisible) 1f else 0.6f,
-        animationSpec = tween(450, easing = FastOutSlowInEasing),
-        label = "splashPop",
-    )
+    val pop =
+        animateFloatAsState(
+            targetValue = if (splashVisible) 1f else 0.6f,
+            animationSpec = tween(450, easing = FastOutSlowInEasing),
+            label = "splashPop",
+        )
 
     if (splashVisible) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
             contentAlignment = Alignment.Center,
         ) {
             Column(
@@ -103,12 +105,13 @@ internal fun SplashOverlay(onDone: () -> Unit) {
             ) {
                 // Logo tile: scale+fade pop, then a gentle idle breathe.
                 Box(
-                    modifier = Modifier
-                        .size(96.dp)
-                        .scale(pop.value * breatheScale)
-                        .graphicsLayer { alpha = pop.value }
-                        .clip(MaterialTheme.shapes.large)
-                        .background(MaterialTheme.colorScheme.primary),
+                    modifier =
+                        Modifier
+                            .size(96.dp)
+                            .scale(pop.value * breatheScale)
+                            .graphicsLayer { alpha = pop.value }
+                            .clip(MaterialTheme.shapes.large)
+                            .background(MaterialTheme.colorScheme.primary),
                     contentAlignment = Alignment.Center,
                 ) {
                     Image(
@@ -123,8 +126,9 @@ internal fun SplashOverlay(onDone: () -> Unit) {
                     "OpenCode".forEachIndexed { i, ch ->
                         AnimatedVisibility(
                             visible = splashVisible,
-                            enter = fadeIn(tween(220, delayMillis = 150 + i * 55)) +
-                                slideInVertically(tween(220, delayMillis = 150 + i * 55)) { it / 2 },
+                            enter =
+                                fadeIn(tween(220, delayMillis = 150 + i * 55)) +
+                                    slideInVertically(tween(220, delayMillis = 150 + i * 55)) { it / 2 },
                         ) {
                             Text(
                                 text = ch.toString(),
@@ -137,21 +141,22 @@ internal fun SplashOverlay(onDone: () -> Unit) {
                 }
                 // Accent sweep bar, then a shimmer while the app settles.
                 Box(
-                    modifier = Modifier
-                        .height(4.dp)
-                        .width(120.dp)
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    modifier =
+                        Modifier
+                            .height(4.dp)
+                            .width(120.dp)
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     Box(
-                        modifier = Modifier
-                            .width(48.dp)
-                            .height(4.dp)
-                            .graphicsLayer {
-                                translationX = sweep * (120.dp.toPx() - 48.dp.toPx())
-                            }
-                            .clip(MaterialTheme.shapes.extraSmall)
-                            .background(MaterialTheme.colorScheme.primary),
+                        modifier =
+                            Modifier
+                                .width(48.dp)
+                                .height(4.dp)
+                                .graphicsLayer {
+                                    translationX = sweep * (120.dp.toPx() - 48.dp.toPx())
+                                }.clip(MaterialTheme.shapes.extraSmall)
+                                .background(MaterialTheme.colorScheme.primary),
                     )
                 }
             }

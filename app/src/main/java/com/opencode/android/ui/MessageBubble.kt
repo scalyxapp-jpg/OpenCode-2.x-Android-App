@@ -15,7 +15,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -85,35 +89,42 @@ internal fun MessageBubble(
     // Dedupe consecutive identical parts: some servers repeat the same
     // reasoning/text chunk in parts[] snapshots, which rendered as
     // "Satz. Satz." inside one bubble.
-    val textBits = mutableListOf<String>()
-    message.text?.takeIf { it.isNotBlank() }?.let { textBits.add(it) }
-    message.parts
-        .filter { it.type.trim() == "text" }
-        .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-        .let { textBits.addAll(it) }
-    message.content
-        .filter { it.type?.trim() == "text" }
-        .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-        .let { textBits.addAll(it) }
-    val text = textBits.fold(mutableListOf<String>()) { acc, s ->
-        if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
-        acc
-    }.joinToString("\n")
+    // Memoised on `message`: this body recomposes on every streaming tick for
+    // every visible message, so re-parsing the part lists each time was waste
+    // whenever the message itself had not changed.
+    val text = remember(message) {
+        val textBits = mutableListOf<String>()
+        message.text?.takeIf { it.isNotBlank() }?.let { textBits.add(it) }
+        message.parts
+            .filter { it.type.trim() == "text" }
+            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+            .let { textBits.addAll(it) }
+        message.content
+            .filter { it.type?.trim() == "text" }
+            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+            .let { textBits.addAll(it) }
+        textBits.fold(mutableListOf<String>()) { acc, s ->
+            if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
+            acc
+        }.joinToString("\n")
+    }
 
     // Reasoning content renders as a collapsed "Thinking" section. The classic
     // web endpoint delivers parts[] (type=reasoning); the legacy endpoint uses
     // content[]. Reading only content[] meant reasoning NEVER showed for classic
     // sessions — verified live against the server.
-    val reasoningText = (
-        message.parts.filter { it.type.trim() == "reasoning" }.mapNotNull { it.text } +
-            message.content.filter { it.type?.trim() == "reasoning" }.mapNotNull { it.text }
-        )
-        .filter { it.isNotBlank() }
-        .fold(mutableListOf<String>()) { acc, s ->
-            if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
-            acc
-        }
-        .joinToString("\n")
+    val reasoningText = remember(message) {
+        (
+            message.parts.filter { it.type.trim() == "reasoning" }.mapNotNull { it.text } +
+                message.content.filter { it.type?.trim() == "reasoning" }.mapNotNull { it.text }
+            )
+            .filter { it.isNotBlank() }
+            .fold(mutableListOf<String>()) { acc, s ->
+                if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
+                acc
+            }
+            .joinToString("\n")
+    }
 
     // NOTE: no logging here — MessageBubble recomposes on every streaming tick
     // and for every visible message; a Log.d in this body throttles the UI.
@@ -134,27 +145,30 @@ internal fun MessageBubble(
                     )
                 }
     }
-    val questionParts = toolParts.filter { it.toolName() == "question" }
-    val otherToolParts = toolParts.filter { it.toolName() != "question" }
+    val questionParts = remember(toolParts) { toolParts.filter { it.toolName() == "question" } }
+    val otherToolParts = remember(toolParts) { toolParts.filter { it.toolName() != "question" } }
     if (text.isBlank() && reasoningText.isBlank() && toolParts.isEmpty()) return
 
-    // Meta line mirrors web: agent - model - duration - time
-    val agent = message.agent ?: message.info?.agent
-    val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model
-    val created = message.time?.created ?: message.info?.time?.created
-    val completed = message.time?.completed ?: message.info?.time?.completed
-    val duration = formatDuration(
-        if (created != null && completed != null && completed > created) completed - created else null
-    )
-    val errorText = messageErrorText(message.error ?: message.info?.error)
-    val meta = listOfNotNull(
-        agent,
-        model,
-        duration,
-        created?.let { formatTimestamp(it) },
-        // Web appends "Interrupted" for aborted messages.
-        errorText,
-    ).joinToString(" · ")
+    // Meta line mirrors web: agent - model - duration - time. Memoised: the
+    // bubble recomposes per streaming tick, but these only depend on `message`.
+    val errorText = remember(message) { messageErrorText(message.error ?: message.info?.error) }
+    val meta = remember(message, errorText) {
+        val agent = message.agent ?: message.info?.agent
+        val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model
+        val created = message.time?.created ?: message.info?.time?.created
+        val completed = message.time?.completed ?: message.info?.time?.completed
+        val duration = formatDuration(
+            if (created != null && completed != null && completed > created) completed - created else null
+        )
+        listOfNotNull(
+            agent,
+            model,
+            duration,
+            created?.let { formatTimestamp(it) },
+            // Web appends "Interrupted" for aborted messages.
+            errorText,
+        ).joinToString(" · ")
+    }
     val messageId = message.id ?: message.info?.id
 
     var reasoningExpanded by remember(messageId, reasoningText.length) { mutableStateOf(false) }
@@ -180,31 +194,44 @@ internal fun MessageBubble(
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
         ) {
         if (isUser) {
-Surface(
-                 // A wine veil rather than a filled pink bubble: at full
-                 // primaryContainer a screen of user messages turned mostly
-                 // pink. 12% of the accent over the surface reads as "mine"
-                 // while keeping the black/white/wine identity, and it adapts
-                 // to light and dark without a second token.
-                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                 contentColor = MaterialTheme.colorScheme.onSurface,
-                 shape = RoundedCornerShape(
-                     topStart = 22.dp,
-                     topEnd = 22.dp,
-                     bottomStart = 22.dp,
-                     bottomEnd = 6.dp,
-                 ),
-                 tonalElevation = 1.dp,
-             ) {
-                 Text(
-                     text = text,
-                     style = MaterialTheme.typography.bodyMedium,
-                     modifier = Modifier.padding(
-                         horizontal = MaterialTheme.spacing.medium,
-                         vertical = MaterialTheme.spacing.medium,
-                     ),
-                 )
-             }
+            // A wine veil rather than a filled pink bubble: at full
+            // primaryContainer a screen of user messages turned mostly pink.
+            // A faint diagonal gradient plus a hairline border reads as "mine"
+            // with depth, while keeping the black/white/wine identity and
+            // adapting to light and dark without a second token.
+            val bubbleShape = RoundedCornerShape(
+                topStart = 22.dp,
+                topEnd = 22.dp,
+                bottomStart = 22.dp,
+                bottomEnd = 8.dp,
+            )
+            Box(
+                modifier = Modifier
+                    .clip(bubbleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.17f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                            ),
+                        ),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                        shape = bubbleShape,
+                    ),
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(
+                        horizontal = MaterialTheme.spacing.medium,
+                        vertical = MaterialTheme.spacing.medium,
+                    ),
+                )
+            }
         } else {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -275,8 +302,12 @@ Row(
                 //  - read/search/list are grouped into an "Explored …" card
                 //  - everything else (bash → "Shell", delegate_task, …) gets
                 //    its own collapsible row.
-                val exploreParts = otherToolParts.filter { isExploreTool(it.toolName()) }
-                val actionParts = otherToolParts.filterNot { isExploreTool(it.toolName()) }
+                val exploreParts = remember(otherToolParts) {
+                    otherToolParts.filter { isExploreTool(it.toolName()) }
+                }
+                val actionParts = remember(otherToolParts) {
+                    otherToolParts.filterNot { isExploreTool(it.toolName()) }
+                }
                 if (exploreParts.isNotEmpty()) {
                     ToolSummaryCard(parts = exploreParts)
                 }

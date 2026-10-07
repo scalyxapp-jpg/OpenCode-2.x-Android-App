@@ -18,15 +18,12 @@ object SseEventDecoder {
     const val SSE_CONNECTED = SseClient.SSE_CONNECTED
     const val SSE_DISCONNECTED = SseClient.SSE_DISCONNECTED
 
-    private val json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+        }
 
     /** Null on malformed/unknown frames so one bad frame cannot kill the stream. */
-    fun decode(data: String): Event? = try {
-        json.decodeFromString<SseEnvelope>(data).payload
-    } catch (_: Exception) {
-        null
-    }
+    fun decode(data: String): Event? = V2EventNormalizer.normalize(data)
 }

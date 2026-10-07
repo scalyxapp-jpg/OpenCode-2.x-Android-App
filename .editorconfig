@@ -1,0 +1,31 @@
+# EditorConfig — https://editorconfig.org
+# Keeps the formatting consistent across editors and contributors.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 140
+
+# Kotlin / Gradle
+[*.{kt,kts}]
+indent_size = 4
+
+# XML (Android resources, manifests)
+[*.xml]
+indent_size = 4
+
+# JSON / YAML
+[*.{json,yml,yaml}]
+indent_size = 2
+
+# Markdown — trailing whitespace is meaningful for hard line breaks.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{gradlew,sh}]
+indent_size = 4

@@ -1,8 +1,7 @@
 package com.opencode.android.ui.settings
-import com.opencode.android.R
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,7 +21,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,16 +29,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.InlineSpinner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.opencode.android.R
 import com.opencode.android.data.ProviderDirectory
 import com.opencode.android.domain.AuthSetRequest
 import com.opencode.android.domain.ProviderAuthMethod
 import com.opencode.android.domain.ProviderEntry
+import com.opencode.android.ui.InlineSpinner
+import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.launch
-import androidx.compose.ui.res.stringResource
 
 // --- Providers -------------------------------------------------------------
 
@@ -52,18 +52,19 @@ internal data class PopularProvider(
     val badge: String? = null,
 )
 
-internal val POPULAR_PROVIDERS = listOf(
-    PopularProvider(
-        "opencode",
-        "OpenCode Zen",
-        "Curated models including Claude, GPT, Gemini and more",
-        "Recommended",
-    ),
-    PopularProvider("anthropic", "Anthropic", "Direct access to Claude models, including Pro and Max"),
-    PopularProvider("github-copilot", "GitHub Copilot", "AI models for coding assistance via GitHub Copilot"),
-    PopularProvider("vercel", "Vercel AI Gateway", "Unified access to AI models with smart routing"),
-    PopularProvider("custom", "Custom provider", "Add an OpenAI-compatible provider by base URL.", "Custom"),
-)
+internal val POPULAR_PROVIDERS =
+    listOf(
+        PopularProvider(
+            "opencode",
+            "OpenCode Zen",
+            "Curated models including Claude, GPT, Gemini and more",
+            "Recommended",
+        ),
+        PopularProvider("anthropic", "Anthropic", "Direct access to Claude models, including Pro and Max"),
+        PopularProvider("github-copilot", "GitHub Copilot", "AI models for coding assistance via GitHub Copilot"),
+        PopularProvider("vercel", "Vercel AI Gateway", "Unified access to AI models with smart routing"),
+        PopularProvider("custom", "Custom provider", "Add an OpenAI-compatible provider by base URL.", "Custom"),
+    )
 
 // Mirrors the web Providers tab (verified via Playwright):
 //  - "Connected providers": name + source badge (Environment/Config/Custom/API key);
@@ -89,10 +90,11 @@ internal fun ProvidersTab() {
         providerDirectory.load()
     }
 
-    val connectedProviders = when (val c = catalog) {
-        is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
-        else -> emptyList()
-    }
+    val connectedProviders =
+        when (val c = catalog) {
+            is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
+            else -> emptyList()
+        }
     val allProviders = (catalog as? ProviderDirectory.State.Ready)?.providers ?: emptyList()
     val connected = (catalog as? ProviderDirectory.State.Ready)?.connectedIds ?: emptySet()
     val loadError = (catalog as? ProviderDirectory.State.Failed)?.message
@@ -100,9 +102,10 @@ internal fun ProvidersTab() {
     val popular = POPULAR_PROVIDERS.filterNot { connected.contains(it.id) }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = MaterialTheme.spacing.medium),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = MaterialTheme.spacing.medium),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
         // Room for the bottom navigation bar: without it the last provider's
         // Disconnect button was cut off at the screen edge.
@@ -127,22 +130,28 @@ internal fun ProvidersTab() {
         } else if (connectedProviders.isEmpty()) {
             item {
                 Text(
-                    text = if (loadError != null) {
-                        stringResource(R.string.could_not_load_providers, loadError)
-                    } else {
-                        stringResource(R.string.no_providers_connected)
-                    },
+                    text =
+                        if (loadError != null) {
+                            stringResource(R.string.could_not_load_providers, loadError)
+                        } else {
+                            stringResource(R.string.no_providers_connected)
+                        },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (loadError != null) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color =
+                        if (loadError != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                 )
             }
         }
         items(connectedProviders, key = { it.id }) { p ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = MaterialTheme.spacing.small),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = MaterialTheme.spacing.small),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -175,7 +184,13 @@ internal fun ProvidersTab() {
                             try {
                                 backendSession.api.disconnectProvider(p.id)
                                 backendSession.api.globalDispose()
-                            } catch (_: Exception) {
+                            } catch (e: Exception) {
+                                // Best-effort teardown, but never silent: a
+                                // failed dispose was invisible before.
+                                com.opencode.android.util.AppLog.e(
+                                    com.opencode.android.util.APP_LOG_TAG,
+                                    "disconnectProvider failed: ${e.message}",
+                                )
                             }
                             providerDirectory.invalidate()
                             reload++
@@ -189,9 +204,10 @@ internal fun ProvidersTab() {
         item { SectionHeader(stringResource(R.string.settings_popular_providers)) }
         items(popular, key = { "pop-" + it.id }) { pp ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = MaterialTheme.spacing.small),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = MaterialTheme.spacing.small),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -225,14 +241,16 @@ internal fun ProvidersTab() {
             }
         } else {
             // Remaining catalog providers that are not connected and not popular.
-            val others = allProviders.filter {
-                !connected.contains(it.id) && POPULAR_PROVIDERS.none { pp -> pp.id == it.id }
-            }
+            val others =
+                allProviders.filter {
+                    !connected.contains(it.id) && POPULAR_PROVIDERS.none { pp -> pp.id == it.id }
+                }
             items(others, key = { "other-" + it.id }) { p ->
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = MaterialTheme.spacing.small),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = MaterialTheme.spacing.small),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -264,18 +282,30 @@ internal fun ProvidersTab() {
 }
 
 @Composable
-internal fun ProviderBadge(text: String?, kind: String = "source") {
-    val label = when {
-        text == null -> return
-        kind == "source" -> when (text) {
-            "env" -> "Environment"
-            "config" -> "Config"
-            "custom" -> "Custom"
-            "api" -> "API key"
-            else -> text
+internal fun ProviderBadge(
+    text: String?,
+    kind: String = "source",
+) {
+    val label =
+        when {
+            text == null -> {
+                return
+            }
+
+            kind == "source" -> {
+                when (text) {
+                    "env" -> "Environment"
+                    "config" -> "Config"
+                    "custom" -> "Custom"
+                    "api" -> "API key"
+                    else -> text
+                }
+            }
+
+            else -> {
+                text
+            }
         }
-        else -> text
-    }
     Surface(
         color = MaterialTheme.colorScheme.secondaryContainer,
         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -314,18 +344,23 @@ internal fun ConnectProviderDialog(
     var oauthCode by remember { mutableStateOf("") }
 
     LaunchedEffect(provider.id) {
-        methods = try {
-            backendSession.api.getProviderAuth()[provider.id] ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
+        methods =
+            try {
+                backendSession.api.getProviderAuth()[provider.id] ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
     }
 
     val apiMethod = methods?.firstOrNull { it.type == "api" }
     val oauthMethods = methods?.filter { it.type == "oauth" } ?: emptyList()
-    val visiblePrompts = apiMethod?.prompts?.filter { pr ->
-        pr.whenCondition?.let { c -> prompts[c.key] == c.value } ?: true
-    } ?: emptyList()
+    val visiblePrompts =
+        apiMethod?.prompts?.filter { pr ->
+            pr.whenCondition?.let { c -> prompts[c.key] == c.value } ?: true
+        } ?: emptyList()
+    // OAuth methods may declare required inputs (e.g. a GitHub Enterprise URL);
+    // render them so the answer can be sent with the connect/oauth call.
+    val oauthPromptFields = oauthMethods.flatMap { it.prompts }.distinctBy { it.key }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -343,14 +378,21 @@ internal fun ConnectProviderDialog(
                             error = null
                             scope.launch {
                                 try {
-                                    val resp = backendSession.api.providerOauthAuthorize(
-                                        provider.id,
-                                        kotlinx.serialization.json.JsonObject(
-                                            mapOf(
-                                                "method" to kotlinx.serialization.json.JsonPrimitive(index),
+                                    val resp =
+                                        backendSession.api.providerOauthAuthorize(
+                                            provider.id,
+                                            kotlinx.serialization.json.JsonObject(
+                                                mapOf(
+                                                    "method" to kotlinx.serialization.json.JsonPrimitive(index),
+                                                    "answer" to
+                                                        kotlinx.serialization.json.JsonObject(
+                                                            prompts
+                                                                .filterValues { it.isNotBlank() }
+                                                                .mapValues { kotlinx.serialization.json.JsonPrimitive(it.value) },
+                                                        ),
+                                                ),
                                             ),
-                                        ),
-                                    ) as? kotlinx.serialization.json.JsonObject
+                                        ) as? kotlinx.serialization.json.JsonObject
                                     val url = (resp?.get("url") as? kotlinx.serialization.json.JsonPrimitive)?.content
                                     oauthInstructions =
                                         (resp?.get("instructions") as? kotlinx.serialization.json.JsonPrimitive)?.content
@@ -374,6 +416,16 @@ internal fun ConnectProviderDialog(
                         },
                     ) { Text(m.label ?: "Sign in") }
                 }
+                oauthPromptFields.forEach { pr ->
+                    OutlinedTextField(
+                        value = prompts[pr.key] ?: "",
+                        onValueChange = { prompts = prompts + (pr.key to it) },
+                        label = { Text(pr.message ?: pr.key) },
+                        placeholder = pr.placeholder?.let { { Text(it) } },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 if (oauthStarted) {
                     oauthInstructions?.let {
                         Text(
@@ -396,15 +448,16 @@ internal fun ConnectProviderDialog(
                             error = null
                             scope.launch {
                                 try {
-                                    backendSession.api.providerOauthCallback(
-                                        provider.id,
-                                        kotlinx.serialization.json.JsonObject(
-                                            mapOf(
-                                                "method" to kotlinx.serialization.json.JsonPrimitive(oauthMethod),
-                                                "code" to kotlinx.serialization.json.JsonPrimitive(oauthCode),
+                                    backendSession.api
+                                        .providerOauthCallback(
+                                            provider.id,
+                                            kotlinx.serialization.json.JsonObject(
+                                                mapOf(
+                                                    "method" to kotlinx.serialization.json.JsonPrimitive(oauthMethod),
+                                                    "code" to kotlinx.serialization.json.JsonPrimitive(oauthCode),
+                                                ),
                                             ),
-                                        ),
-                                    ).close()
+                                        ).close()
                                     runCatching { backendSession.api.globalDispose() }
                                     onConnected()
                                 } catch (e: Exception) {
@@ -450,18 +503,23 @@ internal fun ConnectProviderDialog(
                     error = null
                     scope.launch {
                         try {
-                            val resp = backendSession.api.setProviderAuth(
-                                provider.id,
-                                AuthSetRequest(
-                                    type = apiMethod?.type ?: "api",
-                                    key = key.ifBlank { null },
-                                    prompts = prompts.filterValues { it.isNotBlank() },
-                                ),
-                            )
+                            val resp =
+                                backendSession.api.setProviderAuth(
+                                    provider.id,
+                                    AuthSetRequest(
+                                        type = apiMethod?.type ?: "api",
+                                        key = key.ifBlank { null },
+                                        prompts = prompts.filterValues { it.isNotBlank() },
+                                    ),
+                                )
                             if (resp.isSuccessful) {
                                 try {
                                     backendSession.api.globalDispose()
-                                } catch (_: Exception) {
+                                } catch (e: Exception) {
+                                    com.opencode.android.util.AppLog.e(
+                                        com.opencode.android.util.APP_LOG_TAG,
+                                        "globalDispose after auth failed: ${e.message}",
+                                    )
                                 }
                                 onConnected()
                             } else {

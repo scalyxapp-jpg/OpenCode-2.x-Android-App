@@ -1,7 +1,6 @@
 package com.opencode.android.ui
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,22 +10,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -36,24 +35,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.opencode.android.domain.Model
-import com.opencode.android.domain.Part
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.settings.SectionHeader
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
+import com.opencode.android.R
 import com.opencode.android.domain.ContextItem
 import com.opencode.android.domain.McpEntry
+import com.opencode.android.domain.Model
+import com.opencode.android.domain.Part
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.QuestionItem
 import com.opencode.android.domain.QuestionOption
 import com.opencode.android.domain.SessionQuestion
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
+import com.opencode.android.ui.settings.SectionHeader
+import com.opencode.android.ui.theme.spacing
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -100,14 +101,22 @@ internal fun ContextPanelDialog(
         title = { Text(stringResource(R.string.context_usage)) },
         text = {
             LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 400.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp),
             ) {
                 item { SectionHeader(stringResource(R.string.session_info)) }
                 info?.let {
                     item { ContextRow("Provider", it.provider?.takeIf { p -> p.isNotBlank() } ?: "—") }
-                    item { ContextRow("Model", modelName?.takeIf { m -> m.isNotBlank() } ?: it.model?.takeIf { m -> m.isNotBlank() } ?: "—") }
+                    item {
+                        ContextRow(
+                            "Model",
+                            modelName?.takeIf { m ->
+                                m.isNotBlank()
+                            } ?: it.model?.takeIf { m -> m.isNotBlank() } ?: "—",
+                        )
+                    }
                     it.contextLimit?.let { limit ->
                         item { ContextRow(stringResource(R.string.context_limit), "$limit") }
                     }
@@ -127,7 +136,13 @@ internal fun ContextPanelDialog(
                         item { ContextRow("Output-Tokens", "${it.outputTokens}") }
                         item { ContextRow("Reasoning-Tokens", "${it.reasoningTokens}") }
                         item { ContextRow("Cache (read/write)", "${it.cacheRead} / ${it.cacheWrite}") }
-                        item { ContextRow(stringResource(R.string.total_cost), com.opencode.android.util.formatCost(it.totalCost)) }
+                        item {
+                            ContextRow(
+                                stringResource(R.string.total_cost),
+                                com.opencode.android.util
+                                    .formatCost(it.totalCost),
+                            )
+                        }
                     } else {
                         item {
                             Text(
@@ -155,7 +170,10 @@ internal fun ContextPanelDialog(
                 if (messages.isNotEmpty()) {
                     item { SectionHeader(stringResource(R.string.messages)) }
                 }
-                items(messages, key = { it.id ?: it.hashCode().toString() }) { msg ->
+                // Positional fallback: ContextItem.id is nullable and its
+                // hashCode is value-derived, so two id-less entries with equal
+                // text/time produced a duplicate key — a hard crash.
+                itemsIndexed(messages, key = { index, msg -> msg.id ?: "ctx-$index" }) { _, msg ->
                     val text = msg.text ?: ""
                     if (text.isNotBlank()) {
                         Column(modifier = Modifier.padding(vertical = MaterialTheme.spacing.extraSmall)) {
@@ -190,27 +208,33 @@ internal fun McpDialog(
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    val visible = remember(servers, query) {
-        if (query.isBlank()) servers
-        else servers.filter { it.name.contains(query, ignoreCase = true) }
-    }
+    val visible =
+        remember(servers, query) {
+            if (query.isBlank()) {
+                servers
+            } else {
+                servers.filter { it.name.contains(query, ignoreCase = true) }
+            }
+        }
     val enabledCount = servers.count { it.enabled }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.mcp_title)) },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 460.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp),
             ) {
                 Text(
-                    text = pluralStringResource(
-                        R.plurals.mcp_enabled_of_total,
-                        servers.size,
-                        enabledCount,
-                        servers.size,
-                    ),
+                    text =
+                        pluralStringResource(
+                            R.plurals.mcp_enabled_of_total,
+                            servers.size,
+                            enabledCount,
+                            servers.size,
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -228,23 +252,28 @@ internal fun McpDialog(
                     modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
                 )
                 LazyColumn {
-                    items(visible, key = { it.name }) { server ->
+                    // Positional fallback: duplicate names would be a duplicate
+                    // LazyColumn key crash, but distinctBy silently hid servers
+                    // sharing a name. Keep every row, key uniquely.
+                    itemsIndexed(visible, key = { index, server -> "${server.name}#$index" }) { _, server ->
                         // The whole row authenticates when the server needs it;
                         // previously only the small status text was tappable.
                         val onAuthClick: (() -> Unit)? =
                             if (server.needsAuth) ({ onAuth(server.name) }) else null
                         PickerRow(
                             title = server.name,
-                            subtitle = if (server.needsAuth) {
-                                stringResource(R.string.mcp_click_to_authenticate)
-                            } else {
-                                server.status
-                            },
-                            subtitleColor = if (server.needsAuth) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            subtitle =
+                                if (server.needsAuth) {
+                                    stringResource(R.string.mcp_click_to_authenticate)
+                                } else {
+                                    server.status
+                                },
+                            subtitleColor =
+                                if (server.needsAuth) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             onClick = onAuthClick,
                             trailing = {
                                 Switch(
@@ -318,11 +347,15 @@ internal fun PermissionDialog(
 }
 
 @Composable
-internal fun ContextRow(label: String, value: String) {
+internal fun ContextRow(
+    label: String,
+    value: String,
+) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
@@ -338,29 +371,26 @@ internal fun ContextRow(label: String, value: String) {
     }
 }
 
-internal fun formatDateTime(epochMillis: Long): String {
-    return try {
+internal fun formatDateTime(epochMillis: Long): String =
+    try {
         val sdf = java.text.SimpleDateFormat("MMM d, yyyy, HH:mm", java.util.Locale.ENGLISH)
         sdf.format(java.util.Date(epochMillis))
     } catch (e: Exception) {
         ""
     }
-}
 
-internal fun jsonStr(element: kotlinx.serialization.json.JsonElement?): String? {
-    return (element as? kotlinx.serialization.json.JsonPrimitive)
+internal fun jsonStr(element: kotlinx.serialization.json.JsonElement?): String? =
+    (element as? kotlinx.serialization.json.JsonPrimitive)
         ?.takeIf { it.isString }
         ?.content
         ?.takeIf { it.isNotBlank() }
-}
 
-internal fun jsonBool(element: kotlinx.serialization.json.JsonElement?): Boolean {
-    return try {
+internal fun jsonBool(element: kotlinx.serialization.json.JsonElement?): Boolean =
+    try {
         (element as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false
     } catch (e: Exception) {
         false
     }
-}
 
 // Question items embedded in a question tool call's state.input.questions.
 internal fun parseToolQuestions(part: Part): List<QuestionItem> {
@@ -370,16 +400,18 @@ internal fun parseToolQuestions(part: Part): List<QuestionItem> {
         val arr = input["questions"] as? kotlinx.serialization.json.JsonArray ?: return emptyList()
         arr.mapNotNull { element ->
             val obj = element as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
-            val options = (obj["options"] as? kotlinx.serialization.json.JsonArray)
-                ?.mapNotNull { optionElement ->
-                    val optionObj = optionElement as? kotlinx.serialization.json.JsonObject
-                        ?: return@mapNotNull null
-                    val label = jsonStr(optionObj["label"]) ?: return@mapNotNull null
-                    QuestionOption(
-                        label = label,
-                        description = jsonStr(optionObj["description"]),
-                    )
-                } ?: emptyList()
+            val options =
+                (obj["options"] as? kotlinx.serialization.json.JsonArray)
+                    ?.mapNotNull { optionElement ->
+                        val optionObj =
+                            optionElement as? kotlinx.serialization.json.JsonObject
+                                ?: return@mapNotNull null
+                        val label = jsonStr(optionObj["label"]) ?: return@mapNotNull null
+                        QuestionOption(
+                            label = label,
+                            description = jsonStr(optionObj["description"]),
+                        )
+                    } ?: emptyList()
             QuestionItem(
                 question = jsonStr(obj["question"]),
                 header = jsonStr(obj["header"]),
@@ -415,9 +447,10 @@ internal fun QuestionCard(
     var customAnswer by remember(requestId, text) { mutableStateOf("") }
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -443,29 +476,30 @@ internal fun QuestionCard(
             options.forEachIndexed { index, option ->
                 val checked = index in selected
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (interactive) {
-                                // toggleable gives TalkBack the radio/checkbox
-                                // role + checked state on the whole row; the
-                                // inner control is a non-interactive indicator.
-                                Modifier.toggleable(
-                                    value = checked,
-                                    role = if (multi) Role.Checkbox else Role.RadioButton,
-                                    onValueChange = { now ->
-                                        selected = if (multi) {
-                                            if (now) selected + index else selected - index
-                                        } else {
-                                            setOf(index)
-                                        }
-                                    },
-                                )
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .padding(vertical = MaterialTheme.spacing.extraSmall),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (interactive) {
+                                    // toggleable gives TalkBack the radio/checkbox
+                                    // role + checked state on the whole row; the
+                                    // inner control is a non-interactive indicator.
+                                    Modifier.toggleable(
+                                        value = checked,
+                                        role = if (multi) Role.Checkbox else Role.RadioButton,
+                                        onValueChange = { now ->
+                                            selected =
+                                                if (multi) {
+                                                    if (now) selected + index else selected - index
+                                                } else {
+                                                    setOf(index)
+                                                }
+                                        },
+                                    )
+                                } else {
+                                    Modifier
+                                },
+                            ).padding(vertical = MaterialTheme.spacing.extraSmall),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
@@ -503,8 +537,9 @@ internal fun QuestionCard(
                     val canSubmit = selected.isNotEmpty() || customAnswer.isNotBlank()
                     FilledTonalButton(
                         onClick = {
-                            val answers = selected.sorted().map { options[it].label } +
-                                (if (customAnswer.isNotBlank()) listOf(customAnswer) else emptyList())
+                            val answers =
+                                selected.sorted().map { options[it].label } +
+                                    (if (customAnswer.isNotBlank()) listOf(customAnswer) else emptyList())
                             requestId?.let { onAnswer(it, answers) }
                         },
                         enabled = canSubmit,
@@ -542,15 +577,17 @@ internal fun QuestionRequestCard(
     val customs = remember(question.id, items.size) { mutableStateMapOf<Int, String>() }
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier
-                .padding(MaterialTheme.spacing.cardPadding)
-                .animateContentSize(),
+            modifier =
+                Modifier
+                    .padding(MaterialTheme.spacing.cardPadding)
+                    .animateContentSize(),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
         ) {
             items.forEachIndexed { qIndex, item ->
@@ -570,9 +607,10 @@ internal fun QuestionRequestCard(
                 )
                 if (interactive) {
                     Text(
-                        text = stringResource(
-                            if (multi) R.string.select_all_answers else R.string.select_one_answer,
-                        ),
+                        text =
+                            stringResource(
+                                if (multi) R.string.select_all_answers else R.string.select_one_answer,
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -580,26 +618,27 @@ internal fun QuestionRequestCard(
                 item.options.forEachIndexed { oIndex, option ->
                     val checked = oIndex in selected
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (interactive) {
-                                    Modifier.toggleable(
-                                        value = checked,
-                                        role = if (multi) Role.Checkbox else Role.RadioButton,
-                                        onValueChange = { now ->
-                                            selections[qIndex] = if (multi) {
-                                                if (now) selected + oIndex else selected - oIndex
-                                            } else {
-                                                setOf(oIndex)
-                                            }
-                                        },
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .padding(vertical = MaterialTheme.spacing.extraSmall),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (interactive) {
+                                        Modifier.toggleable(
+                                            value = checked,
+                                            role = if (multi) Role.Checkbox else Role.RadioButton,
+                                            onValueChange = { now ->
+                                                selections[qIndex] =
+                                                    if (multi) {
+                                                        if (now) selected + oIndex else selected - oIndex
+                                                    } else {
+                                                        setOf(oIndex)
+                                                    }
+                                            },
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ).padding(vertical = MaterialTheme.spacing.extraSmall),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -638,18 +677,21 @@ internal fun QuestionRequestCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
-                    val canSubmit = items.indices.any { qi ->
-                        (selections[qi]?.isNotEmpty() == true) || !customs[qi].isNullOrBlank()
-                    }
+                    val canSubmit =
+                        items.indices.any { qi ->
+                            (selections[qi]?.isNotEmpty() == true) || !customs[qi].isNullOrBlank()
+                        }
                     FilledTonalButton(
                         onClick = {
-                            val answers = items.indices.map { qi ->
-                                val labels = (selections[qi] ?: emptySet())
-                                    .sorted()
-                                    .map { items[qi].options[it].label }
-                                val custom = customs[qi]?.takeIf { it.isNotBlank() }
-                                if (custom != null) labels + custom else labels
-                            }
+                            val answers =
+                                items.indices.map { qi ->
+                                    val labels =
+                                        (selections[qi] ?: emptySet())
+                                            .sorted()
+                                            .map { items[qi].options[it].label }
+                                    val custom = customs[qi]?.takeIf { it.isNotBlank() }
+                                    if (custom != null) labels + custom else labels
+                                }
                             onAnswer(question.id, answers)
                         },
                         enabled = canSubmit,

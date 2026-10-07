@@ -1,5 +1,12 @@
 package com.opencode.android.ui
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -7,13 +14,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
@@ -30,37 +38,42 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.runtime.Composable
-import androidx.compose.animation.animateContentSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.key
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.opencode.android.R
 import com.opencode.android.domain.Part
 import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
 
 private val RE_HUNK = Regex("""@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@""")
 
 /** One patch line with its old-file and new-file numbers (TUI gutter). */
-internal data class DiffRow(val line: String, val oldNum: Int?, val newNum: Int?)
+internal data class DiffRow(
+    val line: String,
+    val oldNum: Int?,
+    val newNum: Int?,
+)
 
 /**
  * Old- and new-file line numbers per patch line (null for headers/hunks).
@@ -70,21 +83,37 @@ internal data class DiffRow(val line: String, val oldNum: Int?, val newNum: Int?
 internal fun diffLineNumbers(patch: String): List<DiffRow> {
     var old = 0
     var new = 0
-    return patch.lineSequence().map { line ->
-        when {
-            line.startsWith("@@") -> {
-                RE_HUNK.find(line)?.let {
-                    old = it.groupValues[1].toInt()
-                    new = it.groupValues[2].toInt()
+    return patch
+        .lineSequence()
+        .map { line ->
+            when {
+                line.startsWith("@@") -> {
+                    RE_HUNK.find(line)?.let {
+                        // toIntOrNull: a malformed/out-of-range hunk number must not
+                        // throw NumberFormatException during composition (crash).
+                        old = it.groupValues[1].toIntOrNull() ?: 0
+                        new = it.groupValues[2].toIntOrNull() ?: 0
+                    }
+                    DiffRow(line, null, null)
                 }
-                DiffRow(line, null, null)
+
+                line.startsWith("+++") || line.startsWith("---") -> {
+                    DiffRow(line, null, null)
+                }
+
+                line.startsWith("+") -> {
+                    DiffRow(line, null, new++)
+                }
+
+                line.startsWith("-") -> {
+                    DiffRow(line, old++, null)
+                }
+
+                else -> {
+                    DiffRow(line, old++, new++)
+                }
             }
-            line.startsWith("+++") || line.startsWith("---") -> DiffRow(line, null, null)
-            line.startsWith("+") -> DiffRow(line, null, new++)
-            line.startsWith("-") -> DiffRow(line, old++, null)
-            else -> DiffRow(line, old++, new++)
-        }
-    }.toList()
+        }.toList()
 }
 
 @OptIn(
@@ -92,7 +121,11 @@ internal fun diffLineNumbers(patch: String): List<DiffRow> {
     ExperimentalSharedTransitionApi::class,
 )
 @Composable
-internal fun DiffBlock(patch: String, background: Color, contextOnly: Boolean = false) {
+internal fun DiffBlock(
+    patch: String,
+    background: Color,
+    contextOnly: Boolean = false,
+) {
     // Rows as (line, fileNumber?) pairs. Numbers are parsed from the @@ hunks
     // over ALL lines first, so filtering context lines never shifts them:
     // each row shows the number the line has in the file (removed lines
@@ -101,129 +134,161 @@ internal fun DiffBlock(patch: String, background: Color, contextOnly: Boolean = 
     // hunks remain — the fastest way to read a large diff on a phone. The
     // truncation count must be based on the SAME (filtered) list that is drawn,
     // not the raw line total.
-    val rows = remember(patch, contextOnly) {
-        val numbered = diffLineNumbers(patch)
-        if (!contextOnly) {
-            numbered
-        } else {
-            numbered.filter { (line, _, _) ->
-                line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---") ||
-                    line.startsWith("+") || line.startsWith("-")
+    val rows =
+        remember(patch, contextOnly) {
+            val numbered = diffLineNumbers(patch)
+            if (!contextOnly) {
+                numbered
+            } else {
+                numbered.filter { (line, _, _) ->
+                    line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---") ||
+                        line.startsWith("+") || line.startsWith("-")
+                }
             }
         }
-    }
     // TUI gutter: old number | new number, both right-aligned, one width.
-    val gutterWidth = remember(rows) {
-        val maxNum = (rows.mapNotNull { it.oldNum } + rows.mapNotNull { it.newNum }).maxOrNull() ?: 1
-        (maxNum.toString().length * 8 + 4).dp
-    }
+    val gutterWidth =
+        remember(rows) {
+            val maxNum = (rows.mapNotNull { it.oldNum } + rows.mapNotNull { it.newNum }).maxOrNull() ?: 1
+            (maxNum.toString().length * 8 + 4).dp
+        }
     val contentScroll = androidx.compose.foundation.rememberScrollState()
     val gutterColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     val codeStyle = MaterialTheme.typography.labelSmall
-    val codeFont = com.opencode.android.ui.theme.codeFont()
+    val codeFont =
+        com.opencode.android.ui.theme
+            .codeFont()
     // BoxWithConstraints hands the viewport width down: each tinted row is at
     // least viewport-wide (TUI full-width tint), longer rows grow with content.
     androidx.compose.foundation.layout.BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(background, MaterialTheme.shapes.small)
-            .padding(vertical = MaterialTheme.spacing.small),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(background, MaterialTheme.shapes.small)
+                .padding(vertical = MaterialTheme.spacing.small),
     ) {
         val viewWidth = maxWidth
         Column(
             modifier = Modifier.horizontalScroll(contentScroll),
         ) {
-        rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
-            // Full-width tint like the TUI: added rows green, removed red.
-            // Tinted from primary/error (not the container): containers sit
-            // too close to the surface in some themes and the tint drowned.
-            val rowBg = when {
-                line.startsWith("+") && !line.startsWith("+++") ->
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-                line.startsWith("-") && !line.startsWith("---") ->
-                    MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
-                else -> Color.Transparent
-            }
-            // Marker column like the TUI ([space]marker[space]).
-            val (marker, markerColor) = when {
-                line.startsWith("+") && !line.startsWith("+++") ->
-                    "+" to MaterialTheme.colorScheme.primary
-                line.startsWith("-") && !line.startsWith("---") ->
-                    "-" to MaterialTheme.colorScheme.error
-                else -> " " to Color.Transparent
-            }
-            val lineColor = when {
-                line.startsWith("+++") || line.startsWith("---") ->
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                line.startsWith("@@") -> MaterialTheme.colorScheme.primary
-                else -> MaterialTheme.colorScheme.onSurface
-            }
-            Row(
-                modifier = Modifier
-                    .widthIn(min = viewWidth)
-                    .background(rowBg),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = oldNum?.toString() ?: "",
-                    style = codeStyle,
-                    fontFamily = codeFont,
-                    color = gutterColor,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                    softWrap = false,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .width(gutterWidth)
-                        .padding(start = MaterialTheme.spacing.small),
-                )
-                Text(
-                    text = newNum?.toString() ?: "",
-                    style = codeStyle,
-                    fontFamily = codeFont,
-                    color = gutterColor,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                    softWrap = false,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .width(gutterWidth)
-                        .padding(start = 4.dp),
-                )
-                Text(
-                    text = marker,
-                    style = codeStyle,
-                    fontFamily = codeFont,
-                    color = markerColor,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    softWrap = false,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .width(16.dp)
-                        .padding(horizontal = 2.dp),
-                )
-                Text(
-                    text = if (line.startsWith("+") || line.startsWith("-")) line.drop(1) else line,
-                    style = codeStyle,
-                    fontFamily = codeFont,
-                    color = lineColor,
-                    softWrap = false,
-                    maxLines = 1,
-                    modifier = Modifier.padding(end = MaterialTheme.spacing.small),
-                )
+            rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
+                // Full-width tint like the TUI: added rows green, removed red.
+                // Tinted from primary/error (not the container): containers sit
+                // too close to the surface in some themes and the tint drowned.
+                val rowBg =
+                    when {
+                        line.startsWith("+") && !line.startsWith("+++") -> {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                        }
+
+                        line.startsWith("-") && !line.startsWith("---") -> {
+                            MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
+                        }
+
+                        else -> {
+                            Color.Transparent
+                        }
+                    }
+                // Marker column like the TUI ([space]marker[space]).
+                val (marker, markerColor) =
+                    when {
+                        line.startsWith("+") && !line.startsWith("+++") -> {
+                            "+" to MaterialTheme.colorScheme.primary
+                        }
+
+                        line.startsWith("-") && !line.startsWith("---") -> {
+                            "-" to MaterialTheme.colorScheme.error
+                        }
+
+                        else -> {
+                            " " to Color.Transparent
+                        }
+                    }
+                val lineColor =
+                    when {
+                        line.startsWith("+++") || line.startsWith("---") -> {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+
+                        line.startsWith("@@") -> {
+                            MaterialTheme.colorScheme.primary
+                        }
+
+                        else -> {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    }
+                Row(
+                    modifier =
+                        Modifier
+                            .widthIn(min = viewWidth)
+                            .background(rowBg),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = oldNum?.toString() ?: "",
+                        style = codeStyle,
+                        fontFamily = codeFont,
+                        color = gutterColor,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .width(gutterWidth)
+                                .padding(start = MaterialTheme.spacing.small),
+                    )
+                    Text(
+                        text = newNum?.toString() ?: "",
+                        style = codeStyle,
+                        fontFamily = codeFont,
+                        color = gutterColor,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .width(gutterWidth)
+                                .padding(start = 4.dp),
+                    )
+                    Text(
+                        text = marker,
+                        style = codeStyle,
+                        fontFamily = codeFont,
+                        color = markerColor,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier =
+                            Modifier
+                                .width(16.dp)
+                                .padding(horizontal = 2.dp),
+                    )
+                    Text(
+                        text = if (line.startsWith("+") || line.startsWith("-")) line.drop(1) else line,
+                        style = codeStyle,
+                        fontFamily = codeFont,
+                        color = lineColor,
+                        softWrap = false,
+                        maxLines = 1,
+                        modifier = Modifier.padding(end = MaterialTheme.spacing.small),
+                    )
+                }
             }
         }
     }
-    }
     if (rows.size > MAX_DIFF_LINES) {
-            Text(
-                text = pluralStringResource(
+        Text(
+            text =
+                pluralStringResource(
                     R.plurals.diff_lines_truncated,
                     rows.size - MAX_DIFF_LINES,
                     rows.size - MAX_DIFF_LINES,
                 ),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 // Web "N Changed files" card: aggregate +/- plus one row per file.
@@ -237,14 +302,16 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = MaterialTheme.shapes.medium,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MaterialTheme.spacing.extraSmall),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = MaterialTheme.spacing.extraSmall),
     ) {
         Column(
-            modifier = Modifier
-                .animateContentSize()
-                .padding(horizontal = MaterialTheme.spacing.small, vertical = MaterialTheme.spacing.extraSmall),
+            modifier =
+                Modifier
+                    .animateContentSize()
+                    .padding(horizontal = MaterialTheme.spacing.small, vertical = MaterialTheme.spacing.extraSmall),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -277,13 +344,13 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
                 val isExpanded = expandedPaths[file.path] == true
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(enabled = !file.diff.isNullOrBlank()) {
-                                expandedPaths[file.path] = !isExpanded
-                            }
-                            .semantics { contentDescription = file.path }
-                            .padding(vertical = 2.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !file.diff.isNullOrBlank()) {
+                                    expandedPaths[file.path] = !isExpanded
+                                }.semantics { contentDescription = file.path }
+                                .padding(vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -352,29 +419,39 @@ internal fun ToolCallRow(
     val diffStat = toolDiffStat(part)
     val isRunning = status == "running" || status == "pending"
     val isError = status == "error"
+    // Chevron eases open/closed on the shared spatial spring instead of
+    // snapping; the row already animates its height, so the glyph matches it.
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec =
+            com.opencode.android.ui.theme.Motion
+                .spatial(),
+        label = "toolChevron",
+    )
     // Hoisted out of the onClick lambda (not a composable scope).
     val toolCopyLabel = stringResource(R.string.tool)
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         shape = MaterialTheme.shapes.small,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
     ) {
         Column(modifier = Modifier.animateContentSize()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // Keeps the visual density but guarantees the 48 dp minimum
-                    // touch target a row of this height would otherwise miss.
-                    .minimumInteractiveComponentSize()
-                    .clickable { expanded = !expanded }
-                    .semantics {
-                        role = Role.Button
-                        stateDescription = if (expanded) expandedLabel else collapsedLabel
-                    }
-                    .padding(horizontal = MaterialTheme.spacing.small, vertical = MaterialTheme.spacing.small),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        // Keeps the visual density but guarantees the 48 dp minimum
+                        // touch target a row of this height would otherwise miss.
+                        .minimumInteractiveComponentSize()
+                        .clickable { expanded = !expanded }
+                        .semantics {
+                            role = Role.Button
+                            stateDescription = if (expanded) expandedLabel else collapsedLabel
+                        }.padding(horizontal = MaterialTheme.spacing.small, vertical = MaterialTheme.spacing.small),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
@@ -399,11 +476,12 @@ internal fun ToolCallRow(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                         shape = MaterialTheme.shapes.extraSmall,
-                        modifier = if (subagentSessionId != null) {
-                            Modifier.clickable(role = Role.Button) { onOpenSession(subagentSessionId) }
-                        } else {
-                            Modifier
-                        },
+                        modifier =
+                            if (subagentSessionId != null) {
+                                Modifier.clickable(role = Role.Button) { onOpenSession(subagentSessionId) }
+                            } else {
+                                Modifier
+                            },
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -457,36 +535,66 @@ internal fun ToolCallRow(
                     )
                 }
                 if (isRunning) {
-                    Text(
-                        text = stringResource(R.string.running),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                    // A softly pulsing dot reads "live" at a glance; the plain
+                    // "Running" label alone was easy to miss in a long thread.
+                    val pulse = rememberInfiniteTransition(label = "toolPulse")
+                    val dotAlpha by pulse.animateFloat(
+                        initialValue = 0.30f,
+                        targetValue = 1f,
+                        animationSpec =
+                            infiniteRepeatable(
+                                animation = tween(durationMillis = 850),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                        label = "toolDot",
                     )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(7.dp)
+                                    .graphicsLayer { alpha = dotAlpha }
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.primary),
+                        )
+                        Text(
+                            text = stringResource(R.string.running),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 } else {
                     Icon(
                         imageVector = Icons.Default.ArrowDropDown,
                         contentDescription = if (expanded) "Collapse" else "Expand",
-                        modifier = Modifier
-                            .size(18.dp)
-                            .rotate(if (expanded) 180f else 0f),
+                        modifier =
+                            Modifier
+                                .size(18.dp)
+                                .rotate(chevronRotation),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = expanded,
-                enter = androidx.compose.animation.expandVertically() +
-                    androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.shrinkVertically() +
-                    androidx.compose.animation.fadeOut(),
+                enter =
+                    androidx.compose.animation.expandVertically() +
+                        androidx.compose.animation.fadeIn(),
+                exit =
+                    androidx.compose.animation.shrinkVertically() +
+                        androidx.compose.animation.fadeOut(),
             ) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     shape = MaterialTheme.shapes.small,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.spacing.small)
-                        .padding(bottom = MaterialTheme.spacing.small),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = MaterialTheme.spacing.small)
+                            .padding(bottom = MaterialTheme.spacing.small),
                 ) {
                     Column(modifier = Modifier.padding(MaterialTheme.spacing.small)) {
                         Row(
@@ -495,11 +603,12 @@ internal fun ToolCallRow(
                         ) {
                             IconButton(
                                 onClick = {
-                                    val clipText = buildString {
-                                        diffText?.let { append(it).append('\n') }
-                                        command?.let { append("$ ").append(it).append('\n') }
-                                        append(output ?: "")
-                                    }
+                                    val clipText =
+                                        buildString {
+                                            diffText?.let { append(it).append('\n') }
+                                            command?.let { append("$ ").append(it).append('\n') }
+                                            append(output ?: "")
+                                        }
                                     copyToClipboard(context, toolCopyLabel, clipText)
                                     toast(context, copiedMsg)
                                 },
@@ -523,14 +632,17 @@ internal fun ToolCallRow(
                             Spacer(Modifier.height(MaterialTheme.spacing.small))
                         }
                         Text(
-                            text = cappedForDisplay(
-                                buildString {
-                                    command?.let { append("$ ").append(it).append('\n') }
-                                    append(output ?: "")
-                                },
-                            ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
+                            text =
+                                cappedForDisplay(
+                                    buildString {
+                                        command?.let { append("$ ").append(it).append('\n') }
+                                        append(output ?: "")
+                                    },
+                                ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
                             style = MaterialTheme.typography.bodySmall,
-                            fontFamily = com.opencode.android.ui.theme.codeFont(),
+                            fontFamily =
+                                com.opencode.android.ui.theme
+                                    .codeFont(),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                     }
@@ -550,18 +662,21 @@ internal fun ToolSummaryCard(parts: List<Part>) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MaterialTheme.spacing.extraSmall),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = MaterialTheme.spacing.extraSmall),
     ) {
         Column(modifier = Modifier.padding(MaterialTheme.spacing.small)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -574,17 +689,20 @@ internal fun ToolSummaryCard(parts: List<Part>) {
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = expanded,
-                enter = androidx.compose.animation.expandVertically() +
-                    androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.shrinkVertically() +
-                    androidx.compose.animation.fadeOut(),
+                enter =
+                    androidx.compose.animation.expandVertically() +
+                        androidx.compose.animation.fadeIn(),
+                exit =
+                    androidx.compose.animation.shrinkVertically() +
+                        androidx.compose.animation.fadeOut(),
             ) {
                 parts.forEach { part ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { selected = part }
-                            .padding(vertical = MaterialTheme.spacing.small),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { selected = part }
+                                .padding(vertical = MaterialTheme.spacing.small),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {

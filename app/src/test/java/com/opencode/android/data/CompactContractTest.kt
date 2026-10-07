@@ -24,7 +24,6 @@ import org.junit.Test
  * header, so this is the regression guard for the 1:1 fix.
  */
 class CompactContractTest {
-
     private lateinit var server: MockWebServer
     private lateinit var session: BackendSession
 
@@ -42,90 +41,99 @@ class CompactContractTest {
     }
 
     @Test
-    fun `summarize posts the exact web body, header and path`() = runBlocking<Unit> {
-        server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
+    fun `summarize posts the exact web body, header and path`() =
+        runBlocking<Unit> {
+            server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
 
-        val response = session.api.summarizeSession(
-            sessionId = "ses_abc",
-            directory = "%2Fhome%2Fuser%2FDocuments",
-            body = SummarizeRequest(
-                providerID = "deepseek",
-                modelID = "deepseek-v4-flash",
-            ),
-        )
-        response.body()?.close()
+            val response =
+                session.api.summarizeSession(
+                    sessionId = "ses_abc",
+                    directory = "%2Fhome%2Fuser%2FDocuments",
+                    body =
+                        SummarizeRequest(
+                            providerID = "deepseek",
+                            modelID = "deepseek-v4-flash",
+                        ),
+                )
+            response.body()?.close()
 
-        val recorded = server.takeRequest()
-        assertEquals("POST", recorded.method)
-        assertEquals("/session/ses_abc/summarize", recorded.path)
-        assertEquals(
-            "%2Fhome%2Fuser%2FDocuments",
-            recorded.getHeader("x-opencode-directory"),
-        )
-        assertEquals(
-            """{"providerID":"deepseek","modelID":"deepseek-v4-flash"}""",
-            recorded.body.readUtf8(),
-        )
-    }
-
-    @Test
-    fun `the response body is the literal true`() = runBlocking<Unit> {
-        server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
-
-        // The endpoint returns a Retrofit Response; the payload is the literal
-        // `true` body and a non-2xx is surfaced as !isSuccessful (not a throw),
-        // so the app can read the server's error message.
-        val response = session.api.summarizeSession(
-            sessionId = "ses_abc",
-            directory = null,
-            body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
-        )
-
-        assertTrue(response.isSuccessful)
-        assertEquals("true", response.body()?.string())
-        response.body()?.close()
-    }
+            val recorded = server.takeRequest()
+            assertEquals("POST", recorded.method)
+            assertEquals("/api/session/ses_abc/compact", recorded.path)
+            assertEquals(
+                "%2Fhome%2Fuser%2FDocuments",
+                recorded.getHeader("x-opencode-directory"),
+            )
+            assertEquals(
+                "{}",
+                recorded.body.readUtf8(),
+            )
+        }
 
     @Test
-    fun `an error response stays readable instead of throwing`() = runBlocking<Unit> {
-        server.enqueue(
-            MockResponse()
-                .setResponseCode(500)
-                .setBody("""{"name":"UnknownError","data":{"message":"Unexpected server error."}}""")
-                .setHeader("Content-Type", "application/json"),
-        )
+    fun `the response body is the literal true`() =
+        runBlocking<Unit> {
+            server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
 
-        val response = session.api.summarizeSession(
-            sessionId = "ses_abc",
-            directory = null,
-            body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
-        )
+            // The endpoint returns a Retrofit Response; the payload is the literal
+            // `true` body and a non-2xx is surfaced as !isSuccessful (not a throw),
+            // so the app can read the server's error message.
+            val response =
+                session.api.summarizeSession(
+                    sessionId = "ses_abc",
+                    directory = null,
+                    body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
+                )
 
-        assertEquals(500, response.code())
-        assertEquals(
-            "Unexpected server error.",
-            com.opencode.android.util.serverErrorMessage(
-                response.errorBody()?.string(),
-                "fallback",
-            ),
-        )
-    }
+            assertTrue(response.isSuccessful)
+            assertEquals("true", response.body()?.string())
+            response.body()?.close()
+        }
 
     @Test
-    fun `a missing directory omits the header entirely`() = runBlocking<Unit> {
-        server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
+    fun `an error response stays readable instead of throwing`() =
+        runBlocking<Unit> {
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(500)
+                    .setBody("""{"name":"UnknownError","data":{"message":"Unexpected server error."}}""")
+                    .setHeader("Content-Type", "application/json"),
+            )
 
-        val response = session.api.summarizeSession(
-            sessionId = "ses_abc",
-            directory = null,
-            body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
-        )
-        response.body()?.close()
+            val response =
+                session.api.summarizeSession(
+                    sessionId = "ses_abc",
+                    directory = null,
+                    body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
+                )
 
-        val recorded = server.takeRequest()
-        assertTrue(
-            "x-opencode-directory must be absent when the session has no directory",
-            recorded.getHeader("x-opencode-directory") == null,
-        )
-    }
+            assertEquals(500, response.code())
+            assertEquals(
+                "Unexpected server error.",
+                com.opencode.android.util.serverErrorMessage(
+                    response.errorBody()?.string(),
+                    "fallback",
+                ),
+            )
+        }
+
+    @Test
+    fun `a missing directory omits the header entirely`() =
+        runBlocking<Unit> {
+            server.enqueue(MockResponse().setBody("true").setHeader("Content-Type", "application/json"))
+
+            val response =
+                session.api.summarizeSession(
+                    sessionId = "ses_abc",
+                    directory = null,
+                    body = SummarizeRequest(providerID = "deepseek", modelID = "deepseek-v4-flash"),
+                )
+            response.body()?.close()
+
+            val recorded = server.takeRequest()
+            assertTrue(
+                "x-opencode-directory must be absent when the session has no directory",
+                recorded.getHeader("x-opencode-directory") == null,
+            )
+        }
 }

@@ -1,30 +1,30 @@
 package com.opencode.android.ui
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.foundation.shape.CircleShape
-
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
@@ -34,7 +34,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -50,10 +49,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,28 +62,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.opencode.android.ui.theme.spacing
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.opencode.android.R
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.Session
-import kotlinx.coroutines.launch
-import java.util.Calendar
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
+import com.opencode.android.ui.theme.spacing
 import com.opencode.android.util.RelativeTime
 import com.opencode.android.util.formatCost
-import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -113,17 +114,34 @@ internal fun HomeScreen(
     // "Command palette" setting: quick action launcher in the title bar.
     var showPalette by remember { mutableStateOf(false) }
 
+    // Live global status feed: a turn started by another client / the web flips
+    // the badge the instant it starts or ends. The periodic snapshot below is
+    // the fallback that reconciles anything a dropped connection missed.
+    DisposableEffect(Unit) {
+        viewModel.startStatusTracking()
+        onDispose { viewModel.stopStatusTracking() }
+    }
+    // Keep the per-session running indicators fresh while the list is on screen.
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.refreshStatuses()
+            kotlinx.coroutines.delay(5000)
+        }
+    }
+
     val scopeName = uiState.selectedProject?.name ?: "…"
-    val filteredSessions = remember(
-        uiState.sessions,
-        uiState.searchQuery,
-        uiState.showOnlyGuarded,
-    ) {
-        filterSessions(uiState.sessions, uiState.searchQuery, uiState.showOnlyGuarded, uiState.messageMatchIds)
-    }
-    val grouped = remember(filteredSessions, uiState.pinnedIds) {
-        groupSessions(filteredSessions, uiState.pinnedIds)
-    }
+    val filteredSessions =
+        remember(
+            uiState.sessions,
+            uiState.searchQuery,
+            uiState.showOnlyGuarded,
+        ) {
+            filterSessions(uiState.sessions, uiState.searchQuery, uiState.showOnlyGuarded, uiState.messageMatchIds)
+        }
+    val grouped =
+        remember(filteredSessions, uiState.pinnedIds) {
+            groupSessions(filteredSessions, uiState.pinnedIds)
+        }
 
     Scaffold(
         topBar = {
@@ -144,29 +162,32 @@ internal fun HomeScreen(
                         IconButton(onClick = {
                             showServerStatus = true
                             statusScope.launch {
-                                serverHealth = try {
-                                    backendSession.api.globalHealth()
-                                } catch (_: Exception) {
-                                    null
-                                }
+                                serverHealth =
+                                    try {
+                                        backendSession.api.globalHealth()
+                                    } catch (_: Exception) {
+                                        null
+                                    }
                                 serverStatusChecked = true
                             }
                         }) {
                             // Status is conveyed by colour AND the accessible
                             // label, so it is not colour-only information.
-                            val statusLabel = when {
-                                !serverStatusChecked -> stringResource(R.string.settings_server_status)
-                                serverHealth?.healthy == true -> stringResource(R.string.healthy)
-                                else -> stringResource(R.string.unreachable)
-                            }
+                            val statusLabel =
+                                when {
+                                    !serverStatusChecked -> stringResource(R.string.settings_server_status)
+                                    serverHealth?.healthy == true -> stringResource(R.string.healthy)
+                                    else -> stringResource(R.string.unreachable)
+                                }
                             Icon(
                                 Icons.Default.Dns,
                                 contentDescription = statusLabel,
-                                tint = when {
-                                    !serverStatusChecked -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    serverHealth?.healthy == true -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.error
-                                },
+                                tint =
+                                    when {
+                                        !serverStatusChecked -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        serverHealth?.healthy == true -> MaterialTheme.colorScheme.primary
+                                        else -> MaterialTheme.colorScheme.error
+                                    },
                             )
                         }
                     }
@@ -188,12 +209,18 @@ internal fun HomeScreen(
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.add_project)) },
-                                onClick = { showMenu = false; showAddProject = true },
+                                onClick = {
+                                    showMenu = false
+                                    showAddProject = true
+                                },
                             )
                             uiState.selectedProject?.let { _ ->
                                 DropdownMenuItem(
                                     text = { Text(stringResource(R.string.rename_project)) },
-                                    onClick = { showMenu = false; showRenameProject = true },
+                                    onClick = {
+                                        showMenu = false
+                                        showRenameProject = true
+                                    },
                                 )
                             }
                             // Deleting a project lives on the chip's long-press
@@ -209,152 +236,172 @@ internal fun HomeScreen(
         androidx.compose.material3.pulltorefresh.PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = { viewModel.loadSessions() },
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding),
         ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            // Non-blocking loading hint while refreshing existing content
-            // (instead of replacing the list with a spinner).
-            androidx.compose.animation.AnimatedVisibility(
-                visible = uiState.isLoading &&
-                    (uiState.sessions.isNotEmpty() || uiState.projects.isNotEmpty()),
-                enter = androidx.compose.animation.fadeIn(),
-                exit = androidx.compose.animation.fadeOut(),
+            Column(
+                modifier = Modifier.fillMaxSize(),
             ) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            }
-            when {
-                uiState.isLoading && uiState.sessions.isEmpty() && uiState.projects.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                // Non-blocking loading hint while refreshing existing content
+                // (instead of replacing the list with a spinner).
+                androidx.compose.animation.AnimatedVisibility(
+                    visible =
+                        uiState.isLoading &&
+                            (uiState.sessions.isNotEmpty() || uiState.projects.isNotEmpty()),
+                    enter = androidx.compose.animation.fadeIn(),
+                    exit = androidx.compose.animation.fadeOut(),
+                ) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
-                uiState.error != null && uiState.sessions.isEmpty() && uiState.projects.isEmpty() -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        ErrorState(
-                            message = uiState.error ?: "",
-                            hint = stringResource(R.string.server_hint),
-                            onRetry = {
+                when {
+                    uiState.isLoading && uiState.sessions.isEmpty() && uiState.projects.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    }
+
+                    uiState.error != null && uiState.sessions.isEmpty() && uiState.projects.isEmpty() -> {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            ErrorState(
+                                message = uiState.error ?: "",
+                                hint = stringResource(R.string.server_hint),
+                                onRetry = {
+                                    viewModel.loadProjects()
+                                    uiState.selectedProject?.let { viewModel.loadSessions(it) }
+                                },
+                            )
+                        }
+                    }
+
+                    else -> {
+                        // Pull-to-refresh: the list stays put and the indicator shows while
+                        // the sessions reload (loadSessions sets isRefreshing only when there
+                        // is content to keep on screen).
+                        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                            isRefreshing = uiState.isRefreshing,
+                            onRefresh = {
                                 viewModel.loadProjects()
                                 uiState.selectedProject?.let { viewModel.loadSessions(it) }
                             },
-                        )
-                    }
-                }
-                else -> {
-                    // Pull-to-refresh: the list stays put and the indicator shows while
-                    // the sessions reload (loadSessions sets isRefreshing only when there
-                    // is content to keep on screen).
-                    androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-                        isRefreshing = uiState.isRefreshing,
-                        onRefresh = {
-                            viewModel.loadProjects()
-                            uiState.selectedProject?.let { viewModel.loadSessions(it) }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = MaterialTheme.spacing.extraSmall, bottom = MaterialTheme.spacing.large),
                         ) {
-                        // --- Project switcher: compact scrollable chips ---
-                        item(key = "projects") {
-                            ProjectChipRow(
-                                projects = uiState.projects,
-                                selected = uiState.selectedProject,
-                                onSelect = { viewModel.selectProject(it) },
-                                onAdd = { showAddProject = true },
-                                onDelete = { viewModel.deleteProject(it) },
-                            )
-                        }
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding =
+                                    PaddingValues(
+                                        top = MaterialTheme.spacing.extraSmall,
+                                        bottom = MaterialTheme.spacing.large,
+                                    ),
+                            ) {
+                                // --- Project switcher: compact scrollable chips ---
+                                item(key = "projects") {
+                                    ProjectChipRow(
+                                        projects = uiState.projects,
+                                        selected = uiState.selectedProject,
+                                        onSelect = { viewModel.selectProject(it) },
+                                        onAdd = { showAddProject = true },
+                                        onDelete = { viewModel.deleteProject(it) },
+                                    )
+                                }
 
-                        // --- Search + new session ---
-                        item(key = "search") {
-                            SearchRow(
-                                query = uiState.searchQuery,
-                                onQueryChange = viewModel::setSearchQuery,
-                                scopeName = scopeName,
-                                onNewSession = {
-                                    viewModel.createSession { onSessionClick(it.id) }
-                                },
-                                onlyGuarded = uiState.showOnlyGuarded,
-                                onToggleGuarded = viewModel::setShowOnlyGuarded,
-                            )
-                        }
+                                // --- Search + new session ---
+                                item(key = "search") {
+                                    SearchRow(
+                                        query = uiState.searchQuery,
+                                        onQueryChange = viewModel::setSearchQuery,
+                                        scopeName = scopeName,
+                                        onNewSession = {
+                                            viewModel.createSession { onSessionClick(it.id) }
+                                        },
+                                        onlyGuarded = uiState.showOnlyGuarded,
+                                        onToggleGuarded = viewModel::setShowOnlyGuarded,
+                                    )
+                                }
 
-                        if (uiState.isLoading) {
-                            // Row skeletons instead of a lone spinner: the list
-                            // already shows the shape of what is arriving, so the
-                            // swap when it lands is not a layout jump.
-                            items(4, key = { "skeleton-$it" }) { SessionRowSkeleton() }
-                        }
+                                if (uiState.isLoading) {
+                                    // Row skeletons instead of a lone spinner: the list
+                                    // already shows the shape of what is arriving, so the
+                                    // swap when it lands is not a layout jump.
+                                    items(4, key = { "skeleton-$it" }) { SessionRowSkeleton() }
+                                }
 
-                        if (filteredSessions.isEmpty() && !uiState.isLoading) {
-                            item(key = "empty") {
-                                EmptyState(
-                                    title = if (uiState.searchQuery.isBlank()) {
-                                        stringResource(R.string.empty_home_title)
-                                    } else {
-                                        stringResource(
-                                            R.string.no_sessions_found,
-                                            uiState.searchQuery,
+                                if (filteredSessions.isEmpty() && !uiState.isLoading) {
+                                    item(key = "empty") {
+                                        EmptyState(
+                                            title =
+                                                if (uiState.searchQuery.isBlank()) {
+                                                    stringResource(R.string.empty_home_title)
+                                                } else {
+                                                    stringResource(
+                                                        R.string.no_sessions_found,
+                                                        uiState.searchQuery,
+                                                    )
+                                                },
+                                            subtitle =
+                                                if (uiState.searchQuery.isBlank()) {
+                                                    stringResource(R.string.empty_home_hint)
+                                                } else {
+                                                    null
+                                                },
+                                            icon = Icons.AutoMirrored.Filled.Chat,
                                         )
-                                    },
-                                    subtitle = if (uiState.searchQuery.isBlank()) {
-                                        stringResource(R.string.empty_home_hint)
-                                    } else {
-                                        null
-                                    },
-                                    icon = Icons.AutoMirrored.Filled.Chat,
-                                )
-                            }
-                        } else {
-                            grouped.forEach { (label, sessions) ->
-                                item(key = "header-$label") {
-                                    Text(
-                                        text = label.uppercase(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        letterSpacing = 0.8.sp,
-                                        modifier = Modifier.padding(
-                                            start = MaterialTheme.spacing.medium,
-                                            end = MaterialTheme.spacing.medium,
-                                            top = MaterialTheme.spacing.medium,
-                                            bottom = 2.dp,
-                                        ),
-                                    )
+                                    }
+                                } else {
+                                    grouped.forEach { (label, sessions) ->
+                                        item(key = "header-$label") {
+                                            Text(
+                                                text = label.uppercase(),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                letterSpacing = 0.8.sp,
+                                                modifier =
+                                                    Modifier.padding(
+                                                        start = MaterialTheme.spacing.medium,
+                                                        end = MaterialTheme.spacing.medium,
+                                                        top = MaterialTheme.spacing.medium,
+                                                        bottom = 2.dp,
+                                                    ),
+                                            )
+                                        }
+                                        items(sessions, key = { it.id }) { session ->
+                                            SessionRow(
+                                                // Smooth insert/remove/reorder when the
+                                                // list changes (pin, archive, delete).
+                                                modifier =
+                                                    Modifier.animateItem(
+                                                        placementSpec =
+                                                            com.opencode.android.ui.theme.Motion
+                                                                .spatial(),
+                                                        fadeInSpec =
+                                                            com.opencode.android.ui.theme.Motion
+                                                                .effects(),
+                                                        fadeOutSpec =
+                                                            com.opencode.android.ui.theme.Motion
+                                                                .effects(),
+                                                    ),
+                                                session = session,
+                                                isPinned = session.id in uiState.pinnedIds,
+                                                isRunning = session.id in uiState.runningSessionIds,
+                                                isRetrying = session.id in uiState.retryingSessionIds,
+                                                onTogglePin = { viewModel.togglePinned(session.id) },
+                                                onClick = { onSessionClick(session.id) },
+                                                onRename = { title -> viewModel.renameSession(session, title) },
+                                                onArchive = { viewModel.archiveSession(session) },
+                                                onDelete = { viewModel.deleteSession(session) },
+                                                sharedScope = sharedScope,
+                                                animatedVisibilityScope = animatedVisibilityScope,
+                                            )
+                                        }
+                                    }
                                 }
-                                items(sessions, key = { it.id }) { session ->
-                                    SessionRow(
-                                        // Smooth insert/remove/reorder when the
-                                        // list changes (pin, archive, delete).
-                                        modifier = Modifier.animateItem(
-                                            placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                            fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                            fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                        ),
-                                        session = session,
-                                        isPinned = session.id in uiState.pinnedIds,
-                                        onTogglePin = { viewModel.togglePinned(session.id) },
-                                        onClick = { onSessionClick(session.id) },
-                                        onRename = { title -> viewModel.renameSession(session, title) },
-                                        onArchive = { viewModel.archiveSession(session) },
-                                        onDelete = { viewModel.deleteSession(session) },
-                                        sharedScope = sharedScope,
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                    )
-                                }
-                            }
+                            } // end LazyColumn
                         }
-                    } // end LazyColumn
                     }
                 }
             }
-        }
         }
     }
 
@@ -400,17 +447,19 @@ internal fun HomeScreen(
                     )
                     val healthy = serverHealth?.healthy
                     Text(
-                        text = when {
-                            !serverStatusChecked -> stringResource(R.string.loading_providers)
-                            healthy == true -> stringResource(R.string.healthy)
-                            else -> stringResource(R.string.unreachable)
-                        },
+                        text =
+                            when {
+                                !serverStatusChecked -> stringResource(R.string.loading_providers)
+                                healthy == true -> stringResource(R.string.healthy)
+                                else -> stringResource(R.string.unreachable)
+                            },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (healthy == true) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.error
-                        },
+                        color =
+                            if (healthy == true) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
                     )
                     serverHealth?.version?.let {
                         Text(
@@ -430,18 +479,19 @@ internal fun HomeScreen(
     if (showPalette) {
         CommandPaletteDialog(
             onDismiss = { showPalette = false },
-            actions = listOf(
-                stringResource(R.string.new_session) to {
-                    viewModel.createSession { onSessionClick(it.id) }
-                },
-                stringResource(R.string.refresh) to {
-                    viewModel.loadProjects()
-                    uiState.selectedProject?.let { viewModel.loadSessions(it) }
-                },
-                stringResource(R.string.add_project) to { showAddProject = true },
-                stringResource(R.string.settings) to onOpenSettings,
-                stringResource(R.string.switch_backend) to onSwitchBackend,
-            ),
+            actions =
+                listOf(
+                    stringResource(R.string.new_session) to {
+                        viewModel.createSession { onSessionClick(it.id) }
+                    },
+                    stringResource(R.string.refresh) to {
+                        viewModel.loadProjects()
+                        uiState.selectedProject?.let { viewModel.loadSessions(it) }
+                    },
+                    stringResource(R.string.add_project) to { showAddProject = true },
+                    stringResource(R.string.settings) to onOpenSettings,
+                    stringResource(R.string.switch_backend) to onSwitchBackend,
+                ),
         )
     }
 }
@@ -453,10 +503,14 @@ private fun CommandPaletteDialog(
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
-    val filtered = remember(actions, query) {
-        if (query.isBlank()) actions
-        else actions.filter { it.first.contains(query, ignoreCase = true) }
-    }
+    val filtered =
+        remember(actions, query) {
+            if (query.isBlank()) {
+                actions
+            } else {
+                actions.filter { it.first.contains(query, ignoreCase = true) }
+            }
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings_command_palette)) },
@@ -470,11 +524,18 @@ private fun CommandPaletteDialog(
                 LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
                     items(filtered, key = { it.first }) { (label, action) ->
                         PickerRow(
-                            modifier = Modifier.animateItem(
-                                placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                            ),
+                            modifier =
+                                Modifier.animateItem(
+                                    placementSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .spatial(),
+                                    fadeInSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                    fadeOutSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                ),
                             title = label,
                             subtitle = "",
                             onClick = {
@@ -503,10 +564,11 @@ private fun ProjectChipRow(
     onDelete: (HomeProject) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = MaterialTheme.spacing.medium),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = MaterialTheme.spacing.medium),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -554,30 +616,33 @@ private fun ProjectChip(
     Box {
         Surface(
             shape = MaterialTheme.shapes.small,
-            color = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-            contentColor = if (selected) {
-                MaterialTheme.colorScheme.onSecondaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            modifier = pressModifier
-                .height(32.dp)
-                .combinedClickable(
-                    interactionSource = pressInteraction,
-                    indication = androidx.compose.foundation.LocalIndication.current,
-                    onClick = onSelect,
-                    onLongClick = {
-                        // A tactile tick makes the hidden long-press discoverable.
-                        haptics.performHapticFeedback(
-                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                        )
-                        showMenu = true
-                    },
-                ),
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            contentColor =
+                if (selected) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            modifier =
+                pressModifier
+                    .height(32.dp)
+                    .combinedClickable(
+                        interactionSource = pressInteraction,
+                        indication = androidx.compose.foundation.LocalIndication.current,
+                        onClick = onSelect,
+                        onLongClick = {
+                            // A tactile tick makes the hidden long-press discoverable.
+                            haptics.performHapticFeedback(
+                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                            )
+                            showMenu = true
+                        },
+                    ),
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = MaterialTheme.spacing.cardPadding),
@@ -630,9 +695,10 @@ private fun SearchRow(
     onToggleGuarded: (Boolean) -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = MaterialTheme.spacing.medium, vertical = MaterialTheme.spacing.small),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = MaterialTheme.spacing.medium, vertical = MaterialTheme.spacing.small),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
@@ -644,13 +710,14 @@ private fun SearchRow(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
             shape = CircleShape,
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                focusedIndicatorColor = Color.Transparent,
-                unfocusedIndicatorColor = Color.Transparent,
-            ),
+            colors =
+                TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
         )
         FilterChip(
             selected = onlyGuarded,
@@ -759,7 +826,10 @@ private fun AddProjectDialog(
     // seconds; wait for a short pause instead.
     var searchJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
-    fun list(dir: String, force: Boolean = false) {
+    fun list(
+        dir: String,
+        force: Boolean = false,
+    ) {
         val key = dir + "\u0000" + query
         if (!force) {
             listingCache.value[key]?.let { cached ->
@@ -773,56 +843,57 @@ private fun AddProjectDialog(
         listJob?.cancel()
         loading = true
         error = null
-        listJob = scope.launch {
-            val result = try {
-                val loaded = if (query.isBlank()) {
-                    backendSession.api.getFiles(path = ".", directory = dir)
-                        .filter { it.type == "directory" }
+        listJob =
+            scope.launch {
+                val result =
+                    try {
+                        val loaded =
+                            if (query.isBlank()) {
+                                backendSession.api
+                                    .getFiles(path = ".", directory = dir)
+                                    .filter { it.type == "directory" }
+                            } else {
+                                // V2 `fs/find` is scoped by the `x-opencode-directory`
+                                // header and returns paths RELATIVE to it. Search in
+                                // the current absolute directory and resolve each hit.
+                                val base = dir.trimEnd('/')
+                                backendSession.api.findFiles(query = query, directory = dir).map { p ->
+                                    val clean = p.trimEnd('/')
+                                    FileEntry(
+                                        // Search hits span directories, so show the relative
+                                        // path — several folders can share a basename
+                                        // (Documents/.opencode vs open-design/.opencode).
+                                        name = clean,
+                                        path = clean,
+                                        // The click handler navigates via `absolute`.
+                                        absolute = "$base/$clean",
+                                        type = "directory",
+                                    )
+                                }
+                            }
+                        loaded.sortedBy { (it.name ?: it.path ?: "").lowercase() }
+                    } catch (e: Exception) {
+                        error = FileErrors.friendly(e)
+                        null
+                    }
+                if (result != null) {
+                    listingCache.value = listingCache.value + (key to result)
+                    entries = result
                 } else {
-                    // /find/file needs a RELATIVE directory and returns plain
-                    // string paths relative to it. An absolute path returned []
-                    // (the "search does nothing" bug).
-                    val base = home?.trimEnd('/')?.ifEmpty { "/" } ?: "/"
-                    val underHome = com.opencode.android.util.isUnderHome(dir, base)
-                    val searchBase = if (underHome) dir.trimEnd('/').ifEmpty { "/" } else base
-                    val rel = if (underHome) {
-                        com.opencode.android.util.relativeSearchDir(dir, base)
-                    } else {
-                        "."
-                    }
-                    backendSession.api.findFiles(query = query, directory = rel).map { p ->
-                        val clean = p.trimEnd('/')
-                        FileEntry(
-                            // Search hits span directories, so show the relative
-                            // path — several folders can share a basename
-                            // (Documents/.opencode vs open-design/.opencode).
-                            name = clean,
-                            path = clean,
-                            // The click handler navigates via `absolute`; search
-                            // results must set it or tapping a hit did nothing.
-                            absolute = "$searchBase/$clean",
-                            type = "directory",
-                        )
-                    }
+                    entries = emptyList()
                 }
-                loaded.sortedBy { (it.name ?: it.path ?: "").lowercase() }
-            } catch (e: Exception) {
-                error = FileErrors.friendly(e)
-                null
+                loading = false
             }
-            if (result != null) {
-                listingCache.value = listingCache.value + (key to result)
-                entries = result
-            } else {
-                entries = emptyList()
-            }
-            loading = false
-        }
     }
 
     // Seed the browser from the serve host's home directory.
     LaunchedEffect(Unit) {
-        val info = try { backendSession.api.getPathInfo() } catch (_: Exception) { null }
+        val info =
+            try {
+                backendSession.api.getPathInfo()
+            } catch (_: Exception) {
+                null
+            }
         val h = info?.home?.trimEnd('/')?.ifBlank { "/" } ?: "/"
         home = h
         currentDir = h
@@ -840,20 +911,22 @@ private fun AddProjectDialog(
                     onQueryChange = { value ->
                         query = value
                         searchJob?.cancel()
-                        searchJob = scope.launch {
-                            kotlinx.coroutines.delay(300)
-                            currentDir?.let { list(it) }
-                        }
+                        searchJob =
+                            scope.launch {
+                                kotlinx.coroutines.delay(300)
+                                currentDir?.let { list(it) }
+                            }
                     },
                     placeholder = stringResource(R.string.search_folders),
                 )
                 // Breadcrumb: current location relative to home.
                 Text(
-                    text = currentDir?.let { d ->
-                        val base = home?.trimEnd('/') ?: "/"
-                        val rel = d.removePrefix(base).trim('/')
-                        if (rel.isEmpty()) "~/" else "~/$rel/"
-                    } ?: "~/",
+                    text =
+                        currentDir?.let { d ->
+                            val base = home?.trimEnd('/') ?: "/"
+                            val rel = d.removePrefix(base).trim('/')
+                            if (rel.isEmpty()) "~/" else "~/$rel/"
+                        } ?: "~/",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
@@ -867,13 +940,14 @@ private fun AddProjectDialog(
                 // substringBeforeLast('/') yields "" for one-level paths such as
                 // "/home", which silently removed the "up" row exactly there.
                 // Collapse to "/" so every non-root directory can be left.
-                val parentDir = currentDir?.let { d ->
-                    val trimmed = d.trimEnd('/')
-                    when {
-                        trimmed.isEmpty() || trimmed == "/" -> null
-                        else -> trimmed.substringBeforeLast('/').ifEmpty { "/" }
+                val parentDir =
+                    currentDir?.let { d ->
+                        val trimmed = d.trimEnd('/')
+                        when {
+                            trimmed.isEmpty() || trimmed == "/" -> null
+                            else -> trimmed.substringBeforeLast('/').ifEmpty { "/" }
+                        }
                     }
-                }
                 if (parentDir != null && parentDir != currentDir) {
                     PickerRow(
                         title = stringResource(R.string.up_one_level),
@@ -889,65 +963,93 @@ private fun AddProjectDialog(
                     )
                 }
                 when {
-                    loading -> Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(MaterialTheme.spacing.medium),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(
-                            MaterialTheme.spacing.small,
-                            Alignment.CenterHorizontally,
-                        ),
-                    ) {
-                        InlineSpinner()
-                        Text(
-                            text = stringResource(R.string.reading_folder),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    error != null -> Column {
-                        Text(
-                            text = stringResource(R.string.folder_error, error ?: ""),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        TextButton(onClick = { currentDir?.let { list(it, force = true) } }) {
-                            Text(stringResource(R.string.retry))
+                    loading -> {
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(MaterialTheme.spacing.medium),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement =
+                                Arrangement.spacedBy(
+                                    MaterialTheme.spacing.small,
+                                    Alignment.CenterHorizontally,
+                                ),
+                        ) {
+                            InlineSpinner()
+                            Text(
+                                text = stringResource(R.string.reading_folder),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                    entries.isEmpty() -> EmptyState(
-                        title = stringResource(R.string.no_subfolders),
-                        icon = Icons.Default.Folder,
-                        compact = true,
-                    )
-                    else -> LazyColumn(
-                        modifier = Modifier.heightIn(max = 320.dp),
-                        // Bottom clearance so the last folder is not flush
-                        // against the dialog edge.
-                        contentPadding = PaddingValues(bottom = MaterialTheme.spacing.cardPadding),
-                    ) {
-                        items(entries, key = { it.absolute ?: it.path ?: it.name ?: it.hashCode().toString() }) { entry ->
-                            PickerRow(
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
-                                title = entry.name ?: entry.path ?: "",
-                                subtitle = "",
-                                leading = {
-                                    Icon(Icons.Default.Folder, contentDescription = null)
-                                },
-                                onClick = {
-                                    // `directory` must be absolute; `path` is
-                                    // relative, so it can never be used here.
-                                    val next = entry.absolute ?: return@PickerRow
-                                    currentDir = next
-                                    query = ""
-                                    list(next)
-                                },
+
+                    error != null -> {
+                        Column {
+                            Text(
+                                text = stringResource(R.string.folder_error, error ?: ""),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
                             )
+                            TextButton(onClick = { currentDir?.let { list(it, force = true) } }) {
+                                Text(stringResource(R.string.retry))
+                            }
+                        }
+                    }
+
+                    entries.isEmpty() -> {
+                        EmptyState(
+                            title = stringResource(R.string.no_subfolders),
+                            icon = Icons.Default.Folder,
+                            compact = true,
+                        )
+                    }
+
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 320.dp),
+                            // Bottom clearance so the last folder is not flush
+                            // against the dialog edge.
+                            contentPadding = PaddingValues(bottom = MaterialTheme.spacing.cardPadding),
+                        ) {
+                            itemsIndexed(
+                                entries,
+                                // Positional fallback: two search hits can resolve
+                                // to the same path, and the old hashCode() fallback
+                                // is the exact crash-prone pattern.
+                                key = { index, entry ->
+                                    entry.absolute ?: entry.path ?: entry.name ?: "file-$index"
+                                },
+                            ) { _, entry ->
+                                PickerRow(
+                                    modifier =
+                                        Modifier.animateItem(
+                                            placementSpec =
+                                                com.opencode.android.ui.theme.Motion
+                                                    .spatial(),
+                                            fadeInSpec =
+                                                com.opencode.android.ui.theme.Motion
+                                                    .effects(),
+                                            fadeOutSpec =
+                                                com.opencode.android.ui.theme.Motion
+                                                    .effects(),
+                                        ),
+                                    title = entry.name ?: entry.path ?: "",
+                                    subtitle = "",
+                                    leading = {
+                                        Icon(Icons.Default.Folder, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        // `directory` must be absolute; `path` is
+                                        // relative, so it can never be used here.
+                                        val next = entry.absolute ?: return@PickerRow
+                                        currentDir = next
+                                        query = ""
+                                        list(next)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -972,6 +1074,9 @@ private fun AddProjectDialog(
 private fun SessionRow(
     session: Session,
     isPinned: Boolean,
+    // Server-reported: this session is generating (busy) / retrying.
+    isRunning: Boolean = false,
+    isRetrying: Boolean = false,
     onTogglePin: () -> Unit,
     onClick: () -> Unit,
     onRename: (String) -> Unit,
@@ -985,40 +1090,47 @@ private fun SessionRow(
     var showRename by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
 
-    val sharedModifier = if (sharedScope != null && animatedVisibilityScope != null) {
-        with(sharedScope) {
-            Modifier.sharedElement(
-                state = rememberSharedContentState(key = "session-${session.id}"),
-                animatedVisibilityScope = animatedVisibilityScope,
-            )
+    val sharedModifier =
+        if (sharedScope != null && animatedVisibilityScope != null) {
+            with(sharedScope) {
+                Modifier.sharedElement(
+                    state = rememberSharedContentState(key = "session-${session.id}"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                )
+            }
+        } else {
+            Modifier
         }
-    } else {
-        Modifier
-    }
 
     val (pressModifier, pressInteraction) = rememberPressScale(0.985f)
     Row(
-        modifier = modifier
-            .then(sharedModifier)
-            .then(pressModifier)
-            .fillMaxWidth()
-            .clickable(
-                interactionSource = pressInteraction,
-                indication = androidx.compose.foundation.LocalIndication.current,
-                onClick = onClick,
-            )
-            .padding(start = MaterialTheme.spacing.medium, end = MaterialTheme.spacing.extraSmall, top = MaterialTheme.spacing.small, bottom = MaterialTheme.spacing.small),
+        modifier =
+            modifier
+                .then(sharedModifier)
+                .then(pressModifier)
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = pressInteraction,
+                    indication = androidx.compose.foundation.LocalIndication.current,
+                    onClick = onClick,
+                ).padding(
+                    start = MaterialTheme.spacing.medium,
+                    end = MaterialTheme.spacing.extraSmall,
+                    top = MaterialTheme.spacing.small,
+                    bottom = MaterialTheme.spacing.small,
+                ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.cardPadding),
     ) {
         // Tonal avatar with the session's initial (visual anchor, web-like).
         Box(
-            modifier = Modifier
-                .size(34.dp)
-                .background(
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    shape = CircleShape,
-                ),
+            modifier =
+                Modifier
+                    .size(34.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shape = CircleShape,
+                    ),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -1035,29 +1147,61 @@ private fun SessionRow(
             Text(
                 // Strip the server's " - <ISO timestamp>" suffix so the list
                 // shows a clean title instead of "New session - 2026-09-13T…".
-                text = session.title?.let { com.opencode.android.util.sessionDisplayTitle(it) }
-                    ?: "New session",
+                text =
+                    session.title?.let {
+                        com.opencode.android.util
+                            .sessionDisplayTitle(it)
+                    }
+                        ?: "New session",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             val now = System.currentTimeMillis()
-            val meta = listOfNotNull(
-                session.agent,
-                // Drop the provider prefix ("deepseek/deepseek-v4-flash" → "deepseek-v4-flash").
-                session.model?.id?.substringAfterLast('/'),
-                // Relative while recent ("3h ago"), absolute date beyond a week.
-                session.time?.updated?.let {
-                    RelativeTime.label(it, now) ?: formatHomeTime(it)
-                },
-                session.cost?.takeIf { it > 0.0 }?.let { formatCost(it) },
-            ).joinToString(" · ")
-            if (meta.isNotBlank()) {
+            val meta =
+                listOfNotNull(
+                    session.agent,
+                    // Drop the provider prefix ("deepseek/deepseek-v4-flash" → "deepseek-v4-flash").
+                    session.model?.id?.substringAfterLast('/'),
+                    // Relative while recent ("3h ago"), absolute date beyond a week.
+                    session.time?.updated?.let {
+                        RelativeTime.label(it, now) ?: formatHomeTime(it)
+                    },
+                    session.cost?.takeIf { it > 0.0 }?.let { formatCost(it) },
+                ).joinToString(" · ")
+            if (meta.isNotBlank() || isRunning || isRetrying) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    // Live "running" / "retrying" badge: the server reports the
+                    // session's busy state, so the list shows which session is
+                    // active without opening it.
+                    if (isRunning || isRetrying) {
+                        val badgeColor =
+                            if (isRetrying) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            }
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(11.dp),
+                            strokeWidth = 1.6.dp,
+                            color = badgeColor,
+                        )
+                        Text(
+                            text = if (isRetrying) "retrying" else "running",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = badgeColor,
+                        )
+                        Text(
+                            text = "·",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Text(
                         text = meta,
                         style = MaterialTheme.typography.labelSmall,
@@ -1071,16 +1215,18 @@ private fun SessionRow(
                     session.sessionGuard?.let { guard ->
                         Icon(
                             Icons.Default.Security,
-                            contentDescription = if (guard.mismatch) {
-                                "Session Guard drift"
-                            } else {
-                                "Session Guard"
-                            },
-                            tint = if (guard.mismatch) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
+                            contentDescription =
+                                if (guard.mismatch) {
+                                    "Session Guard drift"
+                                } else {
+                                    "Session Guard"
+                                },
+                            tint =
+                                if (guard.mismatch) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
                             modifier = Modifier.size(12.dp),
                         )
                     }
@@ -1095,11 +1241,12 @@ private fun SessionRow(
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
                     Text(
-                        text = pluralStringResource(
-                            R.plurals.session_files_changed,
-                            summary.files,
-                            summary.files,
-                        ),
+                        text =
+                            pluralStringResource(
+                                R.plurals.session_files_changed,
+                                summary.files,
+                                summary.files,
+                            ),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1142,7 +1289,10 @@ private fun SessionRow(
                             ),
                         )
                     },
-                    onClick = { showMore = false; onTogglePin() },
+                    onClick = {
+                        showMore = false
+                        onTogglePin()
+                    },
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.rename)) },
@@ -1153,7 +1303,10 @@ private fun SessionRow(
                 )
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.archive)) },
-                    onClick = { showMore = false; onArchive() },
+                    onClick = {
+                        showMore = false
+                        onArchive()
+                    },
                 )
                 HorizontalDivider()
                 DropdownMenuItem(
@@ -1163,7 +1316,10 @@ private fun SessionRow(
                             color = MaterialTheme.colorScheme.error,
                         )
                     },
-                    onClick = { showMore = false; showDelete = true },
+                    onClick = {
+                        showMore = false
+                        showDelete = true
+                    },
                 )
             }
         }
@@ -1172,9 +1328,13 @@ private fun SessionRow(
         RenameDialog(
             title = stringResource(R.string.rename_session),
             // Prefill the same clean title the list shows (no ISO suffix).
-            currentTitle = session.title
-                ?.let { com.opencode.android.util.sessionDisplayTitle(it) }
-                ?: "",
+            currentTitle =
+                session.title
+                    ?.let {
+                        com.opencode.android.util
+                            .sessionDisplayTitle(it)
+                    }
+                    ?: "",
             onConfirm = { name ->
                 showRename = false
                 onRename(name)
@@ -1187,19 +1347,28 @@ private fun SessionRow(
             onDismissRequest = { showDelete = false },
             title = { Text(stringResource(R.string.delete_session)) },
             text = {
-                Text(stringResource(
-                    R.string.delete_session_confirm,
-                    session.title?.let { com.opencode.android.util.sessionDisplayTitle(it) }
-                        ?: session.id,
-                ))
+                Text(
+                    stringResource(
+                        R.string.delete_session_confirm,
+                        session.title?.let {
+                            com.opencode.android.util
+                                .sessionDisplayTitle(it)
+                        }
+                            ?: session.id,
+                    ),
+                )
             },
             confirmButton = {
                 Button(
-                    onClick = { showDelete = false; onDelete() },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    onClick = {
+                        showDelete = false
+                        onDelete()
+                    },
+                    colors =
+                        androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
                 ) { Text(stringResource(R.string.delete_2)) }
             },
             dismissButton = {
@@ -1211,9 +1380,8 @@ private fun SessionRow(
 
 /** Cost badge text; sub-cent amounts would all read "$0.00". */
 
-
-private fun formatHomeTime(epochMillis: Long): String {
-    return try {
+private fun formatHomeTime(epochMillis: Long): String =
+    try {
         // English pattern to match the app's English UI (the Language setting is
         // stored but not applied to the process locale).
         val sdf = java.text.SimpleDateFormat("MMM d, HH:mm", java.util.Locale.ENGLISH)
@@ -1221,8 +1389,6 @@ private fun formatHomeTime(epochMillis: Long): String {
     } catch (e: Exception) {
         ""
     }
-}
-
 
 /**
  * Placeholder that mirrors a session row (avatar circle + title line + meta
@@ -1231,14 +1397,15 @@ private fun formatHomeTime(epochMillis: Long): String {
 @Composable
 private fun SessionRowSkeleton() {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                start = MaterialTheme.spacing.medium,
-                end = MaterialTheme.spacing.medium,
-                top = MaterialTheme.spacing.small,
-                bottom = MaterialTheme.spacing.small,
-            ),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = MaterialTheme.spacing.medium,
+                    end = MaterialTheme.spacing.medium,
+                    top = MaterialTheme.spacing.small,
+                    bottom = MaterialTheme.spacing.small,
+                ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.cardPadding),
     ) {
@@ -1251,14 +1418,16 @@ private fun SessionRowSkeleton() {
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
         ) {
             SkeletonBox(
-                modifier = Modifier
-                    .fillMaxWidth(0.6f)
-                    .height(14.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth(0.6f)
+                        .height(14.dp),
             )
             SkeletonBox(
-                modifier = Modifier
-                    .fillMaxWidth(0.35f)
-                    .height(10.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth(0.35f)
+                        .height(10.dp),
             )
         }
     }

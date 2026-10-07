@@ -1,7 +1,6 @@
 package com.opencode.android.domain
 
 import androidx.compose.runtime.Immutable
-
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -12,6 +11,8 @@ data class Session(
     val slug: String? = null,
     @SerialName("projectID") val projectId: String? = null,
     val directory: String? = null,
+    // OpenCode 2.x nests the working directory under `location`.
+    val location: SessionLocation? = null,
     val path: String? = null,
     val title: String? = null,
     val version: String? = null,
@@ -24,6 +25,16 @@ data class Session(
     val summary: SessionSummary? = null,
     @SerialName("status") val status: SessionStatus? = null,
     @SerialName("sessionGuard") val sessionGuard: SessionGuard? = null,
+    // OpenCode 2.x reports an existing share link here; sharing itself is
+    // controlled by the server `share` config (manual|auto|disabled), not an
+    // endpoint.
+    val share: SessionShare? = null,
+)
+
+@Serializable
+@Immutable
+data class SessionShare(
+    val url: String? = null,
 )
 
 @Serializable
@@ -211,6 +222,10 @@ data class Part(
     val state: kotlinx.serialization.json.JsonElement? = null,
     val title: String? = null,
     val time: PartTime? = null,
+    // Which message this part belongs to. Used to tell a USER part (the prompt
+    // echoed back by the server) from an ASSISTANT part, so the prompt is never
+    // rendered as the live assistant response.
+    @SerialName("messageID") val messageId: String? = null,
 )
 
 // Session-scoped agent questions:
@@ -605,6 +620,15 @@ data class EventProperties(
     // session.diff carries the changed-file list.
     val diff: List<VcsDiffFile> = emptyList(),
     val time: Long? = null,
+    // question.asked carries the full pending request. v1 uses `id`, the v2
+    // schema uses `requestID`; both are accepted.
+    @SerialName("id") val questionId: String? = null,
+    @SerialName("requestID") val requestId: String? = null,
+    val questions: List<QuestionItem> = emptyList(),
+    val tool: QuestionToolRef? = null,
+    // `todo.updated` carries the session's current todo list (V2 has no
+    // GET /session/{id}/todo endpoint).
+    val todos: List<TodoItem> = emptyList(),
 )
 
 @Serializable
@@ -658,6 +682,8 @@ data class CacheTokens(
 data class Project(
     val id: String,
     val worktree: String? = null,
+    // OpenCode 2.x names the project root `canonical`.
+    val canonical: String? = null,
     val vcs: String? = null,
     val icon: ProjectIcon? = null,
     val time: SessionTime? = null,
@@ -748,28 +774,28 @@ data class CommandEntry(
     val template: kotlinx.serialization.json.JsonElement? = null,
 )
 
-fun commandTemplate(command: CommandEntry): String? {
-    return (command.template as? kotlinx.serialization.json.JsonPrimitive)
+fun commandTemplate(command: CommandEntry): String? =
+    (command.template as? kotlinx.serialization.json.JsonPrimitive)
         ?.takeIf { it.isString }
         ?.content
-}
 
 // Client-side built-ins the server's GET /command does not return. Mirrors the
 // web slash picker, which prepends these to the server commands.
 const val BUILTIN_SOURCE = "builtin"
 
-val BUILTIN_COMMANDS: List<CommandEntry> = listOf(
-    CommandEntry(
-        name = "compact",
-        description = "Summarize the session to reduce context size",
-        source = BUILTIN_SOURCE,
-    ),
-    CommandEntry(
-        name = "mcp",
-        description = "Toggle MCPs",
-        source = BUILTIN_SOURCE,
-    ),
-)
+val BUILTIN_COMMANDS: List<CommandEntry> =
+    listOf(
+        CommandEntry(
+            name = "compact",
+            description = "Summarize the session to reduce context size",
+            source = BUILTIN_SOURCE,
+        ),
+        CommandEntry(
+            name = "mcp",
+            description = "Toggle MCPs",
+            source = BUILTIN_SOURCE,
+        ),
+    )
 
 // GET /mcp → { "<name>": { "status": "connected" | "disabled" | "failed" |
 // "needs_auth" | "pending" | "needs_client_registration" } }

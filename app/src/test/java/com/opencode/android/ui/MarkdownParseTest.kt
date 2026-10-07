@@ -12,7 +12,6 @@ import org.junit.Test
  * contract with the web renderer is pinned here.
  */
 class MarkdownParseTest {
-
     @Test
     fun `headings keep their level`() {
         val blocks = parseMarkdown("# One\n### Three")
@@ -185,5 +184,50 @@ class MarkdownParseTest {
         val text = "https://x.dev/a_b more"
         val range = autolinkAt(text, 0)!!
         assertTrue(text.substring(range.first, range.last + 1).endsWith("a_b"))
+    }
+
+    // --- streaming split (progressive live rendering) ----------------------
+
+    private fun assertSplitEquivalent(text: String) {
+        val split = markdownStreamSplit(text)
+        assertEquals(
+            parseMarkdown(text),
+            parseMarkdown(split.stable) + parseMarkdown(split.tail),
+        )
+    }
+
+    @Test
+    fun `stream split equals a full parse across many shapes`() {
+        assertSplitEquivalent("")
+        assertSplitEquivalent("no blank line yet")
+        assertSplitEquivalent("first paragraph\n\nsecond paragraph")
+        assertSplitEquivalent("# Heading\n\nbody text")
+        assertSplitEquivalent("- a\n- b\n\n1. c\n2. d")
+        assertSplitEquivalent("para\n\n```kotlin\nval x = 1\n```\n\nafter")
+        // A blank line INSIDE a fenced code block must not be a boundary.
+        assertSplitEquivalent("```\nline\n\nmore\n```\n\nafter")
+        assertSplitEquivalent("| a | b |\n|--|--|\n| 1 | 2 |\n\npara")
+        assertSplitEquivalent("trailing blank\n\n")
+    }
+
+    @Test
+    fun `stream split keeps an unclosed fence in the tail`() {
+        val text = "intro\n\n```kotlin\nval x = 1\n\nval y = 2"
+        val split = markdownStreamSplit(text)
+        // The tail starts at the fence, not inside it, so the prefix never
+        // contains half of a code block.
+        assertTrue(split.tail.startsWith("```kotlin"))
+        assertSplitEquivalent(text)
+    }
+
+    @Test
+    fun `stream split keeps car returns unsplit`() {
+        // \r\n would make the offset arithmetic disagree with the normalised
+        // parse, so such text simply stays in the tail (still correct, just not
+        // incremental).
+        val text = "a\r\n\r\nb"
+        val split = markdownStreamSplit(text)
+        assertEquals("", split.stable)
+        assertEquals(text, split.tail)
     }
 }

@@ -1,18 +1,24 @@
 package com.opencode.android.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,15 +29,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import android.content.ClipboardManager
-import android.content.ClipData
-import android.content.Context
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -56,24 +57,31 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.opencode.android.R
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.BUILTIN_SOURCE
 import com.opencode.android.domain.CommandEntry
@@ -84,30 +92,64 @@ import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.commandTemplate
 import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.flow.filter
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
 
 @Composable
 private fun AttachmentLeadingIcon(attachment: Attachment) {
     val context = LocalContext.current
     val isImage = attachment.mime?.startsWith("image/") == true
     if (isImage) {
-        val bitmap = remember(attachment.uri) {
-            runCatching {
-                context.contentResolver.openInputStream(android.net.Uri.parse(attachment.uri))?.use { input ->
-                    val options = android.graphics.BitmapFactory.Options().apply { inSampleSize = 4 }
-                    android.graphics.BitmapFactory.decodeStream(input, null, options)
-                }
-            }.getOrNull()
-        }
-        if (bitmap != null) {
+        // Decode off the main thread: a full-size photo (even at inSampleSize 4)
+        // is milliseconds-to-hundreds of ms of work, and doing it inside
+        // `remember` stalled the frame that composed the attachment chip.
+        val bitmap by
+            androidx.compose.runtime.produceState<android.graphics.Bitmap?>(
+                initialValue = null,
+                attachment.uri,
+            ) {
+                value =
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        runCatching {
+                            val uri = android.net.Uri.parse(attachment.uri)
+                            // Two-pass decode: read the bounds first, then pick an
+                            // inSampleSize for a ~96px thumbnail. The old fixed
+                            // inSampleSize=4 still decoded a 48 MP photo to ~3 MB
+                            // per chip, and several chips could OOM.
+                            val bounds =
+                                android.graphics.BitmapFactory.Options().apply {
+                                    inJustDecodeBounds = true
+                                }
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                android.graphics.BitmapFactory.decodeStream(input, null, bounds)
+                            }
+                            var sample = 1
+                            val target = 96
+                            while (bounds.outWidth / sample > target * 2 ||
+                                bounds.outHeight / sample > target * 2
+                            ) {
+                                sample *= 2
+                            }
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                android.graphics.BitmapFactory.decodeStream(
+                                    input,
+                                    null,
+                                    android.graphics.BitmapFactory.Options().apply {
+                                        inSampleSize = sample
+                                    },
+                                )
+                            }
+                        }.getOrNull()
+                    }
+            }
+        val decoded = bitmap
+        if (decoded != null) {
             Image(
-                bitmap = bitmap.asImageBitmap(),
+                bitmap = decoded.asImageBitmap(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(4.dp)),
+                modifier =
+                    Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(4.dp)),
             )
             return
         }
@@ -119,12 +161,13 @@ private fun AttachmentLeadingIcon(attachment: Attachment) {
     )
 }
 
-private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(bytes / 1073741824.0)
-    bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / 1048576.0)
-    bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
-    else -> "$bytes B"
-}
+private fun formatBytes(bytes: Long): String =
+    when {
+        bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(bytes / 1073741824.0)
+        bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / 1048576.0)
+        bytes >= 1024L -> "%.0f KB".format(bytes / 1024.0)
+        else -> "$bytes B"
+    }
 
 @Immutable
 internal class ComposerActions(
@@ -184,69 +227,84 @@ internal fun Composer(
     // only visible after the network answers.
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Show the display name like the web model button ("DeepSeek V4 Pro (New)").
-    val modelDisplayName = remember(models, selectedModel) {
-        com.opencode.android.util.friendlyModelName(models, selectedModel)
-            .ifEmpty { "Choose model" }
-    }
+    val modelDisplayName =
+        remember(models, selectedModel) {
+            com.opencode.android.util
+                .friendlyModelName(models, selectedModel)
+                .ifEmpty { "Choose model" }
+        }
     var showModelPicker by remember { mutableStateOf(false) }
     var showManageModels by remember { mutableStateOf(false) }
     var showAgentPicker by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val copiedMsg = stringResource(R.string.copied)
+
     fun toast(message: String) {
         toast(context, message)
     }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            // Attachment chips and the command picker appear/disappear; animating
-            // the height makes the whole composer grow and shrink smoothly
-            // instead of snapping the message list up and down.
-            .animateContentSize()
-            .padding(horizontal = MaterialTheme.spacing.cardPadding, vertical = MaterialTheme.spacing.small)
-            // Escape stops the running generation from anywhere in the composer.
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    event.key == Key.Escape &&
-                    isGenerating
-                ) {
-                    onInterrupt()
-                    true
-                } else {
-                    false
-                }
-            },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                // Attachment chips and the command picker appear/disappear; animating
+                // the height makes the whole composer grow and shrink smoothly
+                // instead of snapping the message list up and down.
+                .animateContentSize()
+                .padding(horizontal = MaterialTheme.spacing.cardPadding, vertical = MaterialTheme.spacing.small)
+                // Escape stops the running generation from anywhere in the composer.
+                .onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown &&
+                        event.key == Key.Escape &&
+                        isGenerating
+                    ) {
+                        onInterrupt()
+                        true
+                    } else {
+                        false
+                    }
+                },
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
-
         // "/" command picker (mirrors web "/ for commands").
         // Visibility animates: without it the card snapped the whole
         // composer up/down on the first/last keystroke.
         androidx.compose.animation.AnimatedVisibility(
-            visible = inputText.startsWith("/") && commands.isNotEmpty() &&
-                commands.any { it.name.lowercase().contains(inputText.removePrefix("/").substringBefore(" ").lowercase()) },
-            enter = androidx.compose.animation.expandVertically() +
-                androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.shrinkVertically() +
-                androidx.compose.animation.fadeOut(),
+            visible =
+                inputText.startsWith("/") && commands.isNotEmpty() &&
+                    commands.any { it.name.lowercase().contains(inputText.removePrefix("/").substringBefore(" ").lowercase()) },
+            enter =
+                androidx.compose.animation.expandVertically() +
+                    androidx.compose.animation.fadeIn(),
+            exit =
+                androidx.compose.animation.shrinkVertically() +
+                    androidx.compose.animation.fadeOut(),
         ) {
             val query = inputText.removePrefix("/").substringBefore(" ").lowercase()
             val matches = commands.filter { it.name.lowercase().contains(query) }.take(6)
             if (matches.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ),
                 ) {
                     LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
-                        items(matches, key = { it.name }) { command ->
+                        // Duplicate names would be a duplicate LazyColumn key crash.
+                        items(matches.distinctBy { it.name }, key = { it.name }) { command ->
                             PickerRow(
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
+                                modifier =
+                                    Modifier.animateItem(
+                                        placementSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .spatial(),
+                                        fadeInSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                        fadeOutSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                    ),
                                 title = "/${command.name}",
                                 subtitle = command.description ?: "",
                                 onClick = {
@@ -258,7 +316,7 @@ internal fun Composer(
                                     } else {
                                         onPickCommand(
                                             commandTemplate(command)
-                                                ?: "/${command.name} "
+                                                ?: "/${command.name} ",
                                         )
                                     }
                                 },
@@ -270,28 +328,37 @@ internal fun Composer(
         }
 
         // "@" mention picker (mirrors web "@ for context", backed by the file list).
-        val mentionQuery = remember(inputText) {
-            Regex("@([A-Za-z0-9_./-]*)$").find(inputText)?.groupValues?.getOrNull(1)
-        }
-        val mentionMatches = remember(mentionQuery, files) {
-            if (mentionQuery == null) emptyList()
-            else files.filter {
-                (it.name ?: it.path ?: "").contains(mentionQuery, ignoreCase = true)
-            }.take(6)
-        }
+        val mentionQuery =
+            remember(inputText) {
+                Regex("@([A-Za-z0-9_./-]*)$").find(inputText)?.groupValues?.getOrNull(1)
+            }
+        val mentionMatches =
+            remember(mentionQuery, files) {
+                if (mentionQuery == null) {
+                    emptyList()
+                } else {
+                    files
+                        .filter {
+                            (it.name ?: it.path ?: "").contains(mentionQuery, ignoreCase = true)
+                        }.take(6)
+                }
+            }
         androidx.compose.animation.AnimatedVisibility(
             visible = mentionMatches.isNotEmpty(),
-            enter = androidx.compose.animation.expandVertically() +
-                androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.shrinkVertically() +
-                androidx.compose.animation.fadeOut(),
+            enter =
+                androidx.compose.animation.expandVertically() +
+                    androidx.compose.animation.fadeIn(),
+            exit =
+                androidx.compose.animation.shrinkVertically() +
+                    androidx.compose.animation.fadeOut(),
         ) {
             if (mentionMatches.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    ),
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        ),
                 ) {
                     LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
                         items(
@@ -300,11 +367,18 @@ internal fun Composer(
                         ) { file ->
                             val ref = file.path ?: file.name ?: return@items
                             PickerRow(
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
+                                modifier =
+                                    Modifier.animateItem(
+                                        placementSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .spatial(),
+                                        fadeInSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                        fadeOutSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                    ),
                                 title = file.name ?: ref,
                                 subtitle = ref,
                                 leading = {
@@ -316,11 +390,12 @@ internal fun Composer(
                                 },
                                 onClick = {
                                     val q = mentionQuery ?: ""
-                                    val replaced = inputText.replaceRange(
-                                        inputText.length - q.length - 1,
-                                        inputText.length,
-                                        "@$ref ",
-                                    )
+                                    val replaced =
+                                        inputText.replaceRange(
+                                            inputText.length - q.length - 1,
+                                            inputText.length,
+                                            "@$ref ",
+                                        )
                                     onInputChange(replaced)
                                 },
                             )
@@ -330,10 +405,47 @@ internal fun Composer(
             }
         }
 
-        // One calm container: attachments, input, controls.
+        // One calm container: attachments, input, controls. A faint focus ring
+        // and a touch of elevation make it feel alive without shouting.
+        val composerInteraction = remember { MutableInteractionSource() }
+        val composerFocused by composerInteraction.collectIsFocusedAsState()
+        val composerHasText = inputText.isNotBlank() || attachments.isNotEmpty()
+        val composerBorder by animateColorAsState(
+            targetValue =
+                when {
+                    composerFocused -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    composerHasText -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+                    else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f)
+                },
+            animationSpec =
+                com.opencode.android.ui.theme.Motion
+                    .effects(),
+            label = "composerBorder",
+        )
+        val composerContainer by animateColorAsState(
+            targetValue =
+                if (composerFocused) {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            animationSpec =
+                com.opencode.android.ui.theme.Motion
+                    .effects(),
+            label = "composerContainer",
+        )
+        val composerElevation by animateDpAsState(
+            targetValue = if (composerFocused) 6.dp else 1.dp,
+            animationSpec =
+                com.opencode.android.ui.theme.Motion
+                    .spatial(),
+            label = "composerElevation",
+        )
         Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = composerContainer,
             shape = MaterialTheme.shapes.extraLarge,
+            border = BorderStroke(1.dp, composerBorder),
+            shadowElevation = composerElevation,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
@@ -353,19 +465,27 @@ internal fun Composer(
                         ) { attachment ->
                             AssistChip(
                                 onClick = { onRemoveAttachment(attachment.uri) },
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
+                                modifier =
+                                    Modifier.animateItem(
+                                        placementSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .spatial(),
+                                        fadeInSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                        fadeOutSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                    ),
                                 label = {
                                     val size = attachment.size?.takeIf { it > 0 }
                                     Text(
-                                        text = if (size != null) {
-                                            "${attachment.name} · ${formatBytes(size)}"
-                                        } else {
-                                            attachment.name
-                                        },
+                                        text =
+                                            if (size != null) {
+                                                "${attachment.name} · ${formatBytes(size)}"
+                                            } else {
+                                                attachment.name
+                                            },
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
@@ -420,30 +540,34 @@ internal fun Composer(
                     BasicTextField(
                         value = inputText,
                         onValueChange = onInputChange,
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 40.dp)
-                            .onPreviewKeyEvent { event ->
-                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                // Enter sends; Shift+Enter inserts a newline.
-                                if (event.key == Key.Enter && !event.isShiftPressed) {
-                                    if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
-                                    true
-                                } else {
-                                    false
-                                }
-                            },
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                        ),
+                        interactionSource = composerInteraction,
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .heightIn(min = 40.dp)
+                                .onPreviewKeyEvent { event ->
+                                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    // Enter sends; Shift+Enter inserts a newline.
+                                    if (event.key == Key.Enter && !event.isShiftPressed) {
+                                        if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                        textStyle =
+                            MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         maxLines = 4,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(
-                            onSend = {
-                                if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
-                            },
-                        ),
+                        keyboardActions =
+                            KeyboardActions(
+                                onSend = {
+                                    if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
+                                },
+                            ),
                         decorationBox = { innerTextField ->
                             Box(contentAlignment = Alignment.CenterStart) {
                                 if (inputText.isEmpty()) {
@@ -459,49 +583,85 @@ internal fun Composer(
                             }
                         },
                     )
-                    androidx.compose.animation.Crossfade(
-                        targetState = isGenerating,
-                        animationSpec = com.opencode.android.ui.theme.Motion.effects(),
-                        label = "sendStop",
-                    ) { generating ->
-                        if (generating) {
-                            FilledTonalIconButton(
-                                onClick = {
-                                    haptics.performHapticFeedback(
-                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                    )
-                                    onInterrupt()
+                    // Send/Stop: one button that breathes. The container colour
+                    // crossfades (wine → error container) and the whole button
+                    // scales with an expressive spring so arming a send feels
+                    // tactile rather than binary.
+                    val actionActive = composerHasText || isGenerating
+                    val actionScale by animateFloatAsState(
+                        targetValue = if (actionActive) 1f else 0.86f,
+                        animationSpec =
+                            com.opencode.android.ui.theme.Motion
+                                .expressive(),
+                        label = "actionScale",
+                    )
+                    val actionContainer by animateColorAsState(
+                        targetValue =
+                            when {
+                                isGenerating -> MaterialTheme.colorScheme.errorContainer
+                                composerHasText -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            },
+                        animationSpec =
+                            com.opencode.android.ui.theme.Motion
+                                .effects(),
+                        label = "actionContainer",
+                    )
+                    val actionContent by animateColorAsState(
+                        targetValue =
+                            when {
+                                isGenerating -> MaterialTheme.colorScheme.onErrorContainer
+                                composerHasText -> MaterialTheme.colorScheme.onPrimary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        animationSpec =
+                            com.opencode.android.ui.theme.Motion
+                                .effects(),
+                        label = "actionContent",
+                    )
+                    FilledTonalIconButton(
+                        onClick = {
+                            haptics.performHapticFeedback(
+                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                            )
+                            if (isGenerating) onInterrupt() else onSend()
+                        },
+                        enabled = (isGenerating || composerHasText) && !isUploading,
+                        colors =
+                            IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = actionContainer,
+                                contentColor = actionContent,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
+                        modifier =
+                            Modifier
+                                .size(40.dp)
+                                .graphicsLayer {
+                                    scaleX = actionScale
+                                    scaleY = actionScale
                                 },
-                                modifier = Modifier.size(40.dp),
-                            ) {
+                    ) {
+                        androidx.compose.animation.Crossfade(
+                            targetState = isGenerating,
+                            animationSpec =
+                                com.opencode.android.ui.theme.Motion
+                                    .effects(),
+                            label = "sendStopIcon",
+                        ) { generating ->
+                            if (isUploading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = actionContent,
+                                )
+                            } else if (generating) {
                                 Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.stop))
-                            }
-                        } else {
-                            FilledTonalIconButton(
-                                onClick = {
-                                    haptics.performHapticFeedback(
-                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                    )
-                                    onSend()
-                                },
-                                enabled = (inputText.isNotBlank() || attachments.isNotEmpty()) && !isUploading,
-                                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                ),
-                                modifier = Modifier.size(40.dp),
-                            ) {
-                                if (isUploading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                    )
-                                } else {
-                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.send))
-                                }
+                            } else {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = stringResource(R.string.send),
+                                )
                             }
                         }
                     }
@@ -510,19 +670,21 @@ internal fun Composer(
                 // never wrap or overlap on a phone.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(
-                        MaterialTheme.spacing.extraSmall,
-                        Alignment.CenterHorizontally,
-                    ),
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            MaterialTheme.spacing.extraSmall,
+                            Alignment.CenterHorizontally,
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (showAgent) {
                         AssistChip(
                             onClick = { showAgentPicker = true },
                             border = null,
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            ),
+                            colors =
+                                AssistChipDefaults.assistChipColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ),
                             label = { Text(text = selectedAgent, maxLines = 1) },
                             trailingIcon = {
                                 Icon(
@@ -536,14 +698,17 @@ internal fun Composer(
                     AssistChip(
                         onClick = { showModelPicker = true },
                         border = null,
-                        colors = AssistChipDefaults.assistChipColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ),
+                        colors =
+                            AssistChipDefaults.assistChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ),
                         modifier = Modifier.widthIn(max = 160.dp),
                         label = {
                             androidx.compose.animation.Crossfade(
                                 targetState = modelDisplayName,
-                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                                animationSpec =
+                                    com.opencode.android.ui.theme.Motion
+                                        .effects(),
                                 label = "modelName",
                             ) { name ->
                                 Text(
@@ -564,7 +729,10 @@ internal fun Composer(
                     if (variants.isNotEmpty()) {
                         ChipMenu(
                             label = selectedVariant.ifEmpty { "default" },
-                            options = variants.map { it.id },
+                            // Remembered: the composer recomposes per keystroke
+                            // and per streaming tick; the id list only changes
+                            // when the variant set does.
+                            options = remember(variants) { variants.map { it.id } },
                             onSelect = onVariantSelect,
                             modifier = Modifier.widthIn(min = 72.dp, max = 140.dp),
                         )
@@ -575,9 +743,10 @@ internal fun Composer(
                 // duplicated the top-bar subtitle and cost a full row.
                 if (isGenerating || isUploading || !statusError.isNullOrBlank()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = MaterialTheme.spacing.small, end = MaterialTheme.spacing.small, top = 2.dp, bottom = 2.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(start = MaterialTheme.spacing.small, end = MaterialTheme.spacing.small, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -586,21 +755,24 @@ internal fun Composer(
                         }
                         if (isUploading) {
                             Text(
-                                text = if (uploadTotal > 0) {
-                                    "Uploading $uploadDone/$uploadTotal…"
-                                } else {
-                                    "Uploading attachments…"
-                                },
+                                text =
+                                    if (uploadTotal > 0) {
+                                        "Uploading $uploadDone/$uploadTotal…"
+                                    } else {
+                                        "Uploading attachments…"
+                                    },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                             )
                         }
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !statusError.isNullOrBlank(),
-                            enter = androidx.compose.animation.fadeIn() +
-                                androidx.compose.animation.expandHorizontally(),
-                            exit = androidx.compose.animation.fadeOut() +
-                                androidx.compose.animation.shrinkHorizontally(),
+                            enter =
+                                androidx.compose.animation.fadeIn() +
+                                    androidx.compose.animation.expandHorizontally(),
+                            exit =
+                                androidx.compose.animation.fadeOut() +
+                                    androidx.compose.animation.shrinkHorizontally(),
                         ) {
                             // Long provider errors ("insufficient balance…"
                             // with account links) were hard-clipped at 2
@@ -612,20 +784,24 @@ internal fun Composer(
                                 color = MaterialTheme.colorScheme.error,
                                 maxLines = if (errorExpanded) Int.MAX_VALUE else 2,
                                 overflow = if (errorExpanded) TextOverflow.Visible else TextOverflow.Ellipsis,
-modifier = Modifier
-                                .pointerInput(statusError) {
-                                    detectTapGestures(
-                                        onTap = { errorExpanded = !errorExpanded },
-                                        onLongPress = {
-                                            val textToCopy = statusError.orEmpty()
-                                            if (textToCopy.isNotBlank()) {
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                clipboard.setPrimaryClip(ClipData.newPlainText("error_text", textToCopy))
-                                                toast(copiedMsg)
-                                            }
+                                modifier =
+                                    Modifier
+                                        .pointerInput(statusError) {
+                                            detectTapGestures(
+                                                onTap = { errorExpanded = !errorExpanded },
+                                                onLongPress = {
+                                                    val textToCopy = statusError.orEmpty()
+                                                    if (textToCopy.isNotBlank()) {
+                                                        val clipboard =
+                                                            context.getSystemService(
+                                                                Context.CLIPBOARD_SERVICE,
+                                                            ) as ClipboardManager
+                                                        clipboard.setPrimaryClip(ClipData.newPlainText("error_text", textToCopy))
+                                                        toast(copiedMsg)
+                                                    }
+                                                },
+                                            )
                                         },
-                                    )
-                                },
                             )
                         }
                     }
