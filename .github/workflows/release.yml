@@ -47,7 +47,7 @@ jobs:
 
       - name: Set up Gradle
         if: steps.signing.outputs.available == 'true'
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Decode keystore
         if: steps.signing.outputs.available == 'true'
