@@ -149,9 +149,9 @@ composeCompiler {
 dependencies {
     implementation("com.google.dagger:hilt-android:2.52")
     ksp("com.google.dagger:hilt-compiler:2.52")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
     // Core
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     // collectAsStateWithLifecycle — stops collection while backgrounded.
@@ -172,7 +172,7 @@ dependencies {
     implementation("androidx.glance:glance-appwidget:1.1.1")
 
     // Navigation
-    implementation("androidx.navigation:navigation-compose:2.8.4")
+    implementation("androidx.navigation:navigation-compose:2.10.2")
 
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
@@ -195,7 +195,7 @@ dependencies {
     // The Compose BOM must be applied per-configuration, otherwise the
     // androidTest/debug Compose artefacts resolve without a version.
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.09.03"))
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation(platform("androidx.compose:compose-bom:2024.09.03"))
     debugImplementation("androidx.compose.ui:ui-tooling")
