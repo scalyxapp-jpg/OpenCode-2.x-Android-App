@@ -70,6 +70,15 @@ jobs:
         if: steps.signing.outputs.available == 'true'
         run: ./gradlew :app:assembleRelease --stacktrace
 
+      - name: Prepare release asset
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp app/build/outputs/apk/release/app-release.apk "OpenCode-Android-${VERSION}.apk"
+          echo "asset: OpenCode-Android-${VERSION}.apk"
+          sha256sum "OpenCode-Android-${VERSION}.apk"
+
       - name: Clean up signing material
         if: always() && steps.signing.outputs.available == 'true'
         run: rm -f release.jks keystore.properties
@@ -79,4 +88,4 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          files: app/build/outputs/apk/release/*.apk
+          files: OpenCode-Android-*.apk
