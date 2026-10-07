@@ -23,6 +23,23 @@ updates:
       network:
         patterns:
           - "com.squareup.*"
+    ignore:
+      # The Android toolchain must move as ONE unit: Android Gradle Plugin <->
+      # Gradle wrapper <-> Kotlin <-> KSP <-> Compose compiler. A major bump of
+      # any single one breaks the others (and CI), so Dependabot only proposes
+      # compatible minor/patch updates; a maintainer does majors deliberately.
+      - dependency-name: "com.android.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "org.jetbrains.kotlin*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.google.devtools.ksp"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "androidx.compose:compose-bom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle"
+        update-types: ["version-update:semver-major"]
     labels:
       - dependencies
 
