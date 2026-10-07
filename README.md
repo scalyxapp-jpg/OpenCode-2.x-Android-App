@@ -24,8 +24,32 @@ web UI or TUI.
 > only to describe what this client connects to. You need your own running
 > OpenCode server — this app is a client, not a server.
 
+## Download
+
+Grab the signed APK straight from the latest release — no build required:
+
+|                          |                                                                                                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Latest APK**           | **[⬇ Download `OpenCode-Android.apk`](https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/releases/latest/download/OpenCode-Android.apk)**       |
+| Version-pinned           | [`OpenCode-Android-1.0.0.apk`](https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/releases/download/v1.0.0/OpenCode-Android-1.0.0.apk) (v1.0.0) |
+| All releases & checksums | [Releases page](https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/releases)                                                                    |
+
+Direct URL — paste it into your phone's browser to download the newest build:
+
+```
+https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/releases/latest/download/OpenCode-Android.apk
+```
+
+Every release is signed with the same key, so a newer version installs straight
+over an older one. Each release note lists the file's **SHA-256** and the
+signing certificate for verification.
+
+After installing, open the app and enter your OpenCode server address — see
+[Getting started](#getting-started).
+
 ## Contents
 
+- [Download](#download)
 - [Features](#features)
 - [Requirements](#requirements)
 - [Getting started](#getting-started)
@@ -76,6 +100,9 @@ The app starts on a backend picker: enter your server's base URL (for example
 baked into the build.
 
 ## Getting started
+
+Prefer a ready-made build? Use the [Download](#download) link above — the rest
+of this section is for building from source.
 
 ```bash
 # 1. Clone
