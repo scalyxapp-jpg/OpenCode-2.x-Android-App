@@ -93,7 +93,7 @@ After installing, open the app and enter your OpenCode server address — see
 | **App**     | Android 7.0 (API 25) or newer                                             |
 | **Server**  | A reachable OpenCode server exposing its HTTP API (e.g. `opencode serve`) |
 | **Network** | The phone must reach the server — same LAN, VPN, or a tunnel              |
-| **Build**   | JDK 17, Android SDK 36                                                    |
+| **Build**   | JDK 17, Android SDK 37                                                    |
 
 The app starts on a backend picker: enter your server's base URL (for example
 `http://192.168.1.100:4096`). Nothing is hard-coded and no server address is

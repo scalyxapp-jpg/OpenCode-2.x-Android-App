@@ -133,6 +133,7 @@ internal fun ChatScreen(
     val listState = rememberLazyListState()
     var selectedTab by remember { mutableIntStateOf(0) }
     val context = androidx.compose.ui.platform.LocalContext.current
+    val resources = androidx.compose.ui.platform.LocalResources.current
 
     // Android share sheet -> composer: shared text becomes the draft, shared
     // images become attachments. Consumed once per share signal.
@@ -243,7 +244,7 @@ internal fun ChatScreen(
                         if (sharedScope != null && animatedVisibilityScope != null) {
                             with(sharedScope) {
                                 Modifier.sharedElement(
-                                    state = rememberSharedContentState(key = "session-$sessionId"),
+                                    sharedContentState = rememberSharedContentState(key = "session-$sessionId"),
                                     animatedVisibilityScope = animatedVisibilityScope,
                                 )
                             }
@@ -418,8 +419,8 @@ internal fun ChatScreen(
                                     viewModel.shareSession { slug ->
                                         toast(
                                             context,
-                                            slug?.let { context.getString(R.string.shared_fmt, it) }
-                                                ?: context.getString(R.string.share_failed),
+                                            slug?.let { resources.getString(R.string.shared_fmt, it) }
+                                                ?: resources.getString(R.string.share_failed),
                                         )
                                     }
                                 },
@@ -432,12 +433,12 @@ internal fun ChatScreen(
                                         toast(
                                             context,
                                             export?.let {
-                                                context.resources.getQuantityString(
+                                                resources.getQuantityString(
                                                     R.plurals.exported_chars,
                                                     it.length,
                                                     it.length,
                                                 )
-                                            } ?: context.getString(R.string.export_failed),
+                                            } ?: resources.getString(R.string.export_failed),
                                         )
                                     }
                                 },
@@ -456,7 +457,7 @@ internal fun ChatScreen(
                                     viewModel.restoreMessages { ok ->
                                         toast(
                                             context,
-                                            context.getString(
+                                            resources.getString(
                                                 if (ok) R.string.messages_restored else R.string.restore_failed,
                                             ),
                                         )
@@ -480,7 +481,7 @@ internal fun ChatScreen(
                                     viewModel.initProject { ok ->
                                         toast(
                                             context,
-                                            context.getString(
+                                            resources.getString(
                                                 if (ok) R.string.initialized_ok else R.string.init_failed,
                                             ),
                                         )

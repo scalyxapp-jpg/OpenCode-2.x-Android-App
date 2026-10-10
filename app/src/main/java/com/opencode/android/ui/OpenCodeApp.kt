@@ -210,13 +210,15 @@ internal fun OpenCodeApp(
         // Every user-facing error surfaces here, on top of whatever screen is open
         // (see UserMessages).
         val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
-        val context = androidx.compose.ui.platform.LocalContext.current
+        val resources = androidx.compose.runtime.rememberUpdatedState(
+            androidx.compose.ui.platform.LocalResources.current,
+        )
         LaunchedEffect(Unit) {
             UserMessages.events.collect { event ->
                 val text =
                     when (event) {
                         is UserMessages.Event.Res -> {
-                            context.getString(event.id, *event.args.toTypedArray())
+                            resources.value.getString(event.id, *event.args.toTypedArray())
                         }
 
                         is UserMessages.Event.Raw -> {

@@ -1094,7 +1094,7 @@ private fun SessionRow(
         if (sharedScope != null && animatedVisibilityScope != null) {
             with(sharedScope) {
                 Modifier.sharedElement(
-                    state = rememberSharedContentState(key = "session-${session.id}"),
+                    sharedContentState = rememberSharedContentState(key = "session-${session.id}"),
                     animatedVisibilityScope = animatedVisibilityScope,
                 )
             }

@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -207,6 +208,7 @@ internal fun MarkdownText(
                                 ).padding(MaterialTheme.spacing.small),
                     ) {
                         val context = LocalContext.current
+                        val resources = LocalResources.current
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -225,7 +227,7 @@ internal fun MarkdownText(
                                     clipboard.setPrimaryClip(
                                         ClipData.newPlainText("code", block.code),
                                     )
-                                    toast(context, context.getString(R.string.copied))
+                                    toast(context, resources.getString(R.string.copied))
                                 },
                                 modifier = Modifier.size(28.dp),
                             ) {

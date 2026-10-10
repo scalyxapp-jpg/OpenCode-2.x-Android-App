@@ -23,6 +23,11 @@ updates:
       network:
         patterns:
           - "com.squareup.*"
+      # Hilt/Dagger must move as a unit too: the Gradle plugin and the
+      # `hilt-android`/`hilt-compiler` artifacts have to share a version.
+      dagger:
+        patterns:
+          - "com.google.dagger*"
     ignore:
       # The Android toolchain must move as ONE unit: Android Gradle Plugin <->
       # Gradle wrapper <-> Kotlin <-> KSP <-> Compose compiler. A major bump of
