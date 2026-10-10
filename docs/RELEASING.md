@@ -64,14 +64,23 @@ keytool -genkeypair -v -keystore release.jks -alias opencode \
 1. Update `versionName` / `versionCode` in `app/build.gradle.kts`.
 2. Move the `Unreleased` entries in `CHANGELOG.md` under the new version and add
    the compare link.
-3. Commit, then tag and push:
+3. Add the release notes for the new version as **`docs/releases/vX.Y.Z.md`**
+   (copy `docs/releases/v1.0.0.md` as a template). This file is the source of
+   truth for the release body — see [releases/README.md](releases/README.md).
+   Do **not** hard-code the APK checksum; CI appends it.
+4. Commit, then tag and push:
     ```bash
-    git tag -a v1.0.0 -m "v1.0.0"
+    git commit -am "docs: release notes for v1.1.0"
+    git tag -a v1.1.0 -m "v1.1.0"
     git push origin main --tags
     ```
-4. The **Release** workflow builds a signed APK and attaches it to a GitHub
-   Release. Without the signing secrets the job skips and warns, so forks are
-   unaffected.
+5. The **Release** workflow builds a signed APK, names it
+   `OpenCode-Android-<version>.apk` (plus the stable `OpenCode-Android.apk`),
+   uses `docs/releases/vX.Y.Z.md` as the release body, appends the artifact
+   checksums and publishes the GitHub Release. Without the signing secrets the
+   job skips and warns, so forks are unaffected.
+6. If the notes file is missing, the workflow warns and falls back to a minimal
+   body — the release still succeeds.
 
 ## 5. Optional hardening
 

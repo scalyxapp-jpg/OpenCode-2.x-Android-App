@@ -83,6 +83,39 @@ jobs:
           cp "$APK" "OpenCode-Android.apk"
           sha256sum OpenCode-Android.apk "OpenCode-Android-${VERSION}.apk"
 
+      - name: Prepare release notes
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES="docs/releases/${GITHUB_REF_NAME}.md"
+          # The notes live in the repository so they are versioned and reviewable.
+          if [ -f "$NOTES" ]; then
+            cp "$NOTES" release-body.md
+            echo "release notes: $NOTES"
+          else
+            {
+              echo "## ${GITHUB_REF_NAME}"
+              echo
+              echo "See [CHANGELOG.md](CHANGELOG.md) for the full list of changes."
+            } > release-body.md
+            echo "::warning::$NOTES not found; falling back to a minimal release body."
+          fi
+          # Append build-time checksums: the APK hash changes per build, so it
+          # must not be hard-coded in the versioned notes file.
+          {
+            echo
+            echo "---"
+            echo
+            echo "## Build artifacts"
+            echo
+            echo "Built from commit \`${GITHUB_SHA:0:7}\` by GitHub Actions."
+            echo
+            echo '```'
+            sha256sum OpenCode-Android.apk "OpenCode-Android-${VERSION}.apk"
+            echo '```'
+          } >> release-body.md
+
       - name: Clean up signing material
         if: always() && steps.signing.outputs.available == 'true'
         run: rm -f release.jks keystore.properties
@@ -91,7 +124,8 @@ jobs:
         if: steps.signing.outputs.available == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          # Release notes come from docs/releases/<tag>.md (see the step above).
+          body_path: release-body.md
           files: |
             OpenCode-Android.apk
             OpenCode-Android-*.apk
