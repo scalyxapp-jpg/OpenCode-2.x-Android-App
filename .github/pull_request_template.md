@@ -29,9 +29,9 @@ Fixes #
 
 ## Checklist
 
-- [ ] My change follows the project's conventions (see `AGENTS.md`)
+- [ ] My change follows the project's conventions (see `CONTRIBUTING.md`)
 - [ ] I did **not** commit secrets, keystores, real hosts or personal paths
 - [ ] New user-facing text lives in `strings.xml`
 - [ ] Public functions have explicit return types
 - [ ] I updated `CHANGELOG.md` under `Unreleased` if the change is user-visible
-- [ ] I updated the docs (`README.md`, `docs/`, `CONTEXT.md`) where relevant
+- [ ] I updated the docs (`README.md`, `docs/`) where relevant

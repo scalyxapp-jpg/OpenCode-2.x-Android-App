@@ -1,9 +1,8 @@
 # Architecture
 
-This document is the map of the codebase. For the precise vocabulary used
-throughout the code (`StreamReducer`, `ConversationState`, `BackendSession`, …),
-read [CONTEXT.md](../CONTEXT.md) — it is the authoritative domain glossary. For
-the server API contract the client depends on, see
+This document is the map of the codebase: its layers, the core concepts
+(`StreamReducer`, `ConversationState`, `BackendSession`, …) and the streaming
+pipeline. For the server API contract the client depends on, see
 [OPENCODE-API.md](OPENCODE-API.md).
 
 ## At a glance

@@ -34,9 +34,10 @@ By participating you agree to our [Code of Conduct](CODE_OF_CONDUCT.md).
 | `app/src/test/`                                      | JVM unit tests — fast, no device.                                                                        |
 | `app/src/androidTest/`                               | On-device tests (optional, skip without a server).                                                       |
 
-`CONTEXT.md` is the domain glossary. Read it before a non-trivial change; it
-names the concepts (SessionStreamer, StreamReducer, ConversationState, …) so
-you can find the code.
+The module map and the core concepts (`SessionStreamer`, `StreamReducer`,
+`ConversationState`, …) are described in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Read it before a non-trivial
+change — it names what lives where, so you can find the code.
 
 ## Making a change
 
