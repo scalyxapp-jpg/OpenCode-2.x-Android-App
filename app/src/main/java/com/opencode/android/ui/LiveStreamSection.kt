@@ -57,7 +57,10 @@ internal fun LiveStatusItem(
 @Composable
 internal fun LiveReasoningItem(liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>) {
     val live by liveState.collectAsStateWithLifecycle()
-    if (live.reasoning.isNotBlank()) {
+    // The setting controls reasoning summaries everywhere; the LIVE block ignored it,
+    // so reasoning appeared even with the toggle off.
+    val showReasoningLive = com.opencode.android.data.AppSettingsStore.state.value.showReasoningSummaries
+    if (showReasoningLive && live.reasoning.isNotBlank()) {
         LiveReasoningBubble(
             text = live.reasoning,
             agent = live.agent,

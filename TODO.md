@@ -1,19 +1,23 @@
-# Auftragsplan — Runde 2
+# Auftragsplan — Runde 3
 
 Vorab: Android-Gerät NICHT angeschlossen — keine adb-Schritte.
 Compile/Build erst am Ende (vor der APK), nicht nach jedem Auftrag.
-Recherche (Web) für Best Practices wird genutzt, wo Entscheidungen anstehen.
 
-Stand Runde 1 (bereits behoben — NICHT erneut melden): Paging-Leiter, Optimistic-Echo-Rollback,
-OkHttp-Fehler-Body-Leaks, Permission-Reply-Session-Lookup, ProviderDirectory-Invalidate,
-Cache-Stale-Overwrite, Store-RMW-Locks, SSE-Steuer-Event-Verdrängung, partTypes-Deckel,
-turnEnded/step-start, NotifyDone einmal pro Turn, Same-Session-Reload, addAttachments atomar,
-Service-onTaskRemoved, Deep-Link-Konsum, Widget-Ready-Gate, ClientLog-Leak, SessionError-Badge,
-Revert-/Projekt-/Backend-Bestätigungen, Guard-Strings, Suchfeld-Layout (1.2.1).
+Bereits in Runde 1+2 behoben (NICHT erneut melden): Paging-Leiter, Echo-Rollback,
+OkHttp-Leaks, Permission-Session-Lookup, ProviderDirectory-Invalidierung, Cache-Stale-Overwrite,
+Store-RMW-Locks, SSE-Steuerkanal, partTypes-Deckel, turnEnded/step-start, NotifyDone einmal,
+Same-Session-Reload, addAttachments, Lifecycle (onTaskRemoved/Deep-Link/Widget/ClientLog),
+Semantik (abort≠success, compaction.failed, session.error, Form-Antworten nie leer,
+isKnownMissing, Review→Session info), GUI (Suchfeld, Filter, Unread-Baseline, PullToRefresh,
+Tool-Gruppen-IDs, Guard-Token-Draft, Splash-onDone, MoreVert auf eigenen Nachrichten,
+Bestätigungen), Workflows (Backend-Verifikation vor Anwenden, Retry Text-oder-Anhang,
+Slash-Restore, Archivieren lokal+Undo, Projekt-Rename-Override, Share-Verfügbarkeit,
+Polling lifecycles), UX (Close all tabs, Appearance-Toggle, Filter persistiert,
+Transkript kopieren, Archived-Count).
 
-- [x] Auftrag 1: Bugs + Race-Conditions (Runde 2) — 21 Fixes (State/IO/Plattform)
-- [x] Auftrag 2: Semantik-Probleme / Unklarheiten — 12 Fixes
-- [x] Auftrag 3: GUI-Logik + Usability — 13 Fixes
-- [x] Auftrag 4: Workflows / Routinen — 7 Fixes
-- [x] Auftrag 5: 5 Verbesserungen (Close all tabs, Appearance-Toggle, Filter persistieren, Transkript kopieren, Archived-Count + filter-bewusster Leerzustand)
-- [x] Auftrag 6: Release-APK 1.3.0 (versionCode 6) + HTTP-Server auf 100.107.159.17:8899 (HTTP 200)
+- [x] Auftrag 1: Bugs + Race-Conditions (Runde 3) — 15 Fixes
+- [x] Auftrag 2: Semantik-Probleme / Unklarheiten — 6 Fixes
+- [x] Auftrag 3: GUI-Logik + Usability — 8 Fixes
+- [x] Auftrag 4: Workflows / Routinen — 6 Fixes
+- [x] Auftrag 5: 5 Verbesserungen (Tab-State, Copy last answer, Projekt im Untertitel, Live-Reasoning-Setting, Archived-Tag)
+- [x] Auftrag 6: Release-APK 1.4.0 (versionCode 7) + HTTP-Server auf 100.107.159.17:8899 (HTTP 200)

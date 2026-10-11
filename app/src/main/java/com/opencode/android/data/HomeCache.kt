@@ -60,6 +60,7 @@ object HomeCache : HomeStore {
     }
 
     override suspend fun read(): HomeSnapshot? {
+        val generationAtStart = generation.get()
         synchronized(lock) { memory }?.let { return it }
         return withContext(Dispatchers.IO) {
             val f = fileFor() ?: return@withContext null
@@ -74,6 +75,9 @@ object HomeCache : HomeStore {
                 val text = f.readText()
                 if (text.isBlank()) return@withContext null
                 val parsed = json.decodeFromString<HomeSnapshot>(text)
+                // A clearAll() (backend switch) that landed while this disk read ran
+                // must win: republishing would show the PREVIOUS server's projects.
+                if (generation.get() != generationAtStart) return@withContext null
                 // A write (fresh network result) may have landed while this disk
                 // read ran; keep the newer in-memory snapshot instead of
                 // overwriting it with the older file content.

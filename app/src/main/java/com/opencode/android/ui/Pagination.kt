@@ -1,10 +1,13 @@
 package com.opencode.android.ui
 
 /**
- * Message-tail paging. The server exposes no cursor/offset pagination (verified:
- * `offset` is ignored, `before` errors), so older history can only be reached by
- * asking for a larger tail. These bounds keep the default memory footprint small
- * while still letting the user walk back.
+ * LEGACY helper: kept only because its unit test pins the boundary rule; it has NO
+ * production caller any more.
+ *
+ * The sentence below used to claim "the server exposes no cursor pagination" — that is
+ * outdated. The real "load older" path walks the opaque `cursor.previous` value
+ * (see [com.opencode.android.data.MessagePage] and `util/MessageCursor`). Do not build
+ * new paging on this file.
  *
  * Pure so the boundary rule can be unit-tested.
  *

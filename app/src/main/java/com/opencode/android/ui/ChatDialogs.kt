@@ -1,4 +1,5 @@
 package com.opencode.android.ui
+import com.opencode.android.util.formatCount
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
@@ -127,7 +128,7 @@ internal fun ContextPanelDialog(
                     // first turn; show a hint instead of a wall of zeros.
                     val hasUsage = it.totalTokens > 0L || it.totalCost > 0.0
                     if (hasUsage) {
-                        item { ContextRow("Total tokens", "${it.totalTokens}") }
+                        item { ContextRow("Total tokens", formatCount(it.totalTokens)) }
                         it.contextLimit?.let { limit ->
                             val pct = if (limit > 0) (it.totalTokens * 100 / limit).coerceAtMost(100) else 0
                             item { ContextRow(stringResource(R.string.usage), "$pct%") }
@@ -135,7 +136,12 @@ internal fun ContextPanelDialog(
                         item { ContextRow("Input-Tokens", "${it.inputTokens}") }
                         item { ContextRow("Output-Tokens", "${it.outputTokens}") }
                         item { ContextRow("Reasoning-Tokens", "${it.reasoningTokens}") }
-                        item { ContextRow("Cache (read/write)", "${it.cacheRead} / ${it.cacheWrite}") }
+                        item {
+                            ContextRow(
+                                "Cache (read/write)",
+                                "${formatCount(it.cacheRead)} / ${formatCount(it.cacheWrite)}",
+                            )
+                        }
                         item {
                             ContextRow(
                                 stringResource(R.string.total_cost),

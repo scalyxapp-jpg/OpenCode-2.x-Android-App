@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.foundation.layout.Spacer
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
@@ -188,8 +189,19 @@ internal fun HomeScreen(
     val todayLabel = stringResource(R.string.group_sessions_today)
     val yesterdayLabel = stringResource(R.string.group_sessions_yesterday)
     val olderLabel = stringResource(R.string.group_sessions_older)
+    // Day key: `groupSessions` uses calendar day boundaries, so an app left open over
+    // midnight kept yesterday's sessions in "Today" (the row's relative time disagreed).
+    val dayKey = System.currentTimeMillis() / 86_400_000L
     val grouped =
-        remember(filteredSessions, uiState.pinnedIds, pinnedLabel, todayLabel, yesterdayLabel, olderLabel) {
+        remember(
+            filteredSessions,
+            uiState.pinnedIds,
+            pinnedLabel,
+            todayLabel,
+            yesterdayLabel,
+            olderLabel,
+            dayKey,
+        ) {
             groupSessions(
                 filteredSessions,
                 uiState.pinnedIds,
@@ -281,8 +293,13 @@ internal fun HomeScreen(
                         }
                     }
                     // Switch to another opencode serve backend (back to start screen).
+                    // A different icon from the status button next to it: two identical
+                    // "Dns" icons with different actions were indistinguishable.
                     IconButton(onClick = onSwitchBackend) {
-                        Icon(Icons.Default.Dns, contentDescription = stringResource(R.string.switch_backend))
+                        Icon(
+                            Icons.Default.SwapHoriz,
+                            contentDescription = stringResource(R.string.switch_backend),
+                        )
                     }
                     IconButton(onClick = {
                         viewModel.loadProjects()
@@ -416,7 +433,10 @@ internal fun HomeScreen(
                                         showArchived = uiState.showArchived,
                                         onToggleArchived = viewModel::setShowArchived,
                                         archivedCount =
-                                            com.opencode.android.data.ArchivedSessionsStore.ids().size,
+                                            // Counted per selected project (the store is
+                                            // device-global): the raw size claimed hidden
+                                            // sessions this view cannot show.
+                                            uiState.archivedCount,
                                     )
                                 }
 
@@ -1453,6 +1473,15 @@ private fun SessionRow(
                             fontWeight = FontWeight.SemiBold,
                             color = badgeColor,
                         )
+                        // The archived view explains itself: every row here is hidden
+                        // from the normal list.
+                        if (isArchived) {
+                            Text(
+                                text = stringResource(R.string.archived),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Text(
                             text = "·",
                             style = MaterialTheme.typography.labelSmall,

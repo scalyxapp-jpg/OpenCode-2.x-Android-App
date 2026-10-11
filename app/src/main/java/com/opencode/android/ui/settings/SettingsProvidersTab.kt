@@ -185,8 +185,18 @@ internal fun ProvidersTab() {
                 } else {
                     OutlinedButton(onClick = {
                         scope.launch {
+                            var ok = false
                             try {
-                                backendSession.api.disconnectProvider(p.id)
+                                val resp = backendSession.api.disconnectProvider(p.id)
+                                // The response was discarded, so a server-side failure
+                                // looked identical to success while the UI reloaded.
+                                ok = resp.isSuccessful
+                                if (!ok) {
+                                    com.opencode.android.util.AppLog.e(
+                                        com.opencode.android.util.APP_LOG_TAG,
+                                        "disconnectProvider HTTP ${resp.code()}",
+                                    )
+                                }
                                 backendSession.api.globalDispose()
                             } catch (e: Exception) {
                                 // Best-effort teardown, but never silent: a
@@ -195,9 +205,15 @@ internal fun ProvidersTab() {
                                     com.opencode.android.util.APP_LOG_TAG,
                                     "disconnectProvider failed: ${e.message}",
                                 )
+                                com.opencode.android.util.UserMessages.post(
+                                    com.opencode.android.R.string.action_failed,
+                                    e.message ?: "disconnect failed",
+                                )
                             }
-                            providerDirectory.invalidate()
-                            reload++
+                            if (ok) {
+                                providerDirectory.invalidate()
+                                reload++
+                            }
                         }
                     }) { Text(stringResource(R.string.disconnect)) }
                 }

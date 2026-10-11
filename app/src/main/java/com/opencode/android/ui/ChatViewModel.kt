@@ -149,6 +149,11 @@ data class ChatUiState(
     val contextUsage: ContextUsage? = null,
     val contextInfo: ContextInfo? = null,
     val files: List<FileEntry> = emptyList(),
+    // Directory listing state (see loadFiles): the previous list stays
+    // visible while loading, and a failure keeps it instead of showing the
+    // old contents under a new breadcrumb.
+    val filesLoading: Boolean = false,
+    val filesError: String? = null,
     val commands: List<CommandEntry> = emptyList(),
     // "/mcp": configured MCP servers (name + status), alphabetical.
     val mcpServers: List<McpEntry> = emptyList(),
@@ -474,8 +479,23 @@ class ChatViewModel
                                 pendingPersist = false,
                                 messages = emptyList(),
                                 canLoadOlder = false,
+                                // Session-scoped collections: the loaders below only
+                                // write NON-empty results, so the previous session's
+                                // question cards / todos / diff stayed on screen under
+                                // the new title (and "Answer" targeted the old session).
+                                pendingQuestions = emptyList(),
+                                pendingPermissions = emptyList(),
+                                todos = emptyList(),
+                                vcsDiff = emptyList(),
+                                vcsDiffError = null,
+                                contextUsage = null,
+                                contextInfo = null,
                             )
                         }
+                        // Fence the old refresh: while this load runs, `_uiState.session`
+                        // is still the PREVIOUS session, so a late write from it would
+                        // pass its own id check and paint A's messages under B.
+                        messagesJob?.cancel()
                         // Keep the revision map bounded to the active session.
                         selectionGuard.retainOnly(sessionId)
                         autoAdoptedGuardRevisions.clear()
@@ -919,14 +939,28 @@ class ChatViewModel
                 .contextLimitFor(_uiState.value.providerGroups, provider, modelId)
 
         fun loadFiles(path: String) {
+            // Fenced by the requested path: tapping two folders quickly let the LAST
+            // response win, so the list showed one directory under the other's
+            // breadcrumb. The previous list is kept visible while loading and restored
+            // on failure (no silent "old list under the new path").
+            filesRequestPath = path
             viewModelScope.launch {
+                val previous = _uiState.value.files
+                _uiState.update { it.copy(filesLoading = true, filesError = null) }
                 try {
                     // /file takes a RELATIVE path + an absolute `directory` base.
                     val files = api.getFiles(path = ".", directory = path)
-                    _uiState.update { it.copy(files = files) }
+                    if (filesRequestPath != path) return@launch
+                    _uiState.update { it.copy(files = files, filesLoading = false) }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    if (filesRequestPath != path) return@launch
                     AppLog.e(APP_LOG_TAG, "loadFiles failed: ${e.message}")
                     UserMessages.post(R.string.could_not_load_files, "${e.message}")
+                    _uiState.update {
+                        it.copy(files = previous, filesLoading = false, filesError = e.message)
+                    }
                 }
             }
         }
@@ -1028,6 +1062,17 @@ class ChatViewModel
         // the previous poll so two jobs cannot race and overwrite each other.
         private var mcpToggleJob: Job? = null
 
+        /** Per-server toggle jobs (see setMcpEnabled). */
+        private val mcpToggleJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+
+        /** Path of the last requested directory listing (see loadFiles). */
+        @Volatile
+        private var filesRequestPath: String? = null
+
+        /** True when [performSend] failed and its draft was restored (see performRetry). */
+        @Volatile
+        private var lastFailureWasSend: Boolean = false
+
         fun toggleMcp(
             name: String,
             enable: Boolean,
@@ -1044,7 +1089,10 @@ class ChatViewModel
                         },
                 )
             }
-            mcpToggleJob?.cancel()
+            // One job PER SERVER: a single shared job meant toggling server B
+            // cancelled an unconfirmed connect/disconnect still in flight for A, so
+            // A's optimistic status silently flipped back with no request ever landing.
+            mcpToggleJobs.remove(name)?.cancel()
             mcpToggleJob =
                 viewModelScope.launch {
                     try {
@@ -1086,8 +1134,13 @@ class ChatViewModel
                         AppLog.e(APP_LOG_TAG, "toggleMcp failed: ${e.message}")
                         UserMessages.post(R.string.mcp_toggle_failed, "${e.message}")
                         loadMcp()
+                    } finally {
+                        // Drop this server's entry so the map cannot grow and a later
+                        // toggle of the same server starts fresh.
+                        mcpToggleJobs.remove(name)
                     }
                 }
+            mcpToggleJob?.let { mcpToggleJobs[name] = it }
         }
 
         fun authenticateMcp(name: String) {
@@ -2944,6 +2997,7 @@ class ChatViewModel
                                 }
                             }
                         }
+                        lastFailureWasSend = false
                         _uiState.update { it.copy(guardConflict = false) }
                         AppLog.d(APP_LOG_TAG) { "sendMessage: API ok" }
                         refreshMessages(session.id)
@@ -2961,6 +3015,7 @@ class ChatViewModel
                         // leaving it made the conversation show a message the server
                         // never received — and put the text back in the composer so a
                         // failed send is retryable without retyping.
+                        lastFailureWasSend = true
                         rollbackOptimisticEcho(
                             messageId,
                             rawText,
@@ -3111,7 +3166,12 @@ class ChatViewModel
             // attachments (each only when it is currently empty), so a text-only or
             // attachment-only failure never met the "&&" condition and Retry only
             // reloaded the session.
-            if (_uiState.value.attachments.isNotEmpty() || _uiState.value.inputText.isNotBlank()) {
+            // Only re-send when the LAST failure actually was a send. The old check
+            // used "the composer is not empty" as a proxy, so a banner from a failed
+            // session LOAD plus text the user had typed meanwhile was sent instead of
+            // reloading the session.
+            if (lastFailureWasSend) {
+                lastFailureWasSend = false
                 _uiState.update { it.copy(error = null, statusError = null) }
                 performSend()
                 return

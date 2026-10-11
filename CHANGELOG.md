@@ -20,6 +20,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.4.0] - 2026-10-11
+
+Dritte Tiefenanalyse: Zustand/Streaming, IO/Daten, Plattform/Android-16, Semantik, GUI, Workflows.
+
+### Fixed (Auswahl)
+- **Session-Wechsel**: sitzungsgebundene Listen (Fragen, Permissions, Todos, Diff, Kontext) werden
+  jetzt geleert, und der laufende Refresh der alten Session wird gefenced (keine „A unter B"-Flackerei).
+- **Turn-Ende**: `session.status idle` räumt auch `isCompacting`; Home-Statusmengen werden mit dem
+  SSE-Zustand gemerged (Badge blinkt nicht mehr weg).
+- **Netz**: verworfene `Response<ResponseBody>` (interrupt, synchroner Prompt, Client-Log,
+  OAuth-Callback) werden geschlossen — kein Verbindungsleck pro „Stop".
+- **Katalog**: ein laufender Provider-Fetch gilt nicht mehr als „stale" (der ~6 MB Katalog blieb
+  sonst dauerhaft auf „Loading" und die Modellauswahl war leer).
+- **Cache**: Lesevorgänge können nach einem Backend-Wechsel keinen Snapshot des alten Servers
+  wiederbeleben (Generationsprüfung auch im Read-Pfad).
+- **Cancellation**: der äußere `loadProjects`-Catch reicht `CancellationException` durch (kein
+  falscher Fehler-Banner mehr).
+- **Android 16 / Plattform**: doppelte IME-Insets behoben (Root konsumiert das Inset), Manifest
+  registriert `ACTION_SEND_MULTIPLE` (Mehrfach-Share war toter Code), Benachrichtigungen werden bei
+  verweigerter Berechtigung nicht mehr fälschlich als „schon gemeldet" markiert, Widget-Zustand
+  wird zentral gespiegelt (kein ewiges „Working…" nach Verlassen des Chats), Release-CI prüft
+  Tag gegen APK-Version.
+
+### Changed / Added
+- **Semantik**: „Restore messages" heißt korrekt „Bring back reverted messages" (es ist ein
+  Server-Un-Revert, kein Cache-Restore), Nutzungsprozent nutzt überall dieselbe (overflow-sichere)
+  Berechnung, Archiv-Zähler ist projektbezogen statt geräteglobal, veraltete Doku in AppLog/Pagination
+  und dem Echo-Präfix korrigiert.
+- **GUI**: Guard-Button tut, was sein Label verspricht; eine offene Frage wird nicht mehr doppelt
+  interaktiv gerendert; `statusError` erscheint nur einmal; IME-Senden respektiert laufende Uploads;
+  Tagesgruppierung aktualisiert sich über Mitternacht.
+- **Vergoldung**: Tab-Zustand überlebt Rotation/Prozess-Tod (`rememberSaveable`), „Copy last answer",
+  Projektname im Chat-Untertitel, Live-Reasoning respektiert die Einstellung, „Archived"-Markierung
+  in der Archiv-Ansicht, `@`-Mention-Picker ohne Kappung, eigene Icons/Clear-Buttons in Pickern,
+  Tausender-Trennung für Token-Zahlen.
+
 ## [1.3.0] - 2026-10-11
 
 Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and workflows.
@@ -223,7 +259,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.1...v1.2.0

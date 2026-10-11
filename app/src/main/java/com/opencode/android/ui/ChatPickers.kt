@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Search
@@ -129,6 +130,18 @@ internal fun PickerSearchField(
         modifier = modifier.fillMaxWidth(),
         placeholder = { Text(placeholder) },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        // One-tap reset, like the home search field: clearing a search by hand,
+        // character by character, is needless work in every picker.
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                androidx.compose.material3.IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = stringResource(R.string.clear_search),
+                    )
+                }
+            }
+        },
         singleLine = true,
     )
 }

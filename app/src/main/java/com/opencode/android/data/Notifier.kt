@@ -199,8 +199,14 @@ object Notifier {
     ) {
         if (!AppSettingsStore.state.value.notifyPermissions) return
         val context = appContext ?: return
+        // From API 33 a denied POST_NOTIFICATIONS makes notify() a silent no-op (no
+        // SecurityException), so the id must not be marked as "already notified" —
+        // otherwise the still-pending request was never announced again after the
+        // user granted the permission.
+        val notificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
         requests.forEach { request ->
             val requestId = request.id ?: return@forEach
+            if (!notificationsEnabled) return@forEach
             if (!markNotified(notifiedPermissions, requestId)) return@forEach
             val title = request.title?.ifBlank { null } ?: "Permission required"
             val text =
@@ -264,8 +270,9 @@ object Notifier {
         sessionId: String? = null,
     ) {
         if (!AppSettingsStore.state.value.notifyPermissions) return
-        if (!markNotified(notifiedQuestions, question.id)) return
         val context = appContext ?: return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (!markNotified(notifiedQuestions, question.id)) return
         val text =
             question.questions
                 .firstOrNull()

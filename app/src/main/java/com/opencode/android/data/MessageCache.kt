@@ -86,6 +86,7 @@ object MessageCache : MessageStore {
     override suspend fun read(sessionId: String): List<Message>? {
         // Memory first: a repeat open returns without suspending or parsing.
         memory.get(sessionId)?.let { return it }
+        val generationAtStart = generation.get()
         return withContext(Dispatchers.IO) {
             val file = fileFor(sessionId) ?: return@withContext null
             if (!file.exists()) return@withContext null
@@ -107,7 +108,10 @@ object MessageCache : MessageStore {
                     // content unconditionally would roll the conversation back to
                     // an older state until the next refresh; putIfAbsent keeps the
                     // newer entry and returns it.
-                    ?.let { memory.putIfAbsent(sessionId, it) }
+                    ?.let {
+                        // A clearAll() during the read wins (see HomeCache.read).
+                        if (generation.get() != generationAtStart) null else memory.putIfAbsent(sessionId, it)
+                    }
             } catch (e: OutOfMemoryError) {
                 // A best-effort cache must never take the process down.
                 AppLog.e(APP_LOG_TAG, "MessageCache read OOM — dropping cache")

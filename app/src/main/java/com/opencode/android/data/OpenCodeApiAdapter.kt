@@ -217,7 +217,8 @@ class OpenCodeApiAdapter(
         // setModel/setAgent was ignored and the prompt silently ran on the
         // PREVIOUS model/agent, so the user's picker choice appeared to be used
         // while a different model answered.
-        v2.prompt(sessionId, PromptBody(text = request.prompt.text))
+        val promptResponse = v2.prompt(sessionId, PromptBody(text = request.prompt.text))
+        promptResponse.body()?.close() ?: promptResponse.errorBody()?.close()
         return PromptResponse(data = PromptResult(sessionId = sessionId))
     }
 
@@ -261,7 +262,10 @@ class OpenCodeApiAdapter(
     }
 
     override suspend fun interrupt(sessionId: String) {
-        v2.interrupt(sessionId)
+        // The result was discarded without closing its body: every "stop" leaked a
+        // pooled connection until the GC/eviction.
+        val response = v2.interrupt(sessionId)
+        response.body()?.close() ?: response.errorBody()?.close()
     }
 
     override suspend fun abort(sessionId: String): Response<ResponseBody> = v2.interrupt(sessionId)
@@ -737,12 +741,14 @@ class OpenCodeApiAdapter(
     ): ResponseBody {
         val attemptId = oauthAttempts[providerId] ?: throw IOException("no OAuth attempt for $providerId")
         val code = (body as? JsonObject)?.get("code")?.jsonPrimitive?.contentOrNull
-        return v2
-            .completeIntegrationOauth(
+        val completed =
+            v2.completeIntegrationOauth(
                 providerId,
                 attemptId,
                 buildJsonObject { code?.let { put("code", it) } },
-            ).body() ?: emptyBody()
+            )
+        if (!completed.isSuccessful) completed.errorBody()?.close()
+        return completed.body() ?: emptyBody()
     }
 
     private suspend fun loadIntegrationMethods(providerId: String): List<com.opencode.android.domain.WireIntegrationMethod> =
@@ -912,12 +918,16 @@ class OpenCodeApiAdapter(
         val service = (obj["service"] as? JsonPrimitive)?.contentOrNull ?: "opencode-android"
         val text = "[$level] $service: $message\n"
         return try {
-            v2
-                .clientLog(
+            val logged =
+                v2.clientLog(
                     name = "android-client.log",
                     append = "1",
                     body = text.toRequestBody("text/plain; charset=utf-8".toMediaType()),
-                ).body() ?: emptyBody()
+                )
+            // On a plain server (no guard proxy) this route 404s, so the error body is
+            // the NORMAL case here and must be closed like any other.
+            if (!logged.isSuccessful) logged.errorBody()?.close()
+            logged.body() ?: emptyBody()
         } catch (_: Exception) {
             emptyBody()
         }

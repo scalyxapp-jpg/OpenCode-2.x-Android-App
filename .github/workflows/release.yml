@@ -70,6 +70,27 @@ jobs:
         if: steps.signing.outputs.available == 'true'
         run: ./gradlew :app:assembleRelease --stacktrace
 
+      - name: Verify the tag matches the APK version
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          # Read the version straight out of the built APK, not from the source, so a
+          # forgotten version bump is caught instead of silently publishing a
+          # mislabelled release (and a stale versionCode blocks future updates).
+          META=app/build/outputs/apk/release/output-metadata.json
+          if [ ! -f "$META" ]; then
+            echo "::error::$META missing — cannot verify the version."
+            exit 1
+          fi
+          APK_VERSION="$(python3 -c "import json,sys; d=json.load(open('$META')); print(d['elements'][0]['versionName'])")"
+          APK_CODE="$(python3 -c "import json,sys; d=json.load(open('$META')); print(d['elements'][0]['versionCode'])")"
+          echo "tag=$TAG_VERSION apk=$APK_VERSION versionCode=$APK_CODE"
+          if [ "$TAG_VERSION" != "$APK_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the APK versionName $APK_VERSION. Bump versionName/versionCode in app/build.gradle.kts before tagging."
+            exit 1
+          fi
+
       - name: Prepare release assets
         if: steps.signing.outputs.available == 'true'
         run: |

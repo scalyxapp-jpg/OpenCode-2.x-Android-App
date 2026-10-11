@@ -2,6 +2,7 @@ package com.opencode.android.ui
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
@@ -285,7 +287,14 @@ internal fun OpenCodeApp(
             // composer ends up hidden behind the keyboard. Applied at the root so
             // the bottom navigation bar lifts with it too; the inner Scaffolds then
             // see the inset as already consumed.
-            modifier = Modifier.imePadding(),
+            // `imePadding()` alone does not CONSUME the inset, so a nested screen
+            // that also applied it (ChatScreen) added the keyboard height twice — the
+            // composer floated a keyboard-height above the keyboard. Consuming here
+            // makes the child's imePadding a no-op, as intended.
+            modifier =
+                Modifier
+                    .imePadding()
+                    .consumeWindowInsets(WindowInsets.ime),
             topBar = {
                 // This slot ALWAYS occupies at least the status bar. Two reasons:
                 //  1. The content below then starts at a stable place whether or not
@@ -363,6 +372,13 @@ internal fun OpenCodeApp(
                                                     onClick = {
                                                         openTabs = emptyList()
                                                         activeTabId = null
+                                                        // Same as closing a single tab: without
+                                                        // this the user stayed on the chat screen
+                                                        // with an empty tab strip.
+                                                        navController.navigate(Routes.HOME) {
+                                                            popUpTo(navController.graph.findStartDestination().id)
+                                                            launchSingleTop = true
+                                                        }
                                                     },
                                                     modifier = Modifier.padding(0.dp),
                                                 ) {

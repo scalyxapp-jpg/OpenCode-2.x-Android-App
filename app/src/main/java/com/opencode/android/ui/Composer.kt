@@ -348,10 +348,12 @@ internal fun Composer(
                 if (mentionQuery == null) {
                     emptyList()
                 } else {
-                    files
-                        .filter {
-                            (it.name ?: it.path ?: "").contains(mentionQuery, ignoreCase = true)
-                        }.take(6)
+                    // No `.take(6)`: the list scrolls (heightIn(max = 220.dp)), and the
+                    // cap silently hid every match past the sixth — the same defect the
+                    // "/" picker already had fixed.
+                    files.filter {
+                        (it.name ?: it.path ?: "").contains(mentionQuery, ignoreCase = true)
+                    }
                 }
             }
         androidx.compose.animation.AnimatedVisibility(
@@ -591,7 +593,11 @@ internal fun Composer(
                         keyboardActions =
                             KeyboardActions(
                                 onSend = {
-                                    if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
+                                    // Same gating as the send button: the IME action used
+                                    // to fire during an upload.
+                                    if (!isUploading && (inputText.isNotBlank() || attachments.isNotEmpty())) {
+                                        onSend()
+                                    }
                                 },
                             ),
                         decorationBox = { innerTextField ->

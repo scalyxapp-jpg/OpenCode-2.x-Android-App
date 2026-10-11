@@ -55,6 +55,8 @@ object AppStartup {
             try {
                 MessageCache.clearAll()
                 HomeCache.clearAll()
+                // The archived set belongs to the previous server's sessions.
+                ArchivedSessionsStore.clear()
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "cache clear after backend switch failed: ${e.message}")
             }

@@ -138,12 +138,43 @@ object ModelVisibilityStore {
         }
     }
 
+    /**
+     * Sets the visibility of many models of one provider in a SINGLE read-modify-write.
+     *
+     * The old loop called [setVisibility] per model: N JSON parses + writes on the
+     * caller's (main) thread, and the `user` array grew without bound for
+     * catalog-wide providers. A "Show all" in the settings could therefore jank
+     * noticeably and bloat the preference.
+     */
     fun setProviderVisibility(
         providerId: String,
         modelIds: List<String>,
         show: Boolean,
     ) {
-        modelIds.forEach { setVisibility(providerId, it, show) }
+        if (modelIds.isEmpty()) return
+        synchronized(lock) {
+            val bare = modelIds.map { bareModelId(providerId, it) }.toSet()
+            val obj = readModel()
+            val user = obj.optJSONArray("user") ?: JSONArray()
+            val visibility = if (show) "show" else "hide"
+            val kept = JSONArray()
+            for (i in 0 until user.length()) {
+                val e = user.optJSONObject(i) ?: continue
+                val sameProvider = e.optString("providerID") == providerId
+                if (sameProvider && e.optString("modelID") in bare) continue
+                kept.put(e)
+            }
+            for (modelId in bare) {
+                kept.put(
+                    JSONObject()
+                        .put("modelID", modelId)
+                        .put("providerID", providerId)
+                        .put("visibility", visibility),
+                )
+            }
+            obj.put("user", kept)
+            writeModel(obj)
+        }
     }
 
     fun recent(): List<Pair<String, String>> {

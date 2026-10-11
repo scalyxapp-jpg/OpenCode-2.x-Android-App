@@ -493,6 +493,10 @@ object StreamReducer {
                         state.copy(
                             isGenerating = false,
                             isStreaming = false,
+                            // A turn can end through the status channel (some servers
+                            // send `session.status idle` without `session.idle`); if the
+                            // compaction end part was dropped, the indicator stayed on.
+                            isCompacting = false,
                             turnEnded = true,
                             effects =
                                 buildList {

@@ -22,8 +22,31 @@ object WidgetStateStore {
     @Volatile
     private var prefs: SharedPreferences? = null
 
+    @Volatile
+    private var appContext: Context? = null
+
     fun init(context: Context) {
+        appContext = context.applicationContext
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    /**
+     * Mirrors the last session's running state and re-renders the widget.
+     *
+     * The chat screen used to be the only writer, so leaving the chat mid-turn left
+     * `generating = true` persisted and the widget showed "Working…" indefinitely.
+     * The home list knows the state of every session, so it keeps the widget honest.
+     * No-op when nothing changed (the periodic caller runs every few seconds).
+     */
+    fun updateGenerating(generating: Boolean) {
+        val current = snapshot()
+        if (current.generating == generating) return
+        save(
+            status = if (generating) null else current.status,
+            model = current.model,
+            generating = generating,
+        )
+        appContext?.let { com.opencode.android.ui.widget.refreshSessionWidget(it) }
     }
 
     fun save(

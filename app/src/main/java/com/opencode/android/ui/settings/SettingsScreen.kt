@@ -47,7 +47,9 @@ internal fun SettingsScreen(
     onSwitchBackend: () -> Unit = {},
 ) {
     val backendSession = com.opencode.android.ui.LocalBackendSession.current
-    var tab by remember { mutableIntStateOf(0) }
+    // rememberSaveable: see ChatScreen — the selected settings tab survived neither a
+    // rotation nor a process restore.
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf("General", "Shortcuts", "Servers", "Providers", "Models")
     // Web parity: the settings header shows "OpenCode Desktop · v<version>".
     var version by remember { mutableStateOf<String?>(null) }

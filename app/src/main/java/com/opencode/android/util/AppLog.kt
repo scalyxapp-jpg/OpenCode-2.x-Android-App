@@ -82,8 +82,8 @@ object AppLog {
     }
 
     /**
-     * Always recorded and, in debug, also written to logcat. [message] must not
-     * contain user content.
+     * Written to logcat in every build; recorded into the in-memory ring buffer only
+     * in DEBUG (see [remember]). [message] must not contain user content.
      */
     fun record(
         tag: String,
@@ -95,9 +95,8 @@ object AppLog {
     }
 
     /**
-     * Recorded always (so the upload has the full picture); written to logcat
-     * only in debug. [message] is a lambda so the string is not built when the
-     * ring buffer is disabled — it is always on, so this always builds.
+     * Written to logcat only in debug; recorded into the ring buffer only in debug.
+     * [message] is a lambda so the string is not built when logging is off.
      */
     fun d(
         tag: String,

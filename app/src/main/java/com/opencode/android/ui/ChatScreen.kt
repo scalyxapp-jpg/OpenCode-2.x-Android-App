@@ -1,4 +1,5 @@
 package com.opencode.android.ui
+import com.opencode.android.util.formatCount
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -146,7 +147,9 @@ internal fun ChatScreen(
     }
 
     val listState = rememberLazyListState()
-    var selectedTab by remember { mutableIntStateOf(0) }
+    // rememberSaveable: a rotation (or a process restore) used to drop the user back
+    // onto the first tab.
+    var selectedTab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = androidx.compose.ui.platform.LocalResources.current
 
@@ -190,6 +193,13 @@ internal fun ChatScreen(
     fun toast(message: String) {
         toast(context, message)
     }
+
+    // Orientation across projects: the title alone does not say WHICH project the
+    // session belongs to (the home list groups by project, the chat did not show it).
+    val sessionDirectory =
+        uiState.session?.directory
+            ?: uiState.session?.location?.directory
+            ?: uiState.session?.path
 
     // Notify parent of title changes for the tab bar
     LaunchedEffect(uiState.session?.title) {
@@ -274,9 +284,17 @@ internal fun ChatScreen(
                                     uiState.selectedModel,
                                     uiState.providerGroups,
                                 )
+                        val projectLabel =
+                            sessionDirectory
+                                ?.trimEnd('/')
+                                ?.substringAfterLast('/')
+                                ?.takeIf { it.isNotBlank() }
                         val subtitle =
-                            "${uiState.selectedAgent} · " +
-                                selectedModelName.ifEmpty { "Choose model" }
+                            listOfNotNull(
+                                projectLabel,
+                                uiState.selectedAgent,
+                                selectedModelName.ifEmpty { "Choose model" },
+                            ).joinToString(" · ")
                         // Crossfade on agent/model switch: no hard text swap.
                         androidx.compose.animation.Crossfade(
                             targetState = subtitle,
@@ -476,6 +494,27 @@ internal fun ChatScreen(
                                 onClick = {
                                     showMore = false
                                     viewModel.archiveSession { onBack() }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_last_answer)) },
+                                onClick = {
+                                    showMore = false
+                                    val last =
+                                        uiState.messages.lastOrNull { message ->
+                                            (message.role ?: message.info?.role) == "assistant"
+                                        }
+                                    val answer = last?.let { buildTranscript(listOf(it)) }.orEmpty()
+                                    if (answer.isBlank()) {
+                                        toast(resources.getString(R.string.nothing_to_copy))
+                                    } else {
+                                        copyToClipboard(
+                                            context,
+                                            resources.getString(R.string.copy_last_answer),
+                                            answer,
+                                        )
+                                        toast(resources.getString(R.string.copied))
+                                    }
                                 },
                             )
                             DropdownMenuItem(
@@ -1092,7 +1131,10 @@ internal fun SessionTab(
                     )
                     TextButton(
                         onClick = {
-                            if (guard?.mismatch == true) {
+                            // Same condition as the LABEL below: a conflict without a
+                            // mismatch still showed "Fix" but only re-synced, leaving the
+                            // conflict in place.
+                            if (guard?.mismatch == true || uiState.guardConflict) {
                                 onAdoptServerSelection()
                             } else {
                                 onRefreshSelection()
@@ -1173,7 +1215,23 @@ internal fun SessionTab(
             )
         }
         // Pending agent questions (mirrors web question cards / dock).
-        if (uiState.pendingQuestions.isNotEmpty()) {
+        //
+        // A question whose tool call is ALSO rendered inline in a message bubble must
+        // not get a second, equally interactive card here: two active widgets for one
+        // request could submit divergent answers.
+        val inlineQuestionCallIds =
+            androidx.compose.runtime.remember(uiState.messages) {
+                uiState.messages
+                    .flatMap { message -> message.parts }
+                    .mapNotNull { part -> part.id }
+                    .toSet()
+            }
+        val dockQuestions =
+            uiState.pendingQuestions.filter { question ->
+                val callId = question.tool?.callID
+                callId == null || callId !in inlineQuestionCallIds
+            }
+        if (dockQuestions.isNotEmpty()) {
             LazyColumn(
                 modifier =
                     Modifier
@@ -1184,7 +1242,7 @@ internal fun SessionTab(
             ) {
                 items(
                     // Duplicate ids would be a duplicate LazyColumn key crash.
-                    uiState.pendingQuestions.distinctBy { it.id },
+                    dockQuestions.distinctBy { it.id },
                     key = { q -> q.id },
                 ) { question ->
                     // Cards pop in/out (answer/reject drops them); animate
@@ -1688,8 +1746,11 @@ internal fun SessionTab(
 
         // Provider/usage error banner (web shows "Free usage exceeded…" in the
         // stream). Stays visible while the provider keeps retrying.
+        //
+        // Only when the composer does NOT already show it: `statusError` was rendered
+        // in both places, so a long provider error appeared twice at once.
         androidx.compose.animation.AnimatedVisibility(
-            visible = !uiState.statusError.isNullOrBlank(),
+            visible = !uiState.statusError.isNullOrBlank() && uiState.error != null,
             enter =
                 androidx.compose.animation.expandVertically() +
                     androidx.compose.animation.fadeIn(),
@@ -1907,15 +1968,28 @@ internal fun ReviewTab(
         item { ContextRow("Tool-Calls", "${toolParts.size} ($reads read)") }
         info?.let {
             item { SectionHeader(stringResource(R.string.usage)) }
-            item { ContextRow("Total tokens", "${it.totalTokens}") }
-            item { ContextRow("Input / Output", "${it.inputTokens} / ${it.outputTokens}") }
+            item { ContextRow("Total tokens", formatCount(it.totalTokens)) }
+            item {
+                ContextRow(
+                    "Input / Output",
+                    "${formatCount(it.inputTokens)} / ${formatCount(it.outputTokens)}",
+                )
+            }
             item { ContextRow("Reasoning", "${it.reasoningTokens}") }
             it.contextLimit?.let { limit ->
-                val pct = if (limit > 0) (it.totalTokens * 100 / limit).coerceAtMost(100) else 0
+                // Same helper as the title-bar ring: the inline copy reintroduced the
+                // Long overflow it fixes and rounded differently, so the two surfaces
+                // could show different percentages for one session.
+                val pct = com.opencode.android.util.contextPercent(it.totalTokens, limit) ?: 0
                 item { ContextRow(stringResource(R.string.context_limit_usage), "$limit / $pct%") }
             }
             item { SectionHeader(stringResource(R.string.cache)) }
-            item { ContextRow("Cache (read/write)", "${it.cacheRead} / ${it.cacheWrite}") }
+            item {
+                ContextRow(
+                    "Cache (read/write)",
+                    "${formatCount(it.cacheRead)} / ${formatCount(it.cacheWrite)}",
+                )
+            }
             item { SectionHeader(stringResource(R.string.cost)) }
             // Server sends full double precision (1.8125874359999998); four
             // decimals is what a cost figure needs.

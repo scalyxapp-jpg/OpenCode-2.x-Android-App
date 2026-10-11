@@ -11,7 +11,12 @@ import com.opencode.android.domain.Message
  * user is watching. Pure and Android-free so the matching rule is unit-tested.
  */
 object MessageEcho {
-    /** Id prefix of a locally echoed row. */
+    /**
+     * LEGACY prefix. The send path does NOT use it: the optimistic echo is created
+     * with a client-generated `msg_…` id that is also sent to the server, so the row
+     * is deduped by ID via `ChatViewModel.optimisticEchoIds`. Only the (unused)
+     * helpers below key off this prefix.
+     */
     const val LOCAL_PREFIX = "local_"
 
     /** Minimal view of a row: id, role and its first text part. */

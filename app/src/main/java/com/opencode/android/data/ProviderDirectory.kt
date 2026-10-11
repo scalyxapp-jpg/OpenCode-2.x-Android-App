@@ -128,10 +128,18 @@ class ProviderDirectory(
                     }
 
                     else -> {
-                        scope.async { doFetch(generation) }.also {
-                            inflight = it
-                            inflightGeneration = generation
-                        }
+                        scope
+                            .async {
+                                fetching = true
+                                try {
+                                    doFetch(generation)
+                                } finally {
+                                    fetching = false
+                                }
+                            }.also {
+                                inflight = it
+                                inflightGeneration = generation
+                            }
                     }
                 }
             }
@@ -191,9 +199,18 @@ class ProviderDirectory(
             _state.value is State.Ready &&
                 System.currentTimeMillis() - loadedAtMs < maxAgeMs
         if (fresh) return false
+        // A fetch already running is NOT stale: bumping the generation here made the
+        // in-flight (slow, ~6 MB) parse publish nothing, and every entry point that
+        // called this again restarted it — browsing sessions/settings faster than the
+        // parse kept the catalog on Loading and left the model picker empty.
+        if (fetching) return false
         invalidate()
         return true
     }
+
+    /** True while a FETCH is in flight (an initial `Loading` state is not). */
+    @Volatile
+    private var fetching: Boolean = false
 
     /** [invalidateIfStale] + a background refetch, for callers that cannot await. */
     fun refreshIfStale(maxAgeMs: Long) {

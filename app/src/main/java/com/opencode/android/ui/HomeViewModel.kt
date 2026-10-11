@@ -60,6 +60,8 @@ data class HomeUiState(
     val showOnlyRunning: Boolean = com.opencode.android.data.HomePrefs.onlyRunning(),
     /** Show the locally archived sessions instead of hiding them. */
     val showArchived: Boolean = com.opencode.android.data.HomePrefs.showArchived(),
+    /** Locally archived sessions of the SELECTED project (drives the chip counter). */
+    val archivedCount: Int = 0,
     /** Bumped when an archive/unarchive changes the local set (drives the filter). */
     val archivedRevision: Int = 0,
     val isLoading: Boolean = false,
@@ -283,6 +285,11 @@ class HomeViewModel
                         selected?.let { loadSessions(it) }
                         // Cache the project list even if the session load fails.
                         persistHome()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // The inner catch rethrows it already; without this outer
+                        // rethrow the single-flight cancel was reported as a load
+                        // failure and left a stale error banner.
+                        throw e
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "loadProjects failed: ${e.message}", e)
                         UserMessages.post(R.string.could_not_load_projects, "${e.message}")
@@ -409,9 +416,11 @@ class HomeViewModel
             }
             viewModelScope.launch {
                 try {
-                    // Local display-name override first: it is what the UI shows.
-                    com.opencode.android.data.HomePrefs.setProjectName(project.directory, newName)
                     api.renameProject(id, mapOf("name" to newName))
+                    // Persist the display-name override only AFTER the server accepted
+                    // the rename: writing it first left the (rejected) name stored when
+                    // the call failed, i.e. an inconsistent half-success.
+                    com.opencode.android.data.HomePrefs.setProjectName(project.directory, newName)
                     loadProjects()
                     onDone()
                 } catch (e: Exception) {
@@ -493,6 +502,10 @@ class HomeViewModel
                             }
                         }
                         val archivedVisible = _uiState.value.showArchived
+                        // How many of THIS project's sessions are hidden locally (the
+                        // store itself is device-global).
+                        val archivedForProject =
+                            (fetched ?: emptyList()).count { ArchivedSessionsStore.isArchived(it.id) }
                         val sessions =
                             (fetched ?: throw (lastError ?: IllegalStateException("load failed")))
                                 // Either the archived ones (the dedicated view) or the
@@ -510,6 +523,7 @@ class HomeViewModel
                         if (_uiState.value.selectedProject?.directory != project.directory) return@launch
                         _uiState.update {
                             it.copy(
+                                archivedCount = archivedForProject,
                                 sessions = sessions,
                                 isLoading = false,
                                 isRefreshing = false,
@@ -546,12 +560,27 @@ class HomeViewModel
                 try {
                     val statuses = api.getSessionStatuses(project.directory)
                     if (_uiState.value.selectedProject?.directory != project.directory) return@launch
-                    _uiState.update {
-                        it.copy(
+                    val snapshotRunning = statuses.filterValues { s -> s.type == "busy" }.keys
+                    val snapshotRetrying = statuses.filterValues { s -> s.type == "retry" }.keys
+                    val covered = statuses.keys
+                    _uiState.update { current ->
+                        // MERGE instead of replacing: an SSE `busy` that arrived between
+                        // the fetch and this write was otherwise dropped, so the badge
+                        // (and the "Running" filter) blinked off for up to 5 s. Only
+                        // sessions the snapshot explicitly covered as non-busy lose it.
+                        current.copy(
                             runningSessionIds =
-                                statuses.filterValues { s -> s.type == "busy" }.keys,
+                                snapshotRunning + (current.runningSessionIds - covered),
                             retryingSessionIds =
-                                statuses.filterValues { s -> s.type == "retry" }.keys,
+                                snapshotRetrying + (current.retryingSessionIds - covered),
+                        )
+                    }
+                    // Keep the widget in sync even when no chat screen is composed
+                    // (it was the only writer before, so the flag got stuck).
+                    com.opencode.android.data.LastSessionStore.sessionId()?.let { last ->
+                        val state = _uiState.value
+                        com.opencode.android.data.WidgetStateStore.updateGenerating(
+                            last in state.runningSessionIds || last in state.retryingSessionIds,
                         )
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
