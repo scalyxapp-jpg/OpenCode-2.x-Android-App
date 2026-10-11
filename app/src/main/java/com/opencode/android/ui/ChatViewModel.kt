@@ -832,12 +832,18 @@ class ChatViewModel
                 val info =
                     ContextInfo(
                         // Provider can be absent on the session payload; derive it
-                        // from the provider-qualified model id when possible so the
-                        // dialog does not show "—" for a known model.
+                        // from the CATALOG so the dialog does not show "—" for a
+                        // known model. Splitting the ref at the first slash was
+                        // wrong for model ids that carry their own namespace
+                        // (Nvidia: "z-ai/glm-5.3" is not provider "z-ai").
                         provider =
                             (full.model?.provider ?: session.model?.provider)
                                 ?.takeIf { it.isNotBlank() }
-                                ?: modelId.takeIf { it.contains('/') }?.substringBefore('/'),
+                                ?: _uiState.value.models
+                                    .firstOrNull { m ->
+                                        m.id == modelId || "${m.providerId}/${m.id}" == modelId
+                                    }?.providerId
+                                    ?.takeIf { it.isNotBlank() },
                         model = modelId,
                         contextLimit = contextLimitFor(modelId) ?: previous?.contextLimit,
                         // Web "Total Tokens" = the last assistant message's

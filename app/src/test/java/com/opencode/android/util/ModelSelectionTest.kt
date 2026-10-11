@@ -13,12 +13,12 @@ import org.junit.Test
  * used to live inline in `ChatViewModel`.
  */
 class ModelSelectionTest {
-
-    private val models = listOf(
-        Model(id = "deepseek-v4-flash", name = "DeepSeek V4 Flash", providerId = "deepseek"),
-        Model(id = "nvidia/nemotron-3-super", name = "Nemotron", providerId = "nvidia"),
-        Model(id = "gpt-5", name = "GPT-5", providerId = "opencode"),
-    )
+    private val models =
+        listOf(
+            Model(id = "deepseek-v4-flash", name = "DeepSeek V4 Flash", providerId = "deepseek"),
+            Model(id = "nvidia/nemotron-3-super", name = "Nemotron", providerId = "nvidia"),
+            Model(id = "gpt-5", name = "GPT-5", providerId = "opencode"),
+        )
 
     @Test
     fun `qualifies a bare id to provider-slash-model`() {
@@ -102,5 +102,27 @@ class ModelSelectionTest {
         assertEquals(7L, guard.guardRevision("s1") ?: -1L)
         guard.clearGuardRevision("s1")
         assertNull(guard.guardRevision("s1"))
+    }
+
+    @Test
+    fun `a bare model id carrying its own namespace resolves to the real provider`() {
+        // Nvidia serves ids like "z-ai/glm-5.3" and
+        // "deepseek-ai/deepseek-v4.1-flash": the model's OWN namespace, not a
+        // provider prefix. Splitting at the first slash sent provider "z-ai".
+        val catalog =
+            listOf(
+                Model(id = "z-ai/glm-5.3", name = "GLM 5.3", providerId = "nvidia"),
+                Model(id = "deepseek-v4-flash", name = "V4 Flash", providerId = "deepseek"),
+            )
+
+        assertEquals("nvidia" to "z-ai/glm-5.3", ModelSelection.resolve("z-ai/glm-5.3", catalog))
+        assertEquals(
+            "nvidia" to "z-ai/glm-5.3",
+            ModelSelection.resolve("nvidia/z-ai/glm-5.3", catalog),
+        )
+        assertEquals("GLM 5.3", ModelSelection.friendlyName(catalog, "nvidia/z-ai/glm-5.3"))
+        assertEquals("nvidia/z-ai/glm-5.3", ModelSelection.qualify("z-ai/glm-5.3", catalog))
+        // A genuinely unknown ref still falls back to the historical split.
+        assertEquals("mystery" to "model", ModelSelection.resolve("mystery/model", catalog))
     }
 }

@@ -33,16 +33,29 @@ object ModelVisibilityStore {
     private fun p(): SharedPreferences? = prefs
 
     /**
-     * Canonical visibility key. The catalog can hand us either a bare model id
-     * ("deepseek-v4-flash") or a provider-qualified one
-     * ("deepseek/deepseek-v4-flash"); both must resolve to the SAME key or a
-     * toggle in one screen has no effect in another. Always normalize to
-     * "<provider>/<bare-model>".
+     * Canonical visibility key for a (provider, model) pair.
+     *
+     * A caller can hand us the bare catalog model id ("deepseek-v4-flash") or an
+     * already provider-qualified ref ("deepseek/deepseek-v4-flash"); both must
+     * map to the SAME key or a toggle in one screen has no effect in another.
+     *
+     * Only the PROVIDER prefix is stripped. Model ids may legitimately contain a
+     * slash of their own — Nvidia serves "z-ai/glm-5.3" and
+     * "deepseek-ai/deepseek-v4.1-flash" — so a blanket `substringAfter('/')`
+     * collapsed them to their vendor-less tail. The app then keyed a different
+     * entry than the web/TUI wrote, so a model hidden there stayed visible here
+     * (and vice versa), and two namespaces could collide on one key.
      */
-    fun visibilityKey(providerId: String, modelId: String): String =
-        "$providerId/${bareModelId(modelId)}"
+    fun visibilityKey(
+        providerId: String,
+        modelId: String,
+    ): String = "$providerId/${bareModelId(providerId, modelId)}"
 
-    private fun bareModelId(modelId: String): String = modelId.substringAfter('/')
+    /** Strips only the provider prefix, never a model's own namespace. */
+    private fun bareModelId(
+        providerId: String,
+        modelId: String,
+    ): String = modelId.removePrefix("$providerId/")
 
     private fun readModel(): JSONObject {
         val raw = p()?.getString(KEY_MODEL, null) ?: return JSONObject()
@@ -73,11 +86,17 @@ object ModelVisibilityStore {
     }
 
     /** Models are visible unless explicitly hidden. */
-    fun isVisible(providerId: String, modelId: String): Boolean =
-        visibilityMap()[visibilityKey(providerId, modelId)] ?: true
+    fun isVisible(
+        providerId: String,
+        modelId: String,
+    ): Boolean = visibilityMap()[visibilityKey(providerId, modelId)] ?: true
 
-    fun setVisibility(providerId: String, modelId: String, show: Boolean) {
-        val bareId = bareModelId(modelId)
+    fun setVisibility(
+        providerId: String,
+        modelId: String,
+        show: Boolean,
+    ) {
+        val bareId = bareModelId(providerId, modelId)
         val obj = readModel()
         val user = obj.optJSONArray("user") ?: JSONArray()
         val newUser = JSONArray()
@@ -85,10 +104,11 @@ object ModelVisibilityStore {
         for (i in 0 until user.length()) {
             val e = user.optJSONObject(i) ?: continue
             if (e.optString("modelID") == bareId && e.optString("providerID") == providerId) {
-                val updated = JSONObject()
-                    .put("modelID", bareId)
-                    .put("providerID", providerId)
-                    .put("visibility", if (show) "show" else "hide")
+                val updated =
+                    JSONObject()
+                        .put("modelID", bareId)
+                        .put("providerID", providerId)
+                        .put("visibility", if (show) "show" else "hide")
                 newUser.put(updated)
                 replaced = true
             } else {
@@ -107,7 +127,11 @@ object ModelVisibilityStore {
         writeModel(obj)
     }
 
-    fun setProviderVisibility(providerId: String, modelIds: List<String>, show: Boolean) {
+    fun setProviderVisibility(
+        providerId: String,
+        modelIds: List<String>,
+        show: Boolean,
+    ) {
         modelIds.forEach { setVisibility(providerId, it, show) }
     }
 
@@ -135,11 +159,12 @@ object ModelVisibilityStore {
         modelId: String?,
         variant: String? = null,
     ) {
-        val obj = try {
-            JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
-        } catch (_: Exception) {
-            JSONObject()
-        }
+        val obj =
+            try {
+                JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
+            } catch (_: Exception) {
+                JSONObject()
+            }
         val sessions = obj.optJSONObject("session") ?: JSONObject()
         val existing = sessions.optJSONObject(sessionId)
         val entry = JSONObject()
@@ -168,11 +193,12 @@ object ModelVisibilityStore {
     )
 
     fun selection(sessionId: String): SessionSelection? {
-        val obj = try {
-            JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
-        } catch (_: Exception) {
-            return null
-        }
+        val obj =
+            try {
+                JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
+            } catch (_: Exception) {
+                return null
+            }
         val entry = obj.optJSONObject("session")?.optJSONObject(sessionId) ?: return null
         val model = entry.optJSONObject("model")
         return SessionSelection(
@@ -189,5 +215,4 @@ object ModelVisibilityStore {
  * platform-typed overload (it inferred `Nothing?`), so read the value only when
  * the key is present and non-null. Absent/null → null, never "".
  */
-private fun JSONObject.optStringOrNull(key: String): String? =
-    if (!has(key) || isNull(key)) null else optString(key)
+private fun JSONObject.optStringOrNull(key: String): String? = if (!has(key) || isNull(key)) null else optString(key)

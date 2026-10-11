@@ -185,8 +185,11 @@ class ProviderDirectory(
  * the client-side availability guard.
  */
 internal fun ProviderEntry.hasModel(modelId: String): Boolean {
-    val requestedId = modelId.substringAfter('/')
-    return models.keys.any { catalogId ->
-        catalogId == modelId || catalogId.substringAfter('/') == requestedId
-    }
+    // Compare with the PROVIDER prefix normalised off BOTH sides. A model id can
+    // also carry a namespace of its own (Nvidia: "z-ai/glm-5.3"), so stripping
+    // everything before the first slash — the old rule — turned such an id into a
+    // different model and made the availability guard reject a model the server
+    // had just offered.
+    val requested = modelId.removePrefix("$id/")
+    return models.keys.any { it.removePrefix("$id/") == requested }
 }

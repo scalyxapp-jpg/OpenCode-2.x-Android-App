@@ -3,9 +3,9 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,15 +26,12 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.role
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,22 +39,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.opencode.android.R
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.RecentModelsStore
 import com.opencode.android.domain.Model
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.settings.SectionHeader
-import kotlinx.coroutines.flow.filter
 import com.opencode.android.domain.ProviderEntry
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
+import com.opencode.android.ui.settings.SectionHeader
+import com.opencode.android.ui.theme.spacing
+import kotlinx.coroutines.flow.filter
 
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -76,9 +76,10 @@ internal fun ChipMenu(
             onClick = { expanded = true },
             modifier = modifier,
             border = null,
-            colors = AssistChipDefaults.assistChipColors(
-                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
+            colors =
+                AssistChipDefaults.assistChipColors(
+                    containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh,
+                ),
             label = {
                 Text(
                     text = label,
@@ -150,18 +151,21 @@ internal fun PickerRow(
     subtitleColor: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer
-                else Color.Transparent,
-            )
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
-            .padding(
-                horizontal = MaterialTheme.spacing.cardPadding,
-                vertical = MaterialTheme.spacing.small,
-            ),
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(
+                    if (selected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        Color.Transparent
+                    },
+                ).then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+                .padding(
+                    horizontal = MaterialTheme.spacing.cardPadding,
+                    vertical = MaterialTheme.spacing.small,
+                ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
@@ -185,13 +189,18 @@ internal fun PickerRow(
             }
         }
         when {
-            trailing != null -> trailing()
-            selected -> Icon(
-                Icons.Default.Check,
-                contentDescription = stringResource(R.string.selected_label),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
+            trailing != null -> {
+                trailing()
+            }
+
+            selected -> {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = stringResource(R.string.selected_label),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
@@ -209,9 +218,10 @@ internal fun ModelPickerDialog(
 ) {
     var searchQuery by remember { mutableStateOf("") }
 
-    val providerNames = remember(providerGroups) {
-        providerGroups.associate { it.id to (it.name ?: it.id) }
-    }
+    val providerNames =
+        remember(providerGroups) {
+            providerGroups.associate { it.id to (it.name ?: it.id) }
+        }
 
     // Read visibility fresh from the store on every open: a model toggled off
     // in Settings → Models must disappear here immediately (the ViewModel
@@ -219,12 +229,13 @@ internal fun ModelPickerDialog(
     val modelVisibility = remember { ModelVisibilityStore.visibilityMap() }
 
     // Hide models the user disabled in "Manage models" (web behaviour).
-    val visibleModels = remember(models, modelVisibility) {
-        models.filter { m ->
-            val key = ModelVisibilityStore.visibilityKey(m.providerId ?: "other", m.id)
-            modelVisibility[key] != false
+    val visibleModels =
+        remember(models, modelVisibility) {
+            models.filter { m ->
+                val key = ModelVisibilityStore.visibilityKey(m.providerId ?: "other", m.id)
+                modelVisibility[key] != false
+            }
         }
-    }
 
     // Group models by provider, de-duplicated per provider. The catalogue can
     // list the same model id more than once (a model reachable through two
@@ -232,31 +243,40 @@ internal fun ModelPickerDialog(
     // key has to be unique across the WHOLE list — the moment a search made two
     // copies visible at once it threw
     //   IllegalArgumentException: Key "…" was already used.
-    val grouped = remember(visibleModels) {
-        visibleModels
-            .groupBy { it.providerId ?: "other" }
-            .mapValues { (_, list) -> list.distinctBy { it.id } }
-    }
+    val grouped =
+        remember(visibleModels) {
+            visibleModels
+                .groupBy { it.providerId ?: "other" }
+                .mapValues { (_, list) -> list.distinctBy { it.id } }
+        }
 
     // Filter by search query
-    val filtered = remember(grouped, searchQuery) {
-        if (searchQuery.isBlank()) grouped
-        else grouped.mapValues { (_, list) ->
-            list.filter {
-                it.id.contains(searchQuery, ignoreCase = true) ||
-                    (it.name ?: "").contains(searchQuery, ignoreCase = true)
+    val filtered =
+        remember(grouped, searchQuery) {
+            if (searchQuery.isBlank()) {
+                grouped
+            } else {
+                grouped
+                    .mapValues { (_, list) ->
+                        list.filter {
+                            it.id.contains(searchQuery, ignoreCase = true) ||
+                                (it.name ?: "").contains(searchQuery, ignoreCase = true)
+                        }
+                    }.filterValues { it.isNotEmpty() }
             }
-        }.filterValues { it.isNotEmpty() }
-    }
+        }
 
     // Recently used models, resolved against the currently visible set so a
     // model hidden in "Manage models" or absent from this backend disappears.
-    val recentModels = remember(visibleModels) {
-        val byRef = visibleModels.associateBy {
-            com.opencode.android.util.sessionModelRef(it.id, it.providerId)
+    val recentModels =
+        remember(visibleModels) {
+            val byRef =
+                visibleModels.associateBy {
+                    com.opencode.android.util
+                        .sessionModelRef(it.id, it.providerId)
+                }
+            RecentModelsStore.recent().mapNotNull { byRef[it] }
         }
-        RecentModelsStore.recent().mapNotNull { byRef[it] }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -270,11 +290,12 @@ internal fun ModelPickerDialog(
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = MaterialTheme.spacing.small))
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        // 400dp + title/buttons exceeded the dialog height, so the
-                        // last row was clipped; 320dp leaves room for everything.
-                        .heightIn(max = 320.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            // 400dp + title/buttons exceeded the dialog height, so the
+                            // last row was clipped; 320dp leaves room for everything.
+                            .heightIn(max = 320.dp),
                     // Bottom clearance so the last model id is not clipped.
                     contentPadding = PaddingValues(bottom = MaterialTheme.spacing.medium),
                 ) {
@@ -282,10 +303,11 @@ internal fun ModelPickerDialog(
                     if (searchQuery.isBlank() && recentModels.isNotEmpty()) {
                         item(key = "recent-header") { SectionHeader("Recent") }
                         items(recentModels, key = { "recent-${it.providerId}/${it.id}" }) { model ->
-                            val ref = com.opencode.android.util.sessionModelRef(
-                                model.id,
-                                model.providerId,
-                            )
+                            val ref =
+                                com.opencode.android.util.sessionModelRef(
+                                    model.id,
+                                    model.providerId,
+                                )
                             PickerRow(
                                 title = model.name ?: model.id,
                                 subtitle = model.id,
@@ -317,19 +339,27 @@ internal fun ModelPickerDialog(
                                     model.providerId,
                                 ) == selectedModel
                             PickerRow(
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
+                                modifier =
+                                    Modifier.animateItem(
+                                        placementSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .spatial(),
+                                        fadeInSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                        fadeOutSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                    ),
                                 title = model.name ?: model.id,
                                 subtitle = model.id,
                                 selected = isSelected,
                                 onClick = {
-                                    val ref = com.opencode.android.util.sessionModelRef(
-                                        model.id,
-                                        model.providerId ?: provider,
-                                    )
+                                    val ref =
+                                        com.opencode.android.util.sessionModelRef(
+                                            model.id,
+                                            model.providerId ?: provider,
+                                        )
                                     RecentModelsStore.record(ref)
                                     onSelect(ref)
                                 },
@@ -360,14 +390,18 @@ internal fun AgentPickerDialog(
     onDismiss: () -> Unit,
 ) {
     var searchQuery by remember { mutableStateOf("") }
-    val filtered = remember(agents, searchQuery) {
-        if (searchQuery.isBlank()) agents
-        else agents.filter {
-            it.id.contains(searchQuery, ignoreCase = true) ||
-                (it.name ?: "").contains(searchQuery, ignoreCase = true) ||
-                (it.description ?: "").contains(searchQuery, ignoreCase = true)
+    val filtered =
+        remember(agents, searchQuery) {
+            if (searchQuery.isBlank()) {
+                agents
+            } else {
+                agents.filter {
+                    it.id.contains(searchQuery, ignoreCase = true) ||
+                        (it.name ?: "").contains(searchQuery, ignoreCase = true) ||
+                        (it.description ?: "").contains(searchQuery, ignoreCase = true)
+                }
+            }
         }
-    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.choose_agent)) },
@@ -380,18 +414,26 @@ internal fun AgentPickerDialog(
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = MaterialTheme.spacing.small))
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 320.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp),
                     contentPadding = PaddingValues(bottom = MaterialTheme.spacing.medium),
                 ) {
                     items(filtered, key = { it.id }) { agent ->
                         PickerRow(
-                            modifier = Modifier.animateItem(
-                                placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                            ),
+                            modifier =
+                                Modifier.animateItem(
+                                    placementSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .spatial(),
+                                    fadeInSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                    fadeOutSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                ),
                             title = agent.name ?: agent.id,
                             subtitle = agent.description ?: agent.mode ?: "",
                             selected = agent.id == selectedAgent,
@@ -420,27 +462,34 @@ internal fun ManageModelsDialog(
     // Live state: switches must reflect a toggle without reopening the dialog.
     var modelVisibility by remember { mutableStateOf(ModelVisibilityStore.visibilityMap()) }
 
-    fun isVisible(providerId: String, modelId: String): Boolean =
-        modelVisibility[ModelVisibilityStore.visibilityKey(providerId, modelId)] != false
+    fun isVisible(
+        providerId: String,
+        modelId: String,
+    ): Boolean = modelVisibility[ModelVisibilityStore.visibilityKey(providerId, modelId)] != false
 
-    val filteredGroups = remember(providerGroups, searchQuery) {
-        if (searchQuery.isBlank()) {
-            providerGroups
-        } else {
-            providerGroups.mapNotNull { p ->
-                val matches = p.models.values.filter {
-                    it.id.contains(searchQuery, ignoreCase = true) ||
-                        (it.name ?: "").contains(searchQuery, ignoreCase = true)
+    val filteredGroups =
+        remember(providerGroups, searchQuery) {
+            if (searchQuery.isBlank()) {
+                providerGroups
+            } else {
+                providerGroups.mapNotNull { p ->
+                    val matches =
+                        p.models.values.filter {
+                            it.id.contains(searchQuery, ignoreCase = true) ||
+                                (it.name ?: "").contains(searchQuery, ignoreCase = true)
+                        }
+                    if (matches.isEmpty()) {
+                        null
+                    } else {
+                        ProviderEntry(
+                            id = p.id,
+                            name = p.name,
+                            models = matches.associateBy { it.id },
+                        )
+                    }
                 }
-                if (matches.isEmpty()) null
-                else ProviderEntry(
-                    id = p.id,
-                    name = p.name,
-                    models = matches.associateBy { it.id },
-                )
             }
         }
-    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -462,9 +511,10 @@ internal fun ManageModelsDialog(
                     placeholder = stringResource(R.string.search_models),
                 )
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp),
                     // Bottom clearance so the last model row is not clipped by
                     // the dialog edge.
                     contentPadding = PaddingValues(bottom = MaterialTheme.spacing.medium),
@@ -487,13 +537,20 @@ internal fun ManageModelsDialog(
                             )
                         }
                         items(provider.models.values.toList(), key = { "${provider.id}/${it.id}" }) { model ->
-                            val modelId = model.id.substringAfter('/')
+                            val modelId = model.id
                             PickerRow(
-                                modifier = Modifier.animateItem(
-                                    placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                    fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                    fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                ),
+                                modifier =
+                                    Modifier.animateItem(
+                                        placementSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .spatial(),
+                                        fadeInSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                        fadeOutSpec =
+                                            com.opencode.android.ui.theme.Motion
+                                                .effects(),
+                                    ),
                                 title = model.name ?: model.id,
                                 subtitle = model.id,
                                 trailing = {

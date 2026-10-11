@@ -143,4 +143,21 @@ class ProviderDirectoryTest {
             assertEquals(2, calls)
             assertTrue(directory.state.value is ProviderDirectory.State.Ready)
         }
+
+    @Test
+    fun `hasModel keeps a model's own namespace and accepts a qualified ref`() {
+        val provider =
+            ProviderEntry(
+                id = "nvidia",
+                models =
+                    mapOf(
+                        "z-ai/glm-5.3" to Model(id = "z-ai/glm-5.3", providerId = "nvidia"),
+                    ),
+            )
+
+        assertTrue(provider.hasModel("z-ai/glm-5.3"))
+        assertTrue(provider.hasModel("nvidia/z-ai/glm-5.3"))
+        assertFalse(provider.hasModel("glm-5.3"))
+        assertFalse(provider.hasModel("other/z-ai/glm-5.3"))
+    }
 }

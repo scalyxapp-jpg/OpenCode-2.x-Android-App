@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The provider catalog is refreshed when stale** (2 minutes) instead of being
   fetched once per process, so providers added, removed or authenticated in the
   TUI, the web UI or `opencode.json` appear without restarting the app.
+- **Model identity survives slashes in a model id.** Providers such as Nvidia
+  serve ids that carry their own namespace (`z-ai/glm-5.3`,
+  `deepseek-ai/deepseek-v4.1-flash`). The client stripped everything before the
+  first slash, which (a) made the "Manage models" visibility key disagree with
+  the entry the web/TUI writes — so a model hidden there stayed visible here —
+  and could collide two namespaces on one key, (b) resolved such a ref to a
+  provider that does not exist (`z-ai`), and (c) made the "is this model
+  available?" guard mis-match. Only a genuine provider prefix is stripped now and
+  resolution is catalog-first (provider-qualified → exact model id → legacy tail
+  match), consistently in the chat picker, "Manage models", Settings → Models
+  and the send-time availability check.
 - Adapt to the newer APIs: `Modifier.sharedElement` now takes
   `sharedContentState`, and resource lookups inside composables use
   `LocalResources` / `rememberUpdatedState` to satisfy Compose's new
