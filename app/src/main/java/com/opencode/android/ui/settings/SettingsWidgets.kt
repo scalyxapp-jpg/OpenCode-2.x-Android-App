@@ -11,6 +11,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -106,38 +113,130 @@ internal fun SettingSwitch(
             onCheckedChange = onCheckedChange,
         )
     }
-    // Divider for consistency with SettingDropdown / SettingTextInput rows.
+    // Divider for consistency with the other setting rows.
     HorizontalDivider()
 }
 
-// Free-form text setting (web: the three appearance font fields).
+// Predefined font picker (replaces the former free-text family field).
+//
+// The stored value is a DEVICE font family name; anything the device does not have
+// silently fell back to the default, so a typed change looked like it did nothing.
+// The list therefore offers only families every device ships, each with a live
+// preview in that font, and a tap applies the choice immediately (the settings
+// StateFlow flows straight into the theme).
 @Composable
-internal fun SettingTextInput(
+internal fun SettingFontPicker(
     title: String,
     subtitle: String,
+    /** Currently stored family name ("" = platform default). */
     value: String,
-    placeholder: String,
-    onValueChange: (String) -> Unit,
+    /** Predefined options for this slot (UI vs monospace). */
+    options: List<com.opencode.android.ui.theme.FontOption>,
+    onSelect: (String) -> Unit,
 ) {
+    var open by remember { mutableStateOf(false) }
+    val all = com.opencode.android.ui.theme.FontCatalog.optionsWith(value, options)
+    val current = all.firstOrNull { it.id == value } ?: all.first()
+
     Column(modifier = Modifier.padding(vertical = MaterialTheme.spacing.small)) {
-        Text(text = title, style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = stringResource(current.labelRes),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            placeholder = { Text(placeholder) },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = MaterialTheme.spacing.extraSmall),
-        )
+        OutlinedButton(
+            onClick = { open = true },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(top = MaterialTheme.spacing.extraSmall),
+        ) {
+            Text(
+                text = stringResource(R.string.font_preview),
+                // Rendered in the SELECTED family, so the effect is visible right here.
+                fontFamily = familyFor(value),
+            )
+        }
     }
     HorizontalDivider()
+
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            title = { Text(title) },
+            text = {
+                Column(
+                    // Scrollable: the UI font list is longer than a small dialog.
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                ) {
+                    all.forEach { option ->
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onSelect(option.id)
+                                        open = false
+                                    }
+                                    .padding(vertical = MaterialTheme.spacing.small),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(option.labelRes),
+                                    color =
+                                        if (option.id == value) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                )
+                                Text(
+                                    text = stringResource(R.string.font_preview),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    // Live preview per row: the only way to tell the
+                                    // families apart before applying one.
+                                    fontFamily = familyFor(option.id),
+                                )
+                            }
+                            if (option.id == value) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { open = false }) { Text(stringResource(R.string.close)) }
+            },
+        )
+    }
 }
+
+/** Preview family for a stored name: the platform default when unset/unknown. */
+@Composable
+private fun familyFor(name: String): androidx.compose.ui.text.font.FontFamily =
+    com.opencode.android.ui.theme.deviceFontFamily(name)
+        ?: androidx.compose.ui.text.font.FontFamily.Default
 
 @Composable
 internal fun SettingDropdown(

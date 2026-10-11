@@ -196,25 +196,26 @@ internal fun GeneralTab() {
             )
         }
 
-        // Web parity: three free-form font family fields (empty = system default).
+        // Predefined families instead of free text: the value is a device font name,
+        // and anything the device does not have silently resolved to the default (the
+        // change looked like it did nothing). Picking an entry applies it immediately —
+        // the settings StateFlow feeds the theme, so the whole UI re-renders.
         item {
-            SettingTextInput(
+            SettingFontPicker(
                 title = stringResource(R.string.settings_ui_font),
                 subtitle = stringResource(R.string.settings_customise_the_font_used_throughout_the_interface),
                 value = settings.sansFont,
-                placeholder = stringResource(R.string.settings_system_sans),
-                onValueChange = { AppSettingsStore.setSansFont(it) },
+                options = com.opencode.android.ui.theme.FontCatalog.uiFonts,
+                onSelect = { AppSettingsStore.setSansFont(it) },
             )
         }
-        // Web parity: two free-form font family fields (empty = system default).
-        // The terminal font field is omitted (no terminal UI in this app).
         item {
-            SettingTextInput(
+            SettingFontPicker(
                 title = stringResource(R.string.settings_code_font),
                 subtitle = stringResource(R.string.settings_customise_the_font_used_in_code_blocks),
                 value = settings.monoFont,
-                placeholder = stringResource(R.string.settings_system_mono),
-                onValueChange = { AppSettingsStore.setMonoFont(it) },
+                options = com.opencode.android.ui.theme.FontCatalog.codeFonts,
+                onSelect = { AppSettingsStore.setMonoFont(it) },
             )
         }
 

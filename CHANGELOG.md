@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.4.1] - 2026-10-11
+
+### Changed
+- **Fonts sind jetzt Auswahllisten statt Freitextfelder.** Interface- und Code-Font bieten eine
+  kuratierte Liste von Schriftfamilien, die jedes Android-Gerät mitbringt (Auraas-
+  Plattform-Aliase wie `sans-serif`, `sans-serif-light`, `sans-serif-condensed`, `serif`,
+  `casual`, `cursive`, `monospace`, `serif-monospace`) plus „System default".
+  Hintergrund: Das Feld enthielt einen **Geräte-Fontnamen**; ein selbst getippter Name, den das
+  Gerät nicht kennt, fiel still auf die Standardschrift zurück — die Änderung sah wirkungslos aus.
+- **Live-Vorschau**: jede Zeile des Auswahldialogs und die Zeile im Screen rendern
+  „Aa Bb Cc 0123" in der jeweiligen Schrift, so dass die Wahl vor und nach dem Anwenden sichtbar ist.
+- **Sofortige Wirkung**: die Auswahl schreibt direkt in die Settings (StateFlow → Theme), die
+  gesamte Oberfläche wechselt ohne Neustart; Code-Blöcke folgen dem Code-Font.
+- Ein in einer älteren Version gespeicherter eigener Wert bleibt als „Custom"-Eintrag wählbar und
+  wird nicht stillschweigend ersetzt.
+
 ## [1.4.0] - 2026-10-11
 
 Dritte Tiefenanalyse: Zustand/Streaming, IO/Daten, Plattform/Android-16, Semantik, GUI, Workflows.
@@ -259,7 +275,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...v1.2.1
