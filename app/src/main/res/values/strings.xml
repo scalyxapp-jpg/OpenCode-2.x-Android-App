@@ -385,4 +385,5 @@
     <string name="font_preview" formatted="false">Aa Bb Cc 0123</string>
     <string name="font_pick_title_ui" formatted="false">Interface font</string>
     <string name="font_pick_title_code" formatted="false">Code font</string>
+    <string name="server_projects_available" formatted="false">On the server, not in your list</string>
 </resources>

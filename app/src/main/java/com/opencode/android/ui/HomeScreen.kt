@@ -565,6 +565,9 @@ internal fun HomeScreen(
                 )
             },
             onDismiss = { showAddProject = false },
+            // Server projects the user has not kept: the list only shows their own
+            // choice, so these must stay reachable here.
+            suggestions = uiState.suggestedProjects,
         )
     }
     if (showRenameProject) {
@@ -1066,6 +1069,7 @@ internal fun groupSessions(
 private fun AddProjectDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
+    suggestions: List<HomeProject> = emptyList(),
 ) {
     val backendSession = LocalBackendSession.current
     // Mirrors the web "Open project" dialog (verified via Playwright):
@@ -1075,6 +1079,7 @@ private fun AddProjectDialog(
     //  - breadcrumb navigation + "Open" confirms the current folder as a project
     var home by remember { mutableStateOf<String?>(null) }
     var currentDir by remember { mutableStateOf<String?>(null) }
+    // Quick-add for projects the server knows but the user did not keep.
     var query by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
@@ -1174,6 +1179,28 @@ private fun AddProjectDialog(
         title = { Text(stringResource(R.string.open_project)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
+                // Projects the server knows but the user has not kept: they are NOT in
+                // the home list any more (only the user's own choice is), so this is the
+                // one place to bring one back.
+                if (suggestions.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.server_projects_available),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                    ) {
+                        suggestions.forEach { suggestion ->
+                            FilterChip(
+                                selected = false,
+                                onClick = { onConfirm(suggestion.directory) },
+                                label = { Text(suggestion.name, maxLines = 1) },
+                            )
+                        }
+                    }
+                }
                 // Search folders (web parity).
                 PickerSearchField(
                     query = query,

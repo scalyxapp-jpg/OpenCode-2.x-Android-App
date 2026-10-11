@@ -72,4 +72,19 @@ object HomePrefs {
         if (!name.isNullOrBlank()) obj.put(directory, name)
         prefs?.edit()?.putString(KEY_PROJECT_NAMES, obj.toString())?.apply()
     }
+
+    // The user's own project list. Persisted so an app restart cannot resurrect a
+    // deleted project or add one the user never chose: only directories in here are
+    // shown (see HomeViewModel.loadProjects).
+    private const val KEY_KEPT_PROJECTS = "kept_projects"
+
+    /** null when the list was never established (first run after this version). */
+    fun keptProjects(): Set<String>? {
+        val raw = prefs?.getString(KEY_KEPT_PROJECTS, null) ?: return null
+        return raw.split("\n").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    }
+
+    fun setKeptProjects(directories: Collection<String>) {
+        prefs?.edit()?.putString(KEY_KEPT_PROJECTS, directories.distinct().joinToString("\n"))?.apply()
+    }
 }

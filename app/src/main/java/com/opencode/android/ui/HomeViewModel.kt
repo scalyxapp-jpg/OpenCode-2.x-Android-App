@@ -58,6 +58,12 @@ data class HomeUiState(
     val showOnlyGuarded: Boolean = false,
     /** Session list filtered to the ones currently generating (badge shortcut). */
     val showOnlyRunning: Boolean = com.opencode.android.data.HomePrefs.onlyRunning(),
+    /**
+     * Projects the SERVER reports that the user has not kept (see "Add project").
+     * Kept separate from [projects]: they must not appear in the home list by
+     * themselves, but the user needs a way to re-add one.
+     */
+    val suggestedProjects: List<HomeProject> = emptyList(),
     /** Show the locally archived sessions instead of hiding them. */
     val showArchived: Boolean = com.opencode.android.data.HomePrefs.showArchived(),
     /** Locally archived sessions of the SELECTED project (drives the chip counter). */
@@ -132,18 +138,34 @@ class HomeViewModel
             viewModelScope.launch {
                 val snapshot = homeStore.read() ?: return@launch
                 if (snapshot.projects.isEmpty()) return@launch
+                val kept =
+                    com.opencode.android.data.HomePrefs.keptProjects()
+                        ?.map { com.opencode.android.util.normalizeProjectDir(it) }
+                        ?.toSet()
+                val hidden =
+                    loadHiddenProjects()
+                        .map { com.opencode.android.util.normalizeProjectDir(it) }
+                        .toSet()
                 val projects =
-                    snapshot.projects.map {
-                        HomeProject(
-                            id = it.id,
-                            name = it.name,
-                            directory = it.directory,
-                            isLocal = it.isLocal,
-                        )
-                    }
+                    snapshot.projects
+                        .map {
+                            HomeProject(
+                                id = it.id,
+                                name = it.name,
+                                directory = com.opencode.android.util.normalizeProjectDir(it.directory),
+                                isLocal = it.isLocal,
+                            )
+                        }
+                        // A cached snapshot can predate a deletion; the user's own list
+                        // decides, so a removed project never flashes back on launch.
+                        .filter { it.directory != "/" }
+                        .filterNot { it.directory in hidden }
+                        .filter { kept == null || it.directory in kept }
                 val selected =
                     snapshot.selectedDirectory?.let { dir ->
-                        projects.firstOrNull { it.directory == dir }
+                        projects.firstOrNull {
+                            com.opencode.android.util.sameProjectDir(it.directory, dir)
+                        }
                     } ?: projects.firstOrNull()
                 _uiState.update { current ->
                     if (current.projects.isNotEmpty()) {
@@ -229,9 +251,15 @@ class HomeViewModel
                         val nameOverrides = com.opencode.android.data.HomePrefs.projectNames()
                         val fromServer =
                             server.mapNotNull { p ->
-                                val dir = p.worktree ?: p.canonical ?: return@mapNotNull null
+                                val raw = p.worktree ?: p.canonical ?: return@mapNotNull null
+                                // The server's own "global" project and the filesystem
+                                // root are not the user's projects: they only enter the
+                                // list through an explicit "Add project".
+                                if (p.id == "global") return@mapNotNull null
+                                val dir = com.opencode.android.util.normalizeProjectDir(raw)
+                                if (dir == "/") return@mapNotNull null
                                 HomeProject(
-                                    id = p.id.takeIf { it != "global" },
+                                    id = p.id,
                                     // A user-chosen name wins over the path segment: V2's
                                     // project payload has no name, which made "Rename" a
                                     // no-op.
@@ -242,44 +270,62 @@ class HomeViewModel
                                     directory = dir,
                                 )
                             }
-                        val local = loadLocalProjects()
-                        // Directories the user removed from the home list. Loaded once
-                        // per refresh so a deleted project never flashes back.
-                        val hiddenProjects = loadHiddenProjects()
-                        // Keep the last-used project selectable even when the server's
-                        // project list no longer contains it — otherwise the home screen
-                        // silently fell back to another (often empty) project and it
-                        // looked like the sessions "did not load".
-                        val rememberedDir = LastSessionStore.directory()
-                        val rememberedEntry =
-                            rememberedDir
-                                ?.takeIf { dir -> (fromServer + local).none { it.directory == dir } }
-                                ?.let { dir ->
-                                    HomeProject(
-                                        name =
-                                            com.opencode.android.util
-                                                .lastPathSegment(dir),
-                                        directory = dir,
-                                        isLocal = true,
+                        val local =
+                            loadLocalProjects()
+                                .map {
+                                    it.copy(
+                                        directory = com.opencode.android.util.normalizeProjectDir(it.directory),
                                     )
-                                }
+                                }.filter { it.directory != "/" }
+                        // Canonical directories, so a trailing slash (server) can never
+                        // beat an exact match against the user's own entry.
+                        val known = (fromServer + local).distinctBy { it.directory }
+                        val hiddenProjects =
+                            loadHiddenProjects()
+                                .map { com.opencode.android.util.normalizeProjectDir(it) }
+                                .toSet()
+                        val rememberedDir =
+                            LastSessionStore
+                                .directory()
+                                ?.let { com.opencode.android.util.normalizeProjectDir(it) }
+
+                        // THE user's list is authoritative: only directories they kept
+                        // are shown. On the first run after this version the list is
+                        // seeded once from the server (minus anything already deleted),
+                        // so nothing existing is lost; afterwards new server projects do
+                        // NOT appear on their own and deleted ones never return.
+                        val keptDirs =
+                            com.opencode.android.data.HomePrefs.keptProjects()
+                                ?: run {
+                                    val seed =
+                                        (fromServer.map { it.directory } + local.map { it.directory })
+                                            .filterNot { it in hiddenProjects }
+                                            .toSet()
+                                    com.opencode.android.data.HomePrefs.setKeptProjects(seed)
+                                    seed
+                                }.map { com.opencode.android.util.normalizeProjectDir(it) }.toSet()
+
                         val merged =
-                            (fromServer + local + listOfNotNull(rememberedEntry))
-                                // Drop projects the user deleted: a server-provided project
-                                // would otherwise reappear on the next refresh.
+                            known
+                                .filter { it.directory in keptDirs }
                                 .filterNot { it.directory in hiddenProjects }
                                 .distinctBy { it.directory }
                         val selected =
                             _uiState.value.selectedProject?.let { sel ->
-                                merged.firstOrNull { it.directory == sel.directory }
-                            } ?: merged.firstOrNull { it.directory == rememberedDir }
-                                ?: merged.firstOrNull { it.directory != "/" }
+                                merged.firstOrNull {
+                                    com.opencode.android.util.sameProjectDir(it.directory, sel.directory)
+                                }
+                            } ?: merged.firstOrNull {
+                                com.opencode.android.util.sameProjectDir(it.directory, rememberedDir)
+                            }
                                 ?: merged.firstOrNull()
                         _uiState.update {
                             it.copy(
                                 projects = merged,
                                 selectedProject = selected,
                                 isLoading = false,
+                                suggestedProjects =
+                                    known.filterNot { it.directory in keptDirs },
                             )
                         }
                         selected?.let { loadSessions(it) }
@@ -310,11 +356,15 @@ class HomeViewModel
         }
 
         fun addLocalProject(directory: String) {
-            val dir = directory.trimEnd('/')
-            if (dir.isBlank()) return
+            val dir = com.opencode.android.util.normalizeProjectDir(directory)
+            if (dir.isBlank() || dir == "/") return
             // Re-adding a path the user previously deleted must clear the hidden
             // flag, otherwise the next refresh would silently remove it again.
-            saveHiddenProjects(loadHiddenProjects() - dir)
+            saveHiddenProjects(loadHiddenProjects().map { com.opencode.android.util.normalizeProjectDir(it) }.filterNot { it == dir }.toSet())
+            // An ADDED project is explicitly kept from now on.
+            com.opencode.android.data.HomePrefs.setKeptProjects(
+                (com.opencode.android.data.HomePrefs.keptProjects().orEmpty() + dir).toSet(),
+            )
             val current = loadLocalProjects().toMutableList()
             if (current.none { it.directory == dir }) {
                 current.add(
@@ -328,9 +378,15 @@ class HomeViewModel
                 )
                 saveLocalProjects(current)
             }
-            val merged = (_uiState.value.projects + current).distinctBy { it.directory }
-            val added = merged.first { it.directory == dir }
+            val merged =
+                (_uiState.value.projects + current)
+                    .filterNot { it.directory in loadHiddenProjects() }
+                    .distinctBy { it.directory }
+            val added = merged.firstOrNull { it.directory == dir } ?: return
             _uiState.update { it.copy(projects = merged, selectedProject = added) }
+            // Persist right away: a restart before the next refresh must not repaint
+            // the old list from the cache.
+            persistHome()
             loadSessions(added)
         }
 
@@ -341,18 +397,46 @@ class HomeViewModel
          * back on the next refresh.
          */
         fun deleteProject(project: HomeProject) {
-            saveHiddenProjects(loadHiddenProjects() + project.directory)
+            val dir = com.opencode.android.util.normalizeProjectDir(project.directory)
+            saveHiddenProjects(
+                (loadHiddenProjects().map { com.opencode.android.util.normalizeProjectDir(it) } + dir).toSet(),
+            )
+            // Forget the choice as well: the keep-list is the authority, so a deleted
+            // project cannot come back through it either.
+            com.opencode.android.data.HomePrefs.setKeptProjects(
+                com.opencode.android.data.HomePrefs.keptProjects().orEmpty()
+                    .map { com.opencode.android.util.normalizeProjectDir(it) }
+                    .filterNot { it == dir }
+                    .toSet(),
+            )
             if (project.isLocal) {
-                saveLocalProjects(loadLocalProjects().filter { it.directory != project.directory })
+                saveLocalProjects(
+                    loadLocalProjects().filter {
+                        !com.opencode.android.util.sameProjectDir(it.directory, dir)
+                    },
+                )
             }
-            val projects = _uiState.value.projects.filter { it.directory != project.directory }
+            val projects =
+                _uiState.value.projects.filter {
+                    !com.opencode.android.util.sameProjectDir(it.directory, dir)
+                }
             val selected =
-                _uiState.value.selectedProject?.takeIf { it.directory != project.directory }
+                _uiState.value.selectedProject?.takeIf {
+                    !com.opencode.android.util.sameProjectDir(it.directory, dir)
+                }
                     // Same preference as loadProjects: never fall back to "/" while a
                     // real project exists.
                     ?: projects.firstOrNull { it.directory != "/" }
                     ?: projects.firstOrNull()
             _uiState.update { it.copy(projects = projects, selectedProject = selected) }
+            // Drop the cached snapshot too: it still contained the project and a cold
+            // start painted it back before the network answered. With no project left
+            // the cache has to be REMOVED (persistHome skips an empty list).
+            if (projects.isEmpty()) {
+                viewModelScope.launch { runCatching { homeStore.clearAll() } }
+            } else {
+                persistHome()
+            }
             if (selected == null) {
             // The last project went away: its sessions must not stay on screen.
             _uiState.update { it.copy(sessions = emptyList()) }
@@ -395,7 +479,11 @@ class HomeViewModel
                     withContext(kotlinx.coroutines.Dispatchers.IO) {
                         val updated =
                             loadLocalProjects().map {
-                                if (it.directory == project.directory) it.copy(name = newName) else it
+                                if (com.opencode.android.util.sameProjectDir(it.directory, project.directory)) {
+                                    it.copy(name = newName)
+                                } else {
+                                    it
+                                }
                             }
                         saveLocalProjects(updated)
                     }
@@ -403,7 +491,11 @@ class HomeViewModel
                         state.copy(
                             projects =
                                 state.projects.map {
-                                    if (it.directory == project.directory) it.copy(name = newName) else it
+                                    if (com.opencode.android.util.sameProjectDir(it.directory, project.directory)) {
+                                        it.copy(name = newName)
+                                    } else {
+                                        it
+                                    }
                                 },
                             selectedProject =
                                 state.selectedProject?.takeIf { it.directory != project.directory }
@@ -441,10 +533,10 @@ class HomeViewModel
                     val obj = arr.getJSONObject(i)
                     HomeProject(
                         name = obj.optString("name"),
-                        directory = obj.optString("directory"),
+                        directory = com.opencode.android.util.normalizeProjectDir(obj.optString("directory")),
                         isLocal = true,
                     )
-                }.filter { it.directory.isNotBlank() }
+                }.filter { it.directory.isNotBlank() && it.directory != "/" }
             } catch (e: Exception) {
                 emptyList()
             }
@@ -475,7 +567,10 @@ class HomeViewModel
                     // this is a pull-to-refresh and the list must stay put.
                     val hasContent =
                         _uiState.value.sessions.isNotEmpty() &&
-                            _uiState.value.selectedProject?.directory == project.directory
+                            com.opencode.android.util.sameProjectDir(
+                                _uiState.value.selectedProject?.directory,
+                                project.directory,
+                            )
                     _uiState.update {
                         it.copy(
                             isLoading = !hasContent,
@@ -520,7 +615,13 @@ class HomeViewModel
                                 }
                                 .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
                         // Drop a stale result: another project was selected meanwhile.
-                        if (_uiState.value.selectedProject?.directory != project.directory) return@launch
+                        if (!com.opencode.android.util.sameProjectDir(
+                                _uiState.value.selectedProject?.directory,
+                                project.directory,
+                            )
+                        ) {
+                            return@launch
+                        }
                         _uiState.update {
                             it.copy(
                                 archivedCount = archivedForProject,

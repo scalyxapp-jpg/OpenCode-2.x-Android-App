@@ -20,6 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.4.2] - 2026-10-11
+
+### Fixed
+- **Die Projektliste ist jetzt genau die Liste, die du selbst festgelegt hast.** Es gibt eine
+  persistente „Meine Projekte"-Auswahl: nur Verzeichnisse darin erscheinen auf dem Home-Screen.
+  Gelöschte Projekte kommen nicht zurück (auch nicht nach einem App-Neustart) und der Server kann
+  keine Projekte mehr „einschmuggeln" (z. B. sein eigenes globales Verzeichnis oder `/`).
+  Beim ersten Start nach diesem Update wird die Liste einmalig aus den vorhandenen Projekten
+  (abzüglich der bereits gelöschten) übernommen — es geht also nichts verloren.
+- **Verzeichnisse werden kanonisch verglichen** (`normalizeProjectDir`: Schrägstriche am Ende,
+  doppelte Trenner, Whitespace). Vorher scheiterte der exakte String-Vergleich, wenn der Server
+  denselben Pfad anders schrieb — genau dadurch tauchte ein gelöschtes Projekt wieder auf bzw.
+  konnte doppelt erscheinen.
+- **Löschen/Hinzufügen wird sofort persistiert** (Cache-Snapshot + Einstellungen). Vorher fehlte
+  beim Löschen der Cache-Schreibvorgang, sodass ein Kaltstart das gelöschte Projekt kurz (und bei
+  je nach Server-Schreibweise dauerhaft) wieder anzeigte. Beim Löschen des letzten Projekts wird
+  der Snapshot entfernt.
+- **Keine Phantom-Projekte mehr:** Das zuletzt benutzte Verzeichnis wurde bisher zusätzlich als
+  Projekt angelegt (auch wenn es nie eines war) und erschien als zufälliger Eintrag. Es dient jetzt
+  nur noch der Auswahl unter den eigenen Projekten.
+- **Server-Projekte bleiben erreichbar:** Im „Projekt hinzufügen"-Dialog erscheinen die Projekte,
+  die der Server kennt, aber nicht in deiner Liste sind („On the server, not in your list") als
+  Ein-Tipp-Vorschläge — dort holst du sie bewusst zurück.
+
 ## [1.4.1] - 2026-10-11
 
 ### Changed
@@ -275,7 +299,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...v1.3.0
