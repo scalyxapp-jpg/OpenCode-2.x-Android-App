@@ -1,6 +1,7 @@
 package com.opencode.android.util
 
 import com.opencode.android.domain.Model
+import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.SessionModel
 
 /**
@@ -105,6 +106,51 @@ object ModelSelection {
         if (model.isBlank()) return model
         val entry = find(models, model) ?: return model
         return sessionRef(entry.id, entry.providerId)
+    }
+
+    /**
+     * True when two refs point at the same catalog entry.
+     *
+     * A plain string compare is not enough: the session payload can name the model
+     * bare ("deepseek-v4-flash") while the picker holds the provider-qualified ref
+     * ("opencode-go/deepseek-v4-flash"), and then NO row looked selected even
+     * though one was. Both sides are resolved against the catalog first.
+     */
+    fun sameModel(
+        models: List<Model>,
+        a: String?,
+        b: String?,
+    ): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return false
+        if (a == b) return true
+        val left = find(models, a) ?: return false
+        val right = find(models, b) ?: return false
+        return left.id == right.id && left.providerId == right.providerId
+    }
+
+    /**
+     * Label for the ACTIVE model ("DeepSeek V4 Flash").
+     *
+     * The provider is appended when that display name is offered by more than one
+     * provider, so two providers serving the same name stay distinguishable
+     * ("DeepSeek V4 Flash · opencode-go"). Unambiguous names are left alone, so the
+     * common case reads exactly as before.
+     */
+    fun activeLabel(
+        models: List<Model>,
+        ref: String?,
+        providers: List<ProviderEntry> = emptyList(),
+    ): String {
+        if (ref.isNullOrBlank()) return ""
+        val entry = find(models, ref) ?: return ref
+        val label = entry.name?.takeIf { it.isNotBlank() } ?: entry.id
+        val shared = models.count { (it.name?.takeIf { name -> name.isNotBlank() } ?: it.id) == label } > 1
+        val provider = entry.providerId
+        if (!shared || provider.isNullOrBlank()) return label
+        val providerLabel =
+            providers.firstOrNull { it.id == provider }?.name?.takeIf { it.isNotBlank() }
+                ?: provider
+        return "$label · $providerLabel"
     }
 
     /** Exact (provider, modelId) for a ref, used before an API call. */

@@ -311,7 +311,9 @@ internal fun ModelPickerDialog(
                             PickerRow(
                                 title = model.name ?: model.id,
                                 subtitle = model.id,
-                                selected = ref == selectedModel,
+                                selected =
+                                    com.opencode.android.util
+                                        .sameModelRefs(models, ref, selectedModel),
                                 onClick = {
                                     RecentModelsStore.record(ref)
                                     onSelect(ref)
@@ -334,10 +336,14 @@ internal fun ModelPickerDialog(
                             // selectedModel is the provider-qualified ref while
                             // model.id is bare, so compare through the helper.
                             val isSelected =
-                                com.opencode.android.util.sessionModelRef(
-                                    model.id,
-                                    model.providerId,
-                                ) == selectedModel
+                                com.opencode.android.util.sameModelRefs(
+                                    models,
+                                    com.opencode.android.util.sessionModelRef(
+                                        model.id,
+                                        model.providerId,
+                                    ),
+                                    selectedModel,
+                                )
                             PickerRow(
                                 modifier =
                                     Modifier.animateItem(

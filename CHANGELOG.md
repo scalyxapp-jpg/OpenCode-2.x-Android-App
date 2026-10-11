@@ -52,6 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolution is catalog-first (provider-qualified → exact model id → legacy tail
   match), consistently in the chat picker, "Manage models", Settings → Models
   and the send-time availability check.
+- **The same model name is now correct per provider.** Two providers can offer the
+  same model id with different windows (`qwen3.8-max`: 1,000,000 on
+  `opencode-go` vs 262,144 on `opencode`, `minimax-m3`: 512,000 vs 1,000,000). The
+  context-limit lookup matched on the model id alone, so the usage ring showed a
+  percentage for an arbitrary provider — it now resolves the selected provider
+  first, in the chat header, the composer chip and the context dialog.
+- The model picker's "selected" check is provider-aware: a bare session ref
+  ("deepseek-v4-flash") still highlights the right row, and when a model name is
+  offered by several providers the active-model label is suffixed with the
+  provider ("DeepSeek V4 Flash · DeepSeek") so the same name is unambiguous.
 - Adapt to the newer APIs: `Modifier.sharedElement` now takes
   `sharedContentState`, and resource lookups inside composables use
   `LocalResources` / `rememberUpdatedState` to satisfy Compose's new

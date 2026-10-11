@@ -227,10 +227,12 @@ internal fun Composer(
     // only visible after the network answers.
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Show the display name like the web model button ("DeepSeek V4 Pro (New)").
+    // When several providers serve the same name the provider is appended, so the
+    // active model stays unambiguous.
     val modelDisplayName =
-        remember(models, selectedModel) {
+        remember(models, selectedModel, providerGroups) {
             com.opencode.android.util
-                .friendlyModelName(models, selectedModel)
+                .activeModelLabel(models, selectedModel, providerGroups)
                 .ifEmpty { "Choose model" }
         }
     var showModelPicker by remember { mutableStateOf(false) }

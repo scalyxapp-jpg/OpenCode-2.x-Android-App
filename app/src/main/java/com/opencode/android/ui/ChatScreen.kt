@@ -254,7 +254,11 @@ internal fun ChatScreen(
                     Box(modifier = titleSharedModifier) {
                         val selectedModelName =
                             com.opencode.android.util
-                                .friendlyModelName(uiState.models, uiState.selectedModel)
+                                .activeModelLabel(
+                                    uiState.models,
+                                    uiState.selectedModel,
+                                    uiState.providerGroups,
+                                )
                         val subtitle =
                             "${uiState.selectedAgent} · " +
                                 selectedModelName.ifEmpty { "Choose model" }
@@ -304,13 +308,12 @@ internal fun ChatScreen(
                         uiState.contextInfo?.let { info ->
                             val limit =
                                 info.contextLimit?.takeIf { it > 0 }
-                                    ?: uiState.providerGroups
-                                        .asSequence()
-                                        .flatMap { it.models.values.asSequence() }
-                                        .firstOrNull { it.id == info.model || it.model == info.model }
-                                        ?.limit
-                                        ?.context
-                                        ?.takeIf { it > 0 }
+                                    ?: com.opencode.android.util
+                                        .contextLimitFor(
+                                            uiState.providerGroups,
+                                            info.provider,
+                                            info.model,
+                                        )
                             com.opencode.android.util
                                 .contextPercent(info.totalTokens, limit)
                         }
@@ -362,9 +365,14 @@ internal fun ChatScreen(
                             info = uiState.contextInfo,
                             messages = uiState.contextUsage?.data ?: emptyList(),
                             modelName =
-                                com.opencode.android.util.friendlyModelName(
+                                com.opencode.android.util.activeModelLabel(
                                     uiState.models,
-                                    uiState.contextInfo?.model ?: uiState.selectedModel,
+                                    com.opencode.android.util
+                                        .sessionModelRef(
+                                            uiState.contextInfo?.model,
+                                            uiState.contextInfo?.provider,
+                                        ).ifBlank { uiState.selectedModel },
+                                    uiState.providerGroups,
                                 ),
                             onDismiss = { showContext = false },
                         )
@@ -1789,8 +1797,13 @@ internal fun ReviewTab(
             ContextRow(
                 "Model",
                 com.opencode.android.util
-                    .friendlyModelName(uiState.models, info?.model ?: uiState.selectedModel)
-                    .ifBlank { "—" },
+                    .activeModelLabel(
+                        uiState.models,
+                        com.opencode.android.util
+                            .sessionModelRef(info?.model, info?.provider)
+                            .ifBlank { uiState.selectedModel },
+                        uiState.providerGroups,
+                    ).ifBlank { "—" },
             )
         }
         item {

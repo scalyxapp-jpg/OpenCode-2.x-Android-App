@@ -824,6 +824,19 @@ class ChatViewModel
                 val cacheWrite = tokens?.cache?.write ?: 0L
 
                 val modelId = full.model?.id ?: session.model?.id ?: ""
+                // Provider can be absent on the session payload; derive it from the
+                // CATALOG so the context dialog does not show "—" for a known model
+                // and the limit is looked up for the right provider. Splitting a ref
+                // at the first slash was wrong for model ids that carry their own
+                // namespace (Nvidia: "z-ai/glm-5.3" is not provider "z-ai").
+                val sessionProvider =
+                    (full.model?.provider ?: session.model?.provider)
+                        ?.takeIf { it.isNotBlank() }
+                        ?: _uiState.value.models
+                            .firstOrNull { m ->
+                                m.id == modelId || "${m.providerId}/${m.id}" == modelId
+                            }?.providerId
+                            ?.takeIf { it.isNotBlank() }
                 // The provider catalog loads asynchronously; when it is not ready
                 // yet (or was just invalidated on a reconnect) the limit lookup
                 // returns null and the ring flashed to 0%. Reuse the last known
@@ -831,21 +844,10 @@ class ChatViewModel
                 val previous = _uiState.value.contextInfo
                 val info =
                     ContextInfo(
-                        // Provider can be absent on the session payload; derive it
-                        // from the CATALOG so the dialog does not show "—" for a
-                        // known model. Splitting the ref at the first slash was
-                        // wrong for model ids that carry their own namespace
-                        // (Nvidia: "z-ai/glm-5.3" is not provider "z-ai").
-                        provider =
-                            (full.model?.provider ?: session.model?.provider)
-                                ?.takeIf { it.isNotBlank() }
-                                ?: _uiState.value.models
-                                    .firstOrNull { m ->
-                                        m.id == modelId || "${m.providerId}/${m.id}" == modelId
-                                    }?.providerId
-                                    ?.takeIf { it.isNotBlank() },
+                        provider = sessionProvider,
                         model = modelId,
-                        contextLimit = contextLimitFor(modelId) ?: previous?.contextLimit,
+                        contextLimit =
+                            contextLimitFor(sessionProvider, modelId) ?: previous?.contextLimit,
                         // Web "Total Tokens" = the last assistant message's
                         // input+output+reasoning+cache(read+write) — i.e. the
                         // tokens currently occupying the context window.
@@ -892,18 +894,18 @@ class ChatViewModel
             }
         }
 
-        // Context window for a model. The provider catalog is authoritative
-        // (GET /provider → models[..].limit.context), which is what the web UI
-        // renders as "Context Limit". When the catalog has not loaded yet we return
-        // null (unknown) instead of fabricating a limit.
-        private fun contextLimitFor(modelId: String): Long? =
-            _uiState.value.providerGroups
-                .asSequence()
-                .flatMap { it.models.values.asSequence() }
-                .firstOrNull { it.id == modelId || it.model == modelId }
-                ?.limit
-                ?.context
-                ?.takeIf { it > 0 }
+        // Context window for the SELECTED provider + model. The provider catalog is
+        // authoritative (GET /provider → models[..].limit.context), which is what
+        // the web UI renders as "Context Limit". Provider-aware: the same model id
+        // can be offered by several providers with different windows, so matching
+        // on the id alone showed the limit of an arbitrary provider — see
+        // `contextLimitFor` in ContextPercent.kt.
+        private fun contextLimitFor(
+            provider: String?,
+            modelId: String,
+        ): Long? =
+            com.opencode.android.util
+                .contextLimitFor(_uiState.value.providerGroups, provider, modelId)
 
         fun loadFiles(path: String) {
             viewModelScope.launch {

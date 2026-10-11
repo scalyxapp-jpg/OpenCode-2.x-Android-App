@@ -125,4 +125,45 @@ class ModelSelectionTest {
         // A genuinely unknown ref still falls back to the historical split.
         assertEquals("mystery" to "model", ModelSelection.resolve("mystery/model", catalog))
     }
+
+    @Test
+    fun `same model id under two providers stays selectable and distinguishable`() {
+        val shared = "deepseek-v4-flash"
+        val catalog =
+            listOf(
+                Model(id = shared, name = "DeepSeek V4 Flash", providerId = "opencode-go"),
+                Model(id = shared, name = "DeepSeek V4 Flash", providerId = "deepseek"),
+            )
+        val providers =
+            listOf(
+                com.opencode.android.domain
+                    .ProviderEntry(id = "opencode-go", name = "OpenCode Go"),
+                com.opencode.android.domain
+                    .ProviderEntry(id = "deepseek", name = "DeepSeek"),
+            )
+
+        // Selection: the same bare id under both providers must resolve per provider.
+        assertEquals(
+            "opencode-go" to shared,
+            ModelSelection.resolve("opencode-go/$shared", catalog),
+        )
+        assertEquals(
+            "deepseek" to shared,
+            ModelSelection.resolve("deepseek/$shared", catalog),
+        )
+        // A row is "selected" only for the provider that is actually active, even
+        // when the session named the model bare.
+        assertTrue(ModelSelection.sameModel(catalog, "deepseek/$shared", "deepseek/$shared"))
+        assertFalse(ModelSelection.sameModel(catalog, "deepseek/$shared", "opencode-go/$shared"))
+        assertTrue("bare ref still matches its qualified row", ModelSelection.sameModel(catalog, shared, "opencode-go/$shared"))
+
+        // Display: the shared name gains a provider suffix so it is unambiguous.
+        assertEquals(
+            "DeepSeek V4 Flash · DeepSeek",
+            ModelSelection.activeLabel(catalog, "deepseek/$shared", providers),
+        )
+        // A unique name is left alone.
+        val unique = listOf(Model(id = "only-one", name = "Unique", providerId = "deepseek"))
+        assertEquals("Unique", ModelSelection.activeLabel(unique, "deepseek/only-one", providers))
+    }
 }
