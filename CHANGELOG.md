@@ -67,6 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LocalResources` / `rememberUpdatedState` to satisfy Compose's new
   configuration-aware lint check.
 
+- **Starting a session in a project no longer fails silently.** `createSession`
+  sent no directory when no project was resolved and the server then created the
+  session in its OWN working directory (observed: `~/.config/opencode`) instead
+  of the project, so the new session never appeared where the user was looking.
+  It now refuses that case with a clear message, logs the attempt (directory,
+  resulting session id) and surfaces failures to the user instead of only
+  setting a quiet UI field.
+
 ## [1.0.0] - 2026-10-07
 
 ### Added
