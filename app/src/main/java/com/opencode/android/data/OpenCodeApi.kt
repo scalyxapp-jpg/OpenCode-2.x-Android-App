@@ -212,6 +212,17 @@ interface OpenCodeApi {
 
     suspend fun getCommands(directory: String? = null): List<CommandEntry>
 
+    /**
+     * Runs a server-side slash command ("/name args"), the way the TUI does: the
+     * server expands the command template. Returns false when rejected.
+     */
+    suspend fun runCommand(
+        sessionId: String,
+        name: String,
+        text: String,
+        directory: String? = null,
+    ): Boolean
+
     suspend fun getSkills(): List<JsonElement>
 
     // --- project / vcs -----------------------------------------------------

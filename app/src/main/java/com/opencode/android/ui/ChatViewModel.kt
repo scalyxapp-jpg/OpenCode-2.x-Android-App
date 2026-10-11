@@ -2488,6 +2488,38 @@ class ChatViewModel
             }
             if (rawText.isEmpty() && attachments.isEmpty()) return
 
+            // A "/name args" line for a SERVER command runs through the command
+            // endpoint, where the server expands the command's template — exactly
+            // what the TUI does. Posting it as a prompt would just send the literal
+            // text, which is why commands appeared to do nothing.
+            com.opencode.android.ui.session
+                .parseSlashCommand(rawText, _uiState.value.commands)
+                ?.let { command ->
+                    _uiState.update { it.copy(inputText = "", attachments = emptyList(), statusError = null) }
+                    sendJob =
+                        viewModelScope.launch {
+                            try {
+                                AppLog.d(APP_LOG_TAG) {
+                                    "runCommand: /${command.name} args=${command.arguments.length} session=${session.id}"
+                                }
+                                if (!api.runCommand(session.id, command.name, command.arguments, session.directory)) {
+                                    AppLog.e(APP_LOG_TAG, "runCommand rejected: /${command.name}")
+                                    UserMessages.post(R.string.action_failed, "/${command.name} was rejected")
+                                    _uiState.update { it.copy(statusError = "Command /${command.name} was rejected") }
+                                } else {
+                                    refreshMessages(session.id)
+                                }
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                AppLog.e(APP_LOG_TAG, "runCommand failed: ${e.message}")
+                                UserMessages.post(R.string.action_failed, "${e.message}")
+                                _uiState.update { it.copy(statusError = e.message) }
+                            }
+                        }
+                    return
+                }
+
             // Web shape: text part + one "file" part per attachment, each with a
             // base64 data URL. The old text-only "[Attached: name]" marker never
             // reached the agent, so files were silently ignored.

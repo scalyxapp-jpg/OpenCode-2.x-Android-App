@@ -513,6 +513,27 @@ class OpenCodeApiAdapter(
         }
     }
 
+    override suspend fun runCommand(
+        sessionId: String,
+        name: String,
+        text: String,
+        directory: String?,
+    ): Boolean {
+        val body =
+            JsonObject(
+                mapOf(
+                    "name" to JsonPrimitive(name),
+                    "text" to JsonPrimitive(text),
+                    // "queue" is the TUI's default: the command runs as a new
+                    // inbox item instead of steering the running turn.
+                    "delivery" to JsonPrimitive("queue"),
+                ),
+            )
+        val response = v2.runCommand(sessionId, body, directory)
+        response.body()?.close()
+        return response.isSuccessful
+    }
+
     override suspend fun getCommands(directory: String?): List<CommandEntry> =
         v2
             .commands(directory)

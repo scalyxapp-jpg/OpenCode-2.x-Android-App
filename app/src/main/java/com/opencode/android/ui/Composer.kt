@@ -273,7 +273,9 @@ internal fun Composer(
         androidx.compose.animation.AnimatedVisibility(
             visible =
                 inputText.startsWith("/") && commands.isNotEmpty() &&
-                    commands.any { it.name.lowercase().contains(inputText.removePrefix("/").substringBefore(" ").lowercase()) },
+                    com.opencode.android.ui.session
+                        .filterCommands(commands, inputText.removePrefix("/").substringBefore(" "))
+                        .isNotEmpty(),
             enter =
                 androidx.compose.animation.expandVertically() +
                     androidx.compose.animation.fadeIn(),
@@ -282,7 +284,12 @@ internal fun Composer(
                     androidx.compose.animation.fadeOut(),
         ) {
             val query = inputText.removePrefix("/").substringBefore(" ").lowercase()
-            val matches = commands.filter { it.name.lowercase().contains(query) }.take(6)
+            // EVERY matching command (the TUI lists them all); the list scrolls.
+            // The old `.take(6)` silently hid most commands, and which six
+            // survived depended on catalog order — "sometimes this, sometimes that".
+            val matches =
+                com.opencode.android.ui.session
+                    .filterCommands(commands, query)
             if (matches.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),

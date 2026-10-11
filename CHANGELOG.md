@@ -5,6 +5,14 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+- **The "/" picker lists every command, and they actually run.** It was capped at
+  six matches (`take(6)`) and matched with `contains`, so most of the server's
+  commands were hidden and which ones appeared changed with the catalog order.
+  It now lists all matches (prefix first, like the TUI) in a scrollable list, and
+  a "/name args" line runs through the server's `POST /api/session/{id}/command`
+  endpoint — the same path the TUI uses, where the command template is expanded —
+  instead of being posted as literal text.
+
 ## [1.1.0] - 2026-10-11
 
 ### Changed
