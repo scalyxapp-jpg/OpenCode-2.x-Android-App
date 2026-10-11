@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.2.1] - 2026-10-11
+
+### Fixed
+- **Home search field**: the two filter chips (Running / guarded) were squeezed into
+  the same row as the search field, leaving it ~150 dp wide — the placeholder wrapped
+  and the field read as an oversized card. The field now owns its row (compact 44 dp,
+  single-line placeholder) and the filters sit on their own line.
+
 ## [1.2.0] - 2026-10-11
 
 Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
@@ -173,7 +181,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.0.0...v1.1.0

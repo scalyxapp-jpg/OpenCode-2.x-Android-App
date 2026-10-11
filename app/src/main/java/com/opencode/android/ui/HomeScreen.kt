@@ -754,53 +754,96 @@ private fun SearchRow(
     onlyRunning: Boolean,
     onToggleRunning: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = MaterialTheme.spacing.medium, vertical = MaterialTheme.spacing.small),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-    ) {
-        TextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
-            placeholder = { Text(stringResource(R.string.search_in, scopeName)) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            singleLine = true,
-            shape = CircleShape,
-            colors =
-                TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                ),
-        )
-        // "Only running" — with many sessions, finding the one that is actually
-        // generating meant scrolling; the badge was the only hint.
-        FilterChip(
-            selected = onlyRunning,
-            onClick = { onToggleRunning(!onlyRunning) },
-            label = { Text(stringResource(R.string.running_only)) },
-        )
-        FilterChip(
-            selected = onlyGuarded,
-            onClick = { onToggleGuarded(!onlyGuarded) },
-            label = {
-                Icon(
-                    Icons.Default.Security,
-                    // An unlabelled 14 dp icon gave no clue what was filtered; the
-                    // description is the only affordance for screen readers.
-                    contentDescription = stringResource(R.string.guarded_only),
-                    modifier = Modifier.size(14.dp),
-                )
-            },
-        )
-        FilledTonalIconButton(onClick = onNewSession) {
-            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.new_session))
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Search field + "new session" share ONE row: the field gets all the
+        // remaining width. Squeezing the filter chips in here too left it ~150 dp
+        // wide, so the placeholder wrapped and the field read as an oversized card.
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialTheme.spacing.medium,
+                        end = MaterialTheme.spacing.medium,
+                        top = MaterialTheme.spacing.small,
+                        bottom = MaterialTheme.spacing.extraSmall,
+                    ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                // Fixed height keeps the row from growing (the default field is
+                // 56 dp, which dominated the list header).
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(44.dp),
+                placeholder = {
+                    Text(
+                        text = stringResource(R.string.search_in, scopeName),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                singleLine = true,
+                shape = CircleShape,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                colors =
+                    TextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+            )
+            FilledTonalIconButton(onClick = onNewSession) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.new_session))
+            }
+        }
+        // Filters live on their own line, so they never compete with the field for
+        // horizontal space (and stay reachable on a narrow screen).
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = MaterialTheme.spacing.medium,
+                        end = MaterialTheme.spacing.medium,
+                        bottom = MaterialTheme.spacing.extraSmall,
+                    ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            // "Only running" — with many sessions, finding the one that is actually
+            // generating meant scrolling; the badge was the only hint.
+            FilterChip(
+                selected = onlyRunning,
+                onClick = { onToggleRunning(!onlyRunning) },
+                label = { Text(stringResource(R.string.running_only)) },
+            )
+            FilterChip(
+                selected = onlyGuarded,
+                onClick = { onToggleGuarded(!onlyGuarded) },
+                label = {
+                    Icon(
+                        Icons.Default.Security,
+                        // An unlabelled 14 dp icon gave no clue what was filtered;
+                        // the description is the only affordance for screen readers.
+                        contentDescription = stringResource(R.string.guarded_only),
+                        modifier = Modifier.size(14.dp),
+                    )
+                },
+            )
         }
     }
 }
