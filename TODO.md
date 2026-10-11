@@ -8,7 +8,7 @@ Build/Compile erst am Ende (vor APK), nicht nach jedem Auftrag.
 - [x] Auftrag 3: GUI-Module — Logik-Issues + Usability/End-User-Experience
 - [x] Auftrag 4: Workflows/Routinen (mehrteilig & einteilig)
 - [x] Auftrag 5: 5 Overhaul-Verbesserungen
-- [x] Auftrag 6: Release-APK gebaut (1.2.0, versionCode 4) + HTTP-Server auf 100.107.159.17:8899. Offen: GitHub-Release + HTTP-Server auf Tailscale-IP 100.107.159.17
+- [x] Auftrag 6: Release-APK 1.2.0 (versionCode 4) gebaut, HTTP-Server auf 100.107.159.17:8899 (HTTP 200) + GitHub-Release v1.2.0 (Latest, Download-Links HTTP 200)
 
 ## Auftrag 1 — behobene Defekte (Kurzliste)
 
