@@ -252,6 +252,7 @@
     <string name="could_not_revert" formatted="false">Could not revert: %1$s</string>
     <string name="could_not_load_todos" formatted="false">Could not load the todo list: %1$s</string>
     <string name="could_not_load_projects" formatted="false">Could not load projects: %1$s</string>
+    <string name="could_not_create_session" formatted="false">Could not create the session: %1$s</string>
     <string name="could_not_load_sessions" formatted="false">Could not load sessions: %1$s</string>
     <string name="could_not_rename_project" formatted="false">Could not rename the project: %1$s</string>
     <string name="action_failed" formatted="false">Action failed: %1$s</string>

@@ -606,15 +606,39 @@ class HomeViewModel
             onCreated: (Session) -> Unit,
         ) {
             viewModelScope.launch {
+                // The directory decides which PROJECT the session belongs to. With
+                // none, the server silently creates it in its OWN working
+                // directory (observed: ~/.config/opencode), so the new session
+                // appeared in the wrong project and looked like "nothing
+                // happened". Refuse instead of doing the wrong thing quietly.
+                val dir =
+                    directory
+                        ?: _uiState.value.selectedProject?.directory
+                        ?: com.opencode.android.data.LastSessionStore
+                            .directory()
+                if (dir.isNullOrBlank()) {
+                    AppLog.e(APP_LOG_TAG, "createSession: no project directory available")
+                    UserMessages.post(R.string.could_not_create_session, "no project selected")
+                    _uiState.update { it.copy(error = "Select a project first") }
+                    return@launch
+                }
+                AppLog.d(APP_LOG_TAG) { "createSession: dir=$dir" }
                 try {
-                    val dir = directory ?: _uiState.value.selectedProject?.directory
                     val session =
                         api
                             .createSessionIn(
-                                SessionCreateRequest(location = dir?.let { SessionLocation(it) }),
+                                SessionCreateRequest(location = SessionLocation(dir)),
                             ).data
+                    AppLog.d(APP_LOG_TAG) { "createSession: ok session=${session.id} dir=${session.directory}" }
                     onCreated(session)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    // Never silent: a failed create used to look like "the button
+                    // does nothing", because only a small UI field was set and
+                    // nothing was logged.
+                    AppLog.e(APP_LOG_TAG, "createSession failed: ${e.message}", e)
+                    UserMessages.post(R.string.could_not_create_session, e.message ?: "")
                     _uiState.update { it.copy(error = e.message ?: "Session creation failed") }
                 }
             }
