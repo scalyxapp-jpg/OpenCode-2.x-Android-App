@@ -278,7 +278,7 @@ internal fun ChatScreen(
                                             com.opencode.android.util
                                                 .sessionDisplayTitle(it)
                                         }
-                                        ?: "Session",
+                                        ?: stringResource(R.string.new_session),
                                 subtitle = animatedSubtitle,
                             )
                         }

@@ -84,6 +84,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Room/WorkManager keep rules fix it, and Android CI now also builds
   `assembleRelease` so a minify-only regression cannot ship unnoticed again.
 
+- **Sessions show their real name.** The chat header stayed on the "Session"
+  placeholder because `refreshSessionModel` copied only `model`/`agent` from the
+  refreshed session. The server names a session from its first turn, so that title
+  is now copied too (as is `directory`), and the placeholder reads "New session"
+  until the name arrives.
+
 ## [1.0.0] - 2026-10-07
 
 ### Added

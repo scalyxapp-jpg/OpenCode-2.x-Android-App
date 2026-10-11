@@ -551,7 +551,7 @@ class ChatViewModel
                         AppLog.d(
                             APP_LOG_TAG,
                         ) {
-                            "loadSession: session=${session.id} dir=${session.directory} agent=${session.agent} model=${session.model?.id}"
+                            "loadSession: session=${session.id} title=${session.title} dir=${session.directory} agent=${session.agent} model=${session.model?.id}"
                         }
                         // Directory-scoped: a project can define its own agents.
                         val agents = loadAgents(session.directory)
@@ -1439,6 +1439,13 @@ class ChatViewModel
                             current.copy(
                                 session =
                                     current.session.copy(
+                                        // The server names a session from its first
+                                        // turn; without copying the title the header
+                                        // stayed on the "Session" fallback forever.
+                                        // `directory` too: /api/session omits it, and
+                                        // the Changes tab/VCS need it.
+                                        title = session.title ?: current.session.title,
+                                        directory = session.directory ?: current.session.directory,
                                         model = session.model,
                                         agent = session.agent ?: current.session.agent,
                                     ),
