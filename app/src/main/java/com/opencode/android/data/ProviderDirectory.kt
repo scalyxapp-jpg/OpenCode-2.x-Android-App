@@ -59,6 +59,10 @@ class ProviderDirectory(
         java.util.concurrent.atomic
             .AtomicLong(0L)
 
+    // When the Ready catalog was fetched; drives [invalidateIfStale].
+    @Volatile
+    private var loadedAtMs: Long = 0L
+
     /** Models of connected providers only — what the pickers may offer. */
     val connectedProviders: List<ProviderEntry>
         get() =
@@ -114,6 +118,7 @@ class ProviderDirectory(
         _state.value =
             try {
                 val resp = fetch()
+                loadedAtMs = System.currentTimeMillis()
                 State.Ready(resp.all, resp.connected.toSet())
             } catch (e: Exception) {
                 State.Failed(e.message ?: e::class.java.simpleName)
@@ -130,12 +135,47 @@ class ProviderDirectory(
     }
 
     /**
+     * Re-fetches when the cached catalog is older than [maxAgeMs].
+     *
+     * Providers can be added, removed or authenticated in the TUI, the web UI or
+     * `opencode.json` while this app is running. The catalog used to be fetched
+     * once per process, so those changes never showed up until the app was
+     * restarted — the provider surfaces now call this on entry and pick up the
+     * new state without paying for a full ~6 MB fetch on every open.
+     *
+     * Returns true when the cache was dropped (the caller then triggers the
+     * fetch, typically via [load], so the result can be awaited).
+     */
+    fun invalidateIfStale(maxAgeMs: Long): Boolean {
+        val fresh =
+            _state.value is State.Ready &&
+                System.currentTimeMillis() - loadedAtMs < maxAgeMs
+        if (fresh) return false
+        invalidate()
+        return true
+    }
+
+    /** [invalidateIfStale] + a background refetch, for callers that cannot await. */
+    fun refreshIfStale(maxAgeMs: Long) {
+        if (invalidateIfStale(maxAgeMs)) prefetch()
+    }
+
+    /**
      * Fire-and-forget warm-up. Called right after a successful backend
      * connection so the ~6 MB catalog is already parsed by the time the user
      * opens Settings → Providers/Models or a chat model picker.
      */
     fun prefetch() {
         scope.launch { load() }
+    }
+
+    companion object {
+        /**
+         * How long a fetched catalog may be reused before the provider surfaces
+         * refresh it. Short enough to reflect TUI/config edits, long enough that
+         * tab switches and session opens stay cheap.
+         */
+        const val DEFAULT_TTL_MS = 120_000L
     }
 }
 

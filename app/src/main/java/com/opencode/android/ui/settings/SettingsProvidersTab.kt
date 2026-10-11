@@ -86,7 +86,11 @@ internal fun ProvidersTab() {
     val catalog by providerDirectory.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(reload) {
-        if (reload > 0) providerDirectory.invalidate()
+        // A manual retry forces it; otherwise only refetch when the cached
+        // catalog has gone stale, so provider changes made in the TUI / web /
+        // opencode.json show up here without paying for a ~6 MB fetch on every
+        // tab switch.
+        if (reload > 0) providerDirectory.invalidate() else providerDirectory.invalidateIfStale(ProviderDirectory.DEFAULT_TTL_MS)
         providerDirectory.load()
     }
 

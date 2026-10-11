@@ -1,5 +1,4 @@
 package com.opencode.android.ui.settings
-import com.opencode.android.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,7 +15,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -24,15 +22,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.opencode.android.R
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.ProviderDirectory
-import com.opencode.android.ui.theme.spacing
-import com.opencode.android.ui.PickerSearchField
-import com.opencode.android.ui.InlineSpinner
 import com.opencode.android.domain.Model
-import androidx.compose.ui.res.stringResource
+import com.opencode.android.ui.InlineSpinner
+import com.opencode.android.ui.PickerSearchField
+import com.opencode.android.ui.theme.spacing
 
 // --- Models ----------------------------------------------------------------
 
@@ -50,21 +50,28 @@ internal fun ModelsTab() {
 
     // Shared, cached catalog (see ProviderDirectory).
     val catalog by providerDirectory.state.collectAsStateWithLifecycle()
-    LaunchedEffect(Unit) { providerDirectory.load() }
-
-    val visibleProviders = when (val c = catalog) {
-        is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
-        else -> emptyList()
+    LaunchedEffect(Unit) {
+        // Pick up provider changes made in the TUI/web/config without refetching
+        // the ~6 MB catalog on every tab switch.
+        providerDirectory.invalidateIfStale(com.opencode.android.data.ProviderDirectory.DEFAULT_TTL_MS)
+        providerDirectory.load()
     }
+
+    val visibleProviders =
+        when (val c = catalog) {
+            is ProviderDirectory.State.Ready -> c.providers.filter { c.connectedIds.contains(it.id) }
+            else -> emptyList()
+        }
     val loadError = (catalog as? ProviderDirectory.State.Failed)?.message
     val loading = catalog is ProviderDirectory.State.Loading
     val q = query.trim().lowercase()
     val visibility = remember(revision) { ModelVisibilityStore.visibilityMap() }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = MaterialTheme.spacing.medium),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = MaterialTheme.spacing.medium),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         item {
@@ -94,32 +101,38 @@ internal fun ModelsTab() {
         } else if (visibleProviders.isEmpty()) {
             item {
                 Text(
-                    text = if (loadError != null) {
-                        stringResource(R.string.could_not_load_models, loadError)
-                    } else {
-                        stringResource(R.string.no_providers_connected)
-                    },
+                    text =
+                        if (loadError != null) {
+                            stringResource(R.string.could_not_load_models, loadError)
+                        } else {
+                            stringResource(R.string.no_providers_connected)
+                        },
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (loadError != null) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color =
+                        if (loadError != null) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
                 )
             }
         }
 
         visibleProviders.forEach { p ->
-            val models = p.models.values
-                .filter { m ->
-                    q.isBlank() ||
-                        (m.name ?: m.id).lowercase().contains(q) ||
-                        m.id.lowercase().contains(q)
-                }
-                .sortedBy { (it.name ?: it.id).lowercase() }
+            val models =
+                p.models.values
+                    .filter { m ->
+                        q.isBlank() ||
+                            (m.name ?: m.id).lowercase().contains(q) ||
+                            m.id.lowercase().contains(q)
+                    }.sortedBy { (it.name ?: it.id).lowercase() }
             if (models.isEmpty()) return@forEach
 
-            val allOn = models.all { m ->
-                visibility[ModelVisibilityStore.visibilityKey(p.id, m.id)] ?: true
-            }
+            val allOn =
+                models.all { m ->
+                    visibility[ModelVisibilityStore.visibilityKey(p.id, m.id)] ?: true
+                }
             item(key = "h-${p.id}") {
                 SectionSubheader(
                     title = p.name ?: p.id,
@@ -145,9 +158,10 @@ internal fun ModelsTab() {
             items(models, key = { "${p.id}/${it.id}" }) { m: Model ->
                 val shown = visibility[ModelVisibilityStore.visibilityKey(p.id, m.id)] ?: true
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(

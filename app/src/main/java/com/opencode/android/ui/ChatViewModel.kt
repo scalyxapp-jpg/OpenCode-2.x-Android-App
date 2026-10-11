@@ -585,7 +585,7 @@ class ChatViewModel
                         // open after a cold start block for seconds. Paint with
                         // whatever is already parsed and re-resolve when it arrives
                         // (the launch after the state write below).
-                        providerDirectory.prefetch()
+                        providerDirectory.refreshIfStale(com.opencode.android.data.ProviderDirectory.DEFAULT_TTL_MS)
                         val providerGroups = providerDirectory.connectedProviders
                         val models = modelsFrom(providerDirectory)
                         session.sessionGuard?.revision?.let { revision ->

@@ -266,4 +266,69 @@ class OpenCodeApiAdapterTest {
             assertEquals("oauth", methods[1].type)
             assertEquals("server", methods[1].prompts.first().key)
         }
+
+    @Test
+    fun `getProviderList uses the full integration catalog and the server connection state`() =
+        runBlocking {
+            // 1) /api/provider — the providers the server has available.
+            server.enqueue(
+                MockResponse()
+                    .setBody(
+                        """{"location":{},"data":[
+                          {"id":"deepseek","integrationID":"deepseek","name":"DeepSeek","activation":"enabled"},
+                          {"id":"google","integrationID":"google","name":"Google","activation":"enabled"},
+                          {"id":"qwencloud","name":"Qwen Cloud","activation":"enabled"}
+                        ]}""",
+                    ).setHeader("Content-Type", "application/json"),
+            )
+            // 2) /api/integration — the FULL catalog plus each live connection.
+            server.enqueue(
+                MockResponse()
+                    .setBody(
+                        """{"location":{},"data":[
+                          {"id":"deepseek","name":"DeepSeek","methods":[],"connections":[
+                             {"type":"credential","id":"cred_1","label":"API key","method":"key"}]},
+                          {"id":"google","name":"Google","methods":[],"connections":[
+                             {"type":"env","name":"GOOGLE_API_KEY"}]},
+                          {"id":"qwencloud","name":"Qwen Cloud","methods":[{"type":"key"}],"connections":[]},
+                          {"id":"openrouter","name":"OpenRouter","methods":[{"type":"key"}],"connections":[]}
+                        ]}""",
+                    ).setHeader("Content-Type", "application/json"),
+            )
+            // 3) /api/model — every model, joined by providerID.
+            server.enqueue(
+                MockResponse()
+                    .setBody(
+                        """{"location":{},"data":[
+                          {"id":"deepseek-v4-pro","modelID":"deepseek-v4-pro","providerID":"deepseek","name":"V4 Pro"},
+                          {"id":"gemini-3.5-flash","modelID":"gemini-3.5-flash","providerID":"google","name":"Gemini"}
+                        ]}""",
+                    ).setHeader("Content-Type", "application/json"),
+            )
+
+            val list = api.getProviderList()
+
+            // The catalog is the whole integration list, not just the activated
+            // providers — otherwise Settings cannot offer anything to connect.
+            assertEquals(
+                listOf("deepseek", "google", "qwencloud", "openrouter"),
+                list.all.map { it.id },
+            )
+            // Connected is the server's own "available" set, NOT "has models".
+            assertEquals(listOf("deepseek", "google", "qwencloud"), list.connected)
+            // The badge/Disconnect decision follows the live connection.
+            assertEquals("api", list.all.first { it.id == "deepseek" }.source)
+            assertEquals("env", list.all.first { it.id == "google" }.source)
+            assertEquals(listOf("GOOGLE_API_KEY"), list.all.first { it.id == "google" }.env)
+            assertEquals("config", list.all.first { it.id == "qwencloud" }.source)
+            assertEquals(null, list.all.first { it.id == "openrouter" }.source)
+            // Models are joined by providerID.
+            assertEquals(
+                listOf("deepseek-v4-pro"),
+                list.all
+                    .first { it.id == "deepseek" }
+                    .models.keys
+                    .toList(),
+            )
+        }
 }

@@ -62,7 +62,9 @@ import com.opencode.android.domain.VcsInfo
 import com.opencode.android.domain.WireCredentialCreate
 import com.opencode.android.domain.WireForm
 import com.opencode.android.domain.WireFormField
+import com.opencode.android.domain.WireIntegration
 import com.opencode.android.domain.WirePermission
+import com.opencode.android.domain.WireProvider
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -435,27 +437,80 @@ class OpenCodeApiAdapter(
     }
 
     override suspend fun getProviderList(): ProvidersResponse {
-        val providers = v2.providers().data.orEmpty()
+        // Three V2 sources, each answering a different question:
+        //   /api/provider   -> the providers the server has AVAILABLE (activated
+        //                      from config or a live credential). Small.
+        //   /api/integration-> the FULL catalog plus each provider's live auth
+        //                      connections (`connections`). This is what the web
+        //                      and TUI list, so it is the "all" catalog.
+        //   /api/model      -> every model, joined by providerID.
+        val active = v2.providers().data.orEmpty()
+        val integrations = v2.integrations().data.orEmpty()
         val modelsByProvider =
             v2
                 .models()
                 .data
                 .orEmpty()
                 .groupBy { it.providerId.orEmpty() }
+        val byId = integrations.associateBy { it.id }
+
+        val ids = LinkedHashSet<String>()
+        integrations.forEach { ids += it.id }
+        active.forEach { ids += it.id }
+
         val all =
-            providers.map { p ->
+            ids.map { id ->
+                val live = byId[id]
+                val activated = active.firstOrNull { it.id == id }
                 ProviderEntry(
-                    id = p.id,
-                    name = p.name,
-                    source = p.activation,
+                    id = id,
+                    name = activated?.name ?: live?.name,
                     models =
-                        modelsByProvider[p.id]
+                        modelsByProvider[id]
                             .orEmpty()
                             .associate { m -> m.id to m.toModel() },
+                    source = providerSource(activated, live),
+                    env =
+                        live
+                            ?.connections
+                            .orEmpty()
+                            .filter { it.type == "env" }
+                            .mapNotNull { it.name },
                 )
             }
-        val connected = providers.filter { modelsByProvider.containsKey(it.id) }.map { it.id }
+
+        // `/api/provider` is the server's authoritative "these providers are
+        // available" list — the same set the TUI and web offer. Deriving
+        // "connected" from "has models" instead (the old behaviour) hid an
+        // activated provider whose models had not been indexed yet and could
+        // show one that was never authenticated. Older/partial servers may
+        // return nothing here, so fall back to the integrations that report a
+        // live connection.
+        val connected =
+            active.map { it.id }.ifEmpty {
+                integrations.filter { it.connections.isNotEmpty() }.map { it.id }
+            }
         return ProvidersResponse(all = all, default = emptyMap(), connected = connected)
+    }
+
+    /**
+     * Where a provider's access comes from, for the Settings badge and to decide
+     * whether "Disconnect" is offered. A stored credential wins over an env var
+     * (only the credential can be removed from the app), and a provider that is
+     * merely switched on in the config has no connection at all.
+     */
+    private fun providerSource(
+        activated: WireProvider?,
+        live: WireIntegration?,
+    ): String? {
+        val connections = live?.connections.orEmpty()
+        return when {
+            connections.any { it.type == "credential" || it.type == "external" } -> "api"
+            connections.any { it.type == "env" } -> "env"
+            connections.isNotEmpty() -> "api"
+            activated != null -> "config"
+            else -> null
+        }
     }
 
     override suspend fun getCommands(directory: String?): List<CommandEntry> =

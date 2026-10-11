@@ -23,6 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Providers now match the server, the web UI and the TUI.** Settings →
+  Providers listed only the _already active_ providers (~6 instead of ~230)
+  because the catalog was built from `/api/provider`; it now uses the full
+  `/api/integration` catalog, so there is something to connect again.
+- **"Connected" is the server's own signal.** It was derived from "the provider
+  has models", which hid an activated provider whose models were not indexed yet
+  and could mark a never-authenticated provider as connected. It now follows
+  `/api/provider` (the available set the TUI shows), falling back to integrations
+  with a live connection.
+- **Connection source is real.** The badge/Disconnect decision used the provider
+  `activation` (`auto`/`enabled`) where the UI expects `env`/`api`, so
+  env-authenticated providers (`nvidia`, `google`) never showed "Environment"
+  and wrongly offered a Disconnect the server cannot perform. It is now derived
+  from the integration's live `connections` (`env` → Environment,
+  `credential` → API key, config-only → Config).
+- **The provider catalog is refreshed when stale** (2 minutes) instead of being
+  fetched once per process, so providers added, removed or authenticated in the
+  TUI, the web UI or `opencode.json` appear without restarting the app.
 - Adapt to the newer APIs: `Modifier.sharedElement` now takes
   `sharedContentState`, and resource lookups inside composables use
   `LocalResources` / `rememberUpdatedState` to satisfy Compose's new

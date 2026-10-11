@@ -260,6 +260,27 @@ data class WireIntegration(
     val id: String,
     val name: String? = null,
     val methods: List<WireIntegrationMethod> = emptyList(),
+    /**
+     * Live auth connections for this provider (a stored credential, an env var,
+     * an external/CLI login). Non-empty means the provider is usable right now;
+     * this is the server's own "is it connected" signal and mirrors what the web
+     * and TUI show.
+     */
+    val connections: List<WireConnection> = emptyList(),
+)
+
+/** `/api/integration` → `connections[]`. */
+@Serializable
+data class WireConnection(
+    /** `env` | `credential` | `external`. */
+    val type: String? = null,
+    /** Env var name when [type] is `env`. */
+    val name: String? = null,
+    /** Credential id when [type] is `credential`. */
+    val id: String? = null,
+    val label: String? = null,
+    /** `key` | `oauth` | `external`. */
+    val method: String? = null,
 )
 
 @Serializable
