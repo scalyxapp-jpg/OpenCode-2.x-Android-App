@@ -40,6 +40,12 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      # The R8/minified build is what ships, and it can break independently of
+      # debug (e.g. a reflectively-instantiated Room class being shrunk away made
+      # the release APK crash on start while debug was fine). Build it in CI.
+      - name: Assemble release APK (R8)
+        run: ./gradlew :app:assembleRelease --stacktrace
+
       - name: Android Lint
         run: ./gradlew :app:lintDebug --stacktrace
 

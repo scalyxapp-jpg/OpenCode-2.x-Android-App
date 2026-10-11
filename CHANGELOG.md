@@ -75,6 +75,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resulting session id) and surfaces failures to the user instead of only
   setting a quiet UI field.
 
+- **The release (R8) build crashed on every start.** Room instantiates its
+  generated `<Database>_Impl` class reflectively, and R8 kept the class name while
+  dropping the no-arg constructor of `androidx.work.impl.WorkDatabase_Impl`
+  (pulled in transitively by Glance's app widget). The app died in
+  `androidx.startup.InitializationProvider` with "Failed to create an instance of
+  androidx.work.impl.WorkDatabase", while the debug build was fine. Explicit
+  Room/WorkManager keep rules fix it, and Android CI now also builds
+  `assembleRelease` so a minify-only regression cannot ship unnoticed again.
+
 ## [1.0.0] - 2026-10-07
 
 ### Added

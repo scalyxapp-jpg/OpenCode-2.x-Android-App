@@ -39,6 +39,27 @@
 -keep class com.opencode.android.data.WireEnvelope { *; }
 
 # ---------------------------------------------------------------------------
+# Room + WorkManager — instantiated REFLECTIVELY by name.
+#
+# Room looks its generated `<Database>_Impl` class up with
+# `Class.forName(name + "_Impl").newInstance()`, which R8 cannot see. Without an
+# explicit keep, the release build kept the class NAME but dropped its no-arg
+# constructor, and the app crashed on every start:
+#   java.lang.RuntimeException: Failed to create an instance of
+#   androidx.work.impl.WorkDatabase
+# (WorkManager is pulled in transitively by Glance's app widget.)
+# ---------------------------------------------------------------------------
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+
+# WorkManager instantiates workers reflectively too.
+-keep class * extends androidx.work.ListenableWorker { <init>(...); }
+-keep class * extends androidx.work.Worker { <init>(...); }
+
+# androidx.startup runs the WorkManager initializer from the manifest.
+-keep class androidx.startup.InitializationProvider { *; }
+
+# ---------------------------------------------------------------------------
 # OkHttp / Okio — platform warnings that are safe to ignore.
 # ---------------------------------------------------------------------------
 -dontwarn okhttp3.**
