@@ -46,6 +46,15 @@ class SlashCommandTest {
     }
 
     @Test
+    fun `typed client built-ins are recognised`() {
+        assertEquals("compact", parseBuiltinCommand("/compact", commands))
+        assertEquals("compact", parseBuiltinCommand("/compact now", commands))
+        assertNull(parseBuiltinCommand("/test", commands))
+        assertNull(parseBuiltinCommand("/nope", commands))
+        assertNull(parseBuiltinCommand("compact", commands))
+    }
+
+    @Test
     fun `filtering never truncates and prefers prefix matches`() {
         assertEquals(3, filterCommands(commands, "").size)
         assertEquals(listOf("review"), filterCommands(commands, "rev").map { it.name })

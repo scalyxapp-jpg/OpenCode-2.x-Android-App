@@ -52,3 +52,21 @@ fun filterCommands(
         .filter { it.name.lowercase().contains(q) }
     return prefix + rest
 }
+
+/**
+ * The CLIENT built-in a typed line refers to ("/compact" -> "compact"), or null.
+ *
+ * Picking a built-in from the "/" list always ran it locally, but TYPING the same
+ * line fell through to the prompt path and posted "/compact" to the model as
+ * literal text.
+ */
+fun parseBuiltinCommand(
+    text: String,
+    commands: List<CommandEntry>,
+): String? {
+    val trimmed = text.trim()
+    if (!trimmed.startsWith("/")) return null
+    val name = trimmed.removePrefix("/").substringBefore(' ').trim()
+    if (name.isEmpty()) return null
+    return commands.firstOrNull { it.name == name && it.source == BUILTIN_SOURCE }?.name
+}

@@ -2492,6 +2492,19 @@ class ChatViewModel
             // endpoint, where the server expands the command's template — exactly
             // what the TUI does. Posting it as a prompt would just send the literal
             // text, which is why commands appeared to do nothing.
+            // Client built-ins typed by hand run locally, exactly like picking
+            // them from the "/" list; posting "/compact" as a prompt would do
+            // nothing.
+            com.opencode.android.ui.session
+                .parseBuiltinCommand(rawText, _uiState.value.commands)
+                ?.let { name ->
+                    _uiState.update { it.copy(inputText = "", attachments = emptyList()) }
+                    when (name) {
+                        "compact" -> compactSession()
+                        "mcp" -> openMcpDialog()
+                    }
+                    return
+                }
             com.opencode.android.ui.session
                 .parseSlashCommand(rawText, _uiState.value.commands)
                 ?.let { command ->
