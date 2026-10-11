@@ -19,13 +19,31 @@ object PendingShare {
 
     private val slot = AtomicReference<Shared?>(null)
 
+    /**
+     * Stores the incoming share. When a share is already pending (two rapid
+     * share-target intents, or a share from the widget flow) the values are
+     * MERGED instead of overwritten — the old `set` silently dropped the first
+     * one.
+     */
     fun set(
         text: String?,
         imageUris: List<String>,
     ) {
         val cleanText = text?.takeIf { it.isNotBlank() }
         if (cleanText == null && imageUris.isEmpty()) return
-        slot.set(Shared(cleanText, imageUris))
+        slot.updateAndGet { previous ->
+            if (previous == null) {
+                Shared(cleanText, imageUris)
+            } else {
+                Shared(
+                    text =
+                        listOfNotNull(previous.text, cleanText)
+                            .joinToString("\n")
+                            .ifBlank { null },
+                    imageUris = previous.imageUris + imageUris,
+                )
+            }
+        }
     }
 
     /** Returns the pending share once, then clears it. */

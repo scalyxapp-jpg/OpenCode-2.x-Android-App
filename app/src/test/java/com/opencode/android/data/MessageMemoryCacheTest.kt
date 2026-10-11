@@ -62,4 +62,17 @@ class MessageMemoryCacheTest {
         cache.clear()
         assertEquals(0, cache.size())
     }
+
+    @Test
+    fun `putIfAbsent keeps a newer entry written while a disk read ran`() {
+        val cache = MessageMemoryCache()
+        val fresh = listOf(Message(id = "fresh"))
+        cache.put("s1", fresh)
+
+        val stale = listOf(Message(id = "stale"))
+        val effective = cache.putIfAbsent("s1", stale)
+
+        assertEquals("the newer entry must win", fresh, effective)
+        assertEquals(fresh, cache.get("s1"))
+    }
 }

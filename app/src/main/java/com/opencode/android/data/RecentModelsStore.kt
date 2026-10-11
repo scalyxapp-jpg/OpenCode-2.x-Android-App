@@ -19,19 +19,26 @@ object RecentModelsStore {
     @Volatile
     private var prefs: SharedPreferences? = null
 
+    private val lock = Any()
+
     fun init(context: Context) {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     }
 
     fun record(ref: String) {
         if (ref.isBlank()) return
-        val current = recent().filterNot { it == ref }
-        val updated = (listOf(ref) + current).take(MAX)
-        prefs?.edit { putString(KEY, updated.joinToString(SEP)) }
+        // Read-modify-write under a lock: two concurrent record() calls used to
+        // overwrite each other and silently drop a model from "Recent".
+        synchronized(lock) {
+            val current = recent().filterNot { it == ref }
+            val updated = (listOf(ref) + current).take(MAX)
+            prefs?.edit { putString(KEY, updated.joinToString(SEP)) }
+        }
     }
 
     fun recent(): List<String> =
-        prefs?.getString(KEY, null)
+        prefs
+            ?.getString(KEY, null)
             ?.split(SEP)
             ?.filter { it.isNotBlank() }
             ?: emptyList()

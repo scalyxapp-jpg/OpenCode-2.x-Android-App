@@ -78,4 +78,18 @@ class MessageEchoTest {
         val local = listOf(Row("local_1", "user", "   "))
         assertTrue(MessageEcho.pendingEchoes(local, emptyList()).isEmpty())
     }
+
+    @Test
+    fun `one server row confirms only one duplicate echo`() {
+        val local =
+            listOf(
+                MessageEcho.Row(id = "local_1", role = "user", text = "continue"),
+                MessageEcho.Row(id = "local_2", role = "user", text = "continue"),
+            )
+        val server = listOf(MessageEcho.Row(id = "srv_1", role = "user", text = "continue"))
+
+        val pending = MessageEcho.pendingEchoes(local, server)
+
+        assertEquals("the second echo is still pending", listOf("local_2"), pending.map { it.id })
+    }
 }

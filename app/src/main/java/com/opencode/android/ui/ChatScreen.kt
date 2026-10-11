@@ -459,6 +459,23 @@ internal fun ChatScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_session_id)) },
+                                onClick = {
+                                    showMore = false
+                                    val id = uiState.session?.id
+                                    if (id.isNullOrBlank()) {
+                                        toast(resources.getString(R.string.no_session_open))
+                                    } else {
+                                        copyToClipboard(
+                                            context,
+                                            resources.getString(R.string.copy_session_id),
+                                            id,
+                                        )
+                                        toast(resources.getString(R.string.session_id_copied))
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.restore_messages)) },
                                 onClick = {
                                     showMore = false
@@ -978,8 +995,9 @@ internal fun SessionTab(
             val guard = uiState.session?.sessionGuard
             // Remembered: the screen recomposes on every message/stream update;
             // this label only changes when the guard selection does.
+            val noSelection = stringResource(R.string.guard_no_selection)
             val guardDetails =
-                remember(guard, uiState.guardAvgMs) {
+                remember(guard, uiState.guardAvgMs, noSelection) {
                     listOfNotNull(
                         guard?.revision?.let { "rev $it" },
                         guard?.providerID,
@@ -987,7 +1005,7 @@ internal fun SessionTab(
                         guard?.agent,
                         guard?.variant,
                         uiState.guardAvgMs?.let { "avg %.0fms".format(it) },
-                    ).filter { it.isNotBlank() }.joinToString(" • ").ifEmpty { "keine Session-Auswahl" }
+                    ).filter { it.isNotBlank() }.joinToString(" • ").ifEmpty { noSelection }
                 }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1020,10 +1038,10 @@ internal fun SessionTab(
                     Text(
                         text =
                             when {
-                                uiState.guardConflict -> "Guard-Konflikt · $guardDetails"
-                                guard?.mismatch == true -> "Guard-Drift · $guardDetails"
-                                !uiState.guardHealthy -> "Guard offline · $guardDetails"
-                                else -> "Guard aktiv · $guardDetails"
+                                uiState.guardConflict -> stringResource(R.string.guard_conflict) + " · " + guardDetails
+                                guard?.mismatch == true -> stringResource(R.string.guard_drift) + " · " + guardDetails
+                                !uiState.guardHealthy -> stringResource(R.string.guard_offline) + " · " + guardDetails
+                                else -> stringResource(R.string.guard_active) + " · " + guardDetails
                             },
                         style = MaterialTheme.typography.labelSmall,
                         maxLines = 1,
@@ -1050,7 +1068,11 @@ internal fun SessionTab(
                         )
                         Spacer(Modifier.size(2.dp))
                         Text(
-                            if (guard?.mismatch == true || uiState.guardConflict) "Fix" else "Sync",
+                            if (guard?.mismatch == true || uiState.guardConflict) {
+                                stringResource(R.string.guard_fix)
+                            } else {
+                                stringResource(R.string.guard_sync)
+                            },
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -1081,7 +1103,7 @@ internal fun SessionTab(
                 )
             AlertDialog(
                 onDismissRequest = { showGuardDialog = false },
-                title = { Text("Session Guard") },
+                title = { Text(stringResource(R.string.guard_title)) },
                 text = {
                     Column {
                         Text(detailLines.joinToString("\n"))
@@ -1090,7 +1112,7 @@ internal fun SessionTab(
                                 onRemoveGuard()
                                 showGuardDialog = false
                             },
-                        ) { Text("Guard entfernen") }
+                        ) { Text(stringResource(R.string.guard_remove)) }
                     }
                 },
                 confirmButton = {
@@ -1099,7 +1121,7 @@ internal fun SessionTab(
                             onAdoptServerSelection()
                             showGuardDialog = false
                         },
-                    ) { Text("Server → Guard") }
+                    ) { Text(stringResource(R.string.guard_adopt_from_server)) }
                 },
                 dismissButton = {
                     TextButton(
@@ -1107,7 +1129,7 @@ internal fun SessionTab(
                             onPushSelection()
                             showGuardDialog = false
                         },
-                    ) { Text("Guard → Server") }
+                    ) { Text(stringResource(R.string.guard_push_to_server)) }
                 },
             )
         }

@@ -22,20 +22,28 @@ class NewSessionTileService : TileService() {
                 action = MainActivity.ACTION_NEW_SESSION
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // API 34+ requires the PendingIntent overload; the Intent overload is
-            // deprecated and throws on some OEM builds.
-            val pending =
-                PendingIntent.getActivity(
-                    this,
-                    0,
-                    intent,
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            startActivityAndCollapse(pending)
-        } else {
-            @Suppress("DEPRECATION")
-            startActivityAndCollapse(intent)
+        // startActivityAndCollapse can throw in restricted states (app standby
+        // bucket, system UI busy); an uncaught throw here hits the QS host.
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                // API 34+ requires the PendingIntent overload; the Intent overload is
+                // deprecated and throws on some OEM builds.
+                val pending =
+                    PendingIntent.getActivity(
+                        this,
+                        0,
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    )
+                startActivityAndCollapse(pending)
+            } else {
+                @Suppress("DEPRECATION")
+                startActivityAndCollapse(intent)
+            }
+        }.onFailure { error ->
+            com.opencode.android.util.AppLog.w(com.opencode.android.util.APP_LOG_TAG) {
+                "NewSessionTileService: could not start activity: ${error.message}"
+            }
         }
     }
 }

@@ -50,8 +50,12 @@ object ModelSelection {
     ): Model? {
         models.firstOrNull { sessionRef(it.id, it.providerId) == ref }?.let { return it }
         models.firstOrNull { it.id == ref }?.let { return it }
-        val tail = ref.substringAfter('/')
-        return models.firstOrNull { it.id.substringAfter('/') == tail }
+        // 3. legacy tail match — ONLY for a bare ref. A ref that names a provider
+        // explicitly ("foo/gpt-5") must not be silently rewritten to whichever
+        // provider happens to offer the same tail model, or the prompt is routed
+        // to a provider the user did not choose.
+        if (ref.contains('/')) return null
+        return models.firstOrNull { it.id.substringAfter('/') == ref }
     }
 
     /** Resolves a selected ref to the exact (provider, modelId) the server expects. */
@@ -59,19 +63,32 @@ object ModelSelection {
         ref: String,
         models: List<Model>,
     ): Pair<String, String> {
-        find(models, ref)?.let { return providerOf(it) }
+        val trimmed = ref.trim()
+        find(models, trimmed)?.let { entry ->
+            val catalogProvider = entry.providerId?.takeIf { it.isNotBlank() }
+            // A bare catalog entry (the flattened /api/model list carries no
+            // provider) must not be forced onto a hardcoded default when the ref
+            // itself names one.
+            val provider = catalogProvider ?: refProvider(trimmed) ?: DEFAULT_PROVIDER
+            return provider to entry.id
+        }
         // Unknown to the local catalog: keep the historical split so a model the
         // server knows but has not indexed can still be sent.
-        val separator = ref.indexOf('/')
-        return if (separator > 0) {
-            ref.substring(0, separator) to ref.substring(separator + 1)
+        val separator = trimmed.indexOf('/')
+        return if (separator > 0 && separator < trimmed.length - 1) {
+            trimmed.substring(0, separator) to trimmed.substring(separator + 1)
         } else {
-            DEFAULT_PROVIDER to ref
+            // "/model" and "model/" must not yield an empty provider/model.
+            DEFAULT_PROVIDER to trimmed.trim('/')
         }
     }
 
-    private fun providerOf(model: Model): Pair<String, String> =
-        (model.providerId?.takeIf { it.isNotBlank() } ?: DEFAULT_PROVIDER) to model.id
+    /** Provider named by a "provider/model" ref, or null when there is none. */
+    private fun refProvider(ref: String): String? {
+        val separator = ref.indexOf('/')
+        if (separator <= 0 || separator == ref.length - 1) return null
+        return ref.substring(0, separator).takeIf { it.isNotBlank() }
+    }
 
     /** Resolves server session model metadata to the exact catalog selection ref. */
     fun resolveSession(

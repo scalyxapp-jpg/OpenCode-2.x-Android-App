@@ -76,8 +76,6 @@ interface OpenCodeApi {
 
     suspend fun getSessionStatuses(directory: String): Map<String, SessionStatus>
 
-    suspend fun createSession(body: Map<String, String> = emptyMap()): SessionResponse
-
     suspend fun createSessionIn(body: SessionCreateRequest): SessionResponse
 
     suspend fun getProjectSessions(

@@ -101,7 +101,9 @@ internal fun ChangesTab(
             onLoadFiles(initialPath)
         }
     }
-    LaunchedEffect(currentPath) {
+    // Only when the SESSION's directory changes: keying this on `currentPath` threw
+    // the user to the top (the diff section) every time a folder was entered.
+    LaunchedEffect(initialPath) {
         listState.scrollToItem(0)
     }
 

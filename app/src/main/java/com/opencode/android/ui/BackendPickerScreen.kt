@@ -77,6 +77,9 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
     var errorText by remember { mutableStateOf<String?>(null) }
     // Free-form label editing (rename) + label for the add dialog.
     var renameFor by remember { mutableStateOf<BackendStore.Backend?>(null) }
+    // Removing a backend also deletes its saved credentials, so it asks first
+    // (it used to delete immediately, next to the rename button).
+    var deleteFor by remember { mutableStateOf<BackendStore.Backend?>(null) }
     var renameText by remember { mutableStateOf("") }
     var newName by remember { mutableStateOf("") }
     // Set when the server demands auth.
@@ -89,12 +92,21 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
     val serverUnhealthyMsg = stringResource(R.string.server_unhealthy)
     val connectionFailedPrefix = stringResource(R.string.connection_failed_prefix)
 
+    /**
+     * Connects to [backend].
+     *
+     * The global session is switched only AFTER the health check passed: the old
+     * order pointed `backendSession` (and with it `api`, the provider catalog and
+     * the file browser) at a server that was never saved, and a failure left it
+     * there until the app was restarted.
+     */
     fun connect(
         backend: BackendStore.Backend,
         pass: String?,
     ) {
         connectingUrl = backend.url
         errorText = null
+        val previousUrl = backendSession.currentBaseUrl()
         scope.launch {
             try {
                 val needsAuth = backendSession.requiresAuth(backend.url)
@@ -139,11 +151,16 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                 providerDirectory.prefetch()
                 connectingUrl = null
                 // Hero moment: celebrate the successful connection with an
-                // expressive spring before navigating on.
+                // expressive spring before navigating on. `connectedUrl` also
+                // blocks another card: the clickable guard only checks
+                // `connectingUrl`, which is null again by now.
                 connectedUrl = backend.url
                 kotlinx.coroutines.delay(650)
                 onConnected()
             } catch (e: Exception) {
+                // Roll back to the previously configured backend so a failed
+                // attempt cannot leave the app pointed at an unverified server.
+                backendSession.setBaseUrl(previousUrl)
                 errorText = connectionFailedPrefix + (e.message ?: "")
                 connectingUrl = null
             }
@@ -220,7 +237,9 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = connectingUrl == null) { connect(backend, null) },
+                                .clickable(enabled = connectingUrl == null && connectedUrl == null) {
+                                    connect(backend, null)
+                                },
                     ) {
                         Row(
                             modifier =
@@ -355,10 +374,7 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                    IconButton(onClick = {
-                                        BackendStore.remove(backend.url)
-                                        backends = BackendStore.backends()
-                                    }) {
+                                    IconButton(onClick = { deleteFor = backend }) {
                                         Icon(
                                             Icons.Default.Delete,
                                             contentDescription = stringResource(R.string.remove),
@@ -418,6 +434,31 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
     }
 
     // --- Rename backend label ---------------------------------------------
+    deleteFor?.let { backend ->
+        AlertDialog(
+            onDismissRequest = { deleteFor = null },
+            title = { Text(stringResource(R.string.remove_backend)) },
+            text = { Text(stringResource(R.string.remove_backend_confirm, backend.url)) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        BackendStore.remove(backend.url)
+                        backends = BackendStore.backends()
+                        deleteFor = null
+                    },
+                    colors =
+                        androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                ) { Text(stringResource(R.string.remove)) }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { deleteFor = null }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
     renameFor?.let { backend ->
         AlertDialog(
             onDismissRequest = { renameFor = null },

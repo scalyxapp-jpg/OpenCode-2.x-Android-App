@@ -56,4 +56,13 @@ class PathSearchTest {
     fun `lastPathSegment returns a bare name unchanged`() {
         assertEquals("file.kt", lastPathSegment("file.kt"))
     }
+
+    @Test
+    fun `root home is handled without a double slash`() {
+        // home="/" used to build the prefix "//", so EVERY path counted as
+        // "outside home" and search ran against "." instead.
+        assertEquals("home/user/a", relativeSearchDir("/home/user/a", "/"))
+        assertTrue(isUnderHome("/home/user", "/"))
+        assertFalse(isUnderHome("/", "/x"))
+    }
 }

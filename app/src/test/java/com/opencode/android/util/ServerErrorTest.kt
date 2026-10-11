@@ -35,4 +35,23 @@ class ServerErrorTest {
     fun `falls back for a json body without a message`() {
         assertEquals("fallback", serverErrorMessage("""{"data":{"ref":"x"}}""", "fallback"))
     }
+
+    @Test
+    fun `falls through an unusable data message to the real one`() {
+        // `data.message` present but empty/null must not hide the valid message
+        // sitting next to it.
+        assertEquals(
+            "real error",
+            serverErrorMessage("""{"data":{"message":""},"message":"real error"}""", "fallback"),
+        )
+        assertEquals(
+            "real error",
+            serverErrorMessage("""{"data":{"message":null},"message":"real error"}""", "fallback"),
+        )
+    }
+
+    @Test
+    fun `reads a nested error object`() {
+        assertEquals("boom", serverErrorMessage("""{"error":{"message":"boom"}}""", "fallback"))
+    }
 }

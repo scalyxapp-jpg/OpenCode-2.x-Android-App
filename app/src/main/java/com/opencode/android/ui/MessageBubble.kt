@@ -40,6 +40,12 @@ import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.res.stringResource
 import com.opencode.android.R
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.size
 
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -63,6 +69,9 @@ internal fun MessageBubble(
     onOpenSession: (String) -> Unit = {},
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // Revert is destructive (everything after the message is discarded), so it
+    // asks first; the long-press menu used to fire it immediately.
+    var confirmRevert by remember { mutableStateOf(false) }
 
     // Support both structures:
     // - GET /session/{id}/message → info.role + parts[] (with .tool)
@@ -147,11 +156,14 @@ internal fun MessageBubble(
     }
     val questionParts = remember(toolParts) { toolParts.filter { it.toolName() == "question" } }
     val otherToolParts = remember(toolParts) { toolParts.filter { it.toolName() != "question" } }
-    if (text.isBlank() && reasoningText.isBlank() && toolParts.isEmpty()) return
-
     // Meta line mirrors web: agent - model - duration - time. Memoised: the
     // bubble recomposes per streaming tick, but these only depend on `message`.
+    //
+    // Computed BEFORE the empty check: an aborted/failed turn can have no text and
+    // no tool parts, and returning early there rendered NOTHING — the user saw
+    // neither "Interrupted" nor the error.
     val errorText = remember(message) { messageErrorText(message.error ?: message.info?.error) }
+    if (text.isBlank() && reasoningText.isBlank() && toolParts.isEmpty() && errorText == null) return
     val meta = remember(message, errorText) {
         val agent = message.agent ?: message.info?.agent
         val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model
@@ -361,11 +373,24 @@ Row(
                 }
                 // Meta line (web: "Commander · deepseek-v4-pro · 15s")
                 if (meta.isNotBlank()) {
-                    Text(
-                        text = meta,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = meta,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                        )
+                        // Discoverable entry point for Copy / Regenerate / Fork /
+                        // Revert: without it the only way in was an invisible
+                        // long-press.
+                        IconButton(onClick = { showContextMenu = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = stringResource(R.string.more_options),
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -414,11 +439,36 @@ Row(
                         text = { Text(stringResource(R.string.revert_message)) },
                         onClick = {
                             showContextMenu = false
-                            onRevertMessage(messageId)
+                            confirmRevert = true
                         },
                     )
                 }
             }
+        }
+        if (confirmRevert && messageId != null) {
+            AlertDialog(
+                onDismissRequest = { confirmRevert = false },
+                title = { Text(stringResource(R.string.revert_message)) },
+                text = { Text(stringResource(R.string.revert_message_confirm)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            confirmRevert = false
+                            onRevertMessage(messageId)
+                        },
+                        colors =
+                            androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ),
+                    ) { Text(stringResource(R.string.revert_message)) }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { confirmRevert = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+            )
         }
     } // end Box
 }

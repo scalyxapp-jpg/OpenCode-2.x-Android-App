@@ -73,6 +73,9 @@ class SessionStreamer(
             }
     }
 
+    /** True when this streamer is currently consuming [sessionId]. */
+    fun isActiveFor(sessionId: String): Boolean = activeSession == sessionId && candidate?.isActive == true
+
     /** Cancels the stream and any pending flush/timeout. */
     fun stop() {
         candidate?.cancel()
@@ -149,7 +152,9 @@ class SessionStreamer(
         val live = state.live
         if (live.response.isBlank() && live.reasoning.isBlank() && live.parts.isEmpty()) {
             // Nothing to persist; make sure a timer from a previous turn cannot
-            // fire later and clear a subsequent turn's buffers.
+            // fire later and clear a subsequent turn's buffers. `isCompacting` is
+            // deliberately NOT cleared: a step boundary must not hide a running
+            // compaction (only its own end event / turn end does).
             persistTimeoutJob?.cancel()
             persistTimeoutJob = null
             state =
@@ -157,13 +162,12 @@ class SessionStreamer(
                     live = LiveStreamState(),
                     isStreaming = false,
                     pendingPersist = false,
-                    isCompacting = false,
                 )
             publish()
             emitFlowFlags()
             return
         }
-        state = state.copy(isStreaming = false, pendingPersist = true, isCompacting = false)
+        state = state.copy(isStreaming = false, pendingPersist = true)
         publish()
         emitFlowFlags()
         persistTimeoutJob?.cancel()
@@ -217,6 +221,9 @@ class SessionStreamer(
         val text = state.pendingText
         if (reasoning.isEmpty() && text.isEmpty()) return
         val before = state.projection()
+        // `statusError` is deliberately NOT cleared here: it belongs to the
+        // reducer. Blanking it on every delta made a "retrying…" status flicker
+        // away as soon as one character streamed, while the server kept retrying.
         state =
             state.copy(
                 pendingReasoning = "",
@@ -227,7 +234,6 @@ class SessionStreamer(
                         response = capLive(state.live.response + text),
                         thinking = reasoning.isNotEmpty(),
                     ),
-                statusError = null,
             )
         publish()
         val after = state.projection()

@@ -23,11 +23,12 @@ object LiveFlushPolicy {
     const val MEDIUM_ABOVE = 1_200
     const val LONG_ABOVE = 3_000
 
-    fun windowMs(liveLength: Int): Long = when {
-        liveLength > LONG_ABOVE -> LONG_MS
-        liveLength > MEDIUM_ABOVE -> MEDIUM_MS
-        else -> SHORT_MS
-    }
+    fun windowMs(liveLength: Int): Long =
+        when {
+            liveLength > LONG_ABOVE -> LONG_MS
+            liveLength > MEDIUM_ABOVE -> MEDIUM_MS
+            else -> SHORT_MS
+        }
 }
 
 /**
@@ -54,7 +55,10 @@ class RefreshCoalescer(
         data object KeepRunning : Decision
     }
 
-    private var batchStart = 0L
+    // null = no batch pending. A 0 sentinel made the FIRST call with
+    // jobActive=true look ancient (`now - 0` is huge) and return KeepRunning
+    // forever, so a policy used that way would never start a batch.
+    private var batchStart: Long? = null
 
     /**
      * [jobActive] is the caller's own "a scheduled job is still running" flag.
@@ -62,12 +66,16 @@ class RefreshCoalescer(
      * cannot desync from the job (a cancelled job used to leave it stuck
      * "active" and starve the next refresh).
      */
-    fun onRequest(now: Long, jobActive: Boolean): Decision {
-        if (!jobActive) {
+    fun onRequest(
+        now: Long,
+        jobActive: Boolean,
+    ): Decision {
+        val start = batchStart
+        if (!jobActive || start == null) {
             batchStart = now
             return Decision.Start
         }
-        return if (now - batchStart < maxWaitMs) Decision.Restart else Decision.KeepRunning
+        return if (now - start < maxWaitMs) Decision.Restart else Decision.KeepRunning
     }
 }
 
@@ -83,7 +91,10 @@ class WriteThrottle(
     // look like it happened "0 ms ago" and wrongly block it.
     private var lastAt: Long? = null
 
-    fun allow(now: Long, force: Boolean = false): Boolean {
+    fun allow(
+        now: Long,
+        force: Boolean = false,
+    ): Boolean {
         if (force) {
             lastAt = now
             return true

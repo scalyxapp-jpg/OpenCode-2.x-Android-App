@@ -318,8 +318,10 @@ internal fun Composer(
                                 subtitle = command.description ?: "",
                                 onClick = {
                                     // Client built-ins run immediately (e.g.
-                                    // "/compact"); server commands insert their
-                                    // template as before.
+                                    // "/compact"). For a server command the
+                                    // server's `/command` list carries no template
+                                    // string, so "/name " is inserted and the user
+                                    // types the arguments.
                                     if (command.source == BUILTIN_SOURCE) {
                                         onBuiltinCommand(command.name)
                                     } else {
@@ -556,12 +558,25 @@ internal fun Composer(
                                 .heightIn(min = 40.dp)
                                 .onPreviewKeyEvent { event ->
                                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                    // Enter sends; Shift+Enter inserts a newline.
-                                    if (event.key == Key.Enter && !event.isShiftPressed) {
-                                        if (inputText.isNotBlank() || attachments.isNotEmpty()) onSend()
-                                        true
-                                    } else {
-                                        false
+                                    when {
+                                        // Esc stops a running turn (nothing else does
+                                        // this from the keyboard). The picker closes
+                                        // first because it handles Esc while open.
+                                        event.key == Key.Escape && isGenerating -> {
+                                            onInterrupt()
+                                            true
+                                        }
+                                        // Enter sends; Shift+Enter inserts a newline.
+                                        // Ctrl/Cmd+Enter also sends, the habit from
+                                        // desktop chat clients.
+                                        event.key == Key.Enter &&
+                                            (!event.isShiftPressed) -> {
+                                            if (!isUploading && (inputText.isNotBlank() || attachments.isNotEmpty())) {
+                                                onSend()
+                                            }
+                                            true
+                                        }
+                                        else -> false
                                     }
                                 },
                         textStyle =

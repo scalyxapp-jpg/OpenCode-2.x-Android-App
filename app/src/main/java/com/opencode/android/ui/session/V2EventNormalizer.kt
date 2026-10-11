@@ -43,6 +43,12 @@ object V2EventNormalizer {
         Json {
             ignoreUnknownKeys = true
             isLenient = true
+            // A V1/proxy frame may carry `properties.part.type: null` while the
+            // domain model declares `type` non-null. Without coercion that failed
+            // the WHOLE decode and the normaliser returned null, so a single part
+            // field nuked the entire event (the HTTP converter already sets this
+            // flag; the normaliser did not).
+            coerceInputValues = true
         }
 
     /** V2 frame. `data` is kept raw so field extraction never fails a decode. */
@@ -414,7 +420,7 @@ object V2EventNormalizer {
                 )
             }
 
-            "session.compaction.ended", "session.compacted", "session.compaction.failed" -> {
+            "session.compaction.ended", "session.compacted" -> {
                 Event(
                     type = "message.part.updated",
                     properties =
@@ -426,6 +432,19 @@ object V2EventNormalizer {
                                     type = "step-finish",
                                     messageId = d.str("assistantMessageID"),
                                 ),
+                        ),
+                )
+            }
+
+            // A failed compaction must not look like a successful end: it keeps
+            // the turn running (compaction is not the turn) and surfaces an error.
+            "session.compaction.failed" -> {
+                Event(
+                    type = "session.compaction.failed",
+                    properties =
+                        EventProperties(
+                            sessionId = d.str("sessionID"),
+                            error = d["error"] ?: d["data"],
                         ),
                 )
             }
@@ -454,8 +473,15 @@ object V2EventNormalizer {
                 )
             }
 
-            "session.execution.succeeded", "session.execution.interrupted" -> {
+            // A user/web/TUI abort is NOT a success: mapping it to `session.idle`
+            // made the app announce "the agent finished" for a cancelled turn.
+            // `session.aborted` ends the turn without the success notification.
+            "session.execution.succeeded" -> {
                 Event(type = "session.idle", properties = EventProperties(sessionId = d.str("sessionID")))
+            }
+
+            "session.execution.interrupted" -> {
+                Event(type = "session.aborted", properties = EventProperties(sessionId = d.str("sessionID")))
             }
 
             "session.execution.failed" -> {

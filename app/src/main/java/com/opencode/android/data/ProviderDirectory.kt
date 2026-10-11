@@ -50,7 +50,11 @@ class ProviderDirectory(
     val state: StateFlow<State> = _state.asStateFlow()
 
     // Shared by concurrent load() callers so a burst of them issues one fetch.
+    // Together with [inflightGeneration] it also ties the in-flight fetch to the
+    // generation it was started under, so a load() after invalidate() never
+    // reuses a fetch that predates the bump.
     private var inflight: Deferred<Unit>? = null
+    private var inflightGeneration: Long = -1L
 
     // Bumped by invalidate(). A load() that started before the bump must not
     // reuse the (now-stale) inflight/Ready state, or the forced refresh is
@@ -94,11 +98,27 @@ class ProviderDirectory(
         val job =
             mutex.withLock {
                 val current = inflight
-                val stillCurrent = generation == invalidation.get()
+                // Reuse the in-flight fetch ONLY when it was started under the
+                // same generation. `stillCurrent` (comparing our own generation
+                // with the current one) was not enough: after invalidate() an old
+                // fetch is still non-null, so a fresh load() returned it and the
+                // forced refresh was dropped.
+                val reuseInflight = current != null && inflightGeneration == generation
                 when {
-                    current != null && stillCurrent -> current
-                    _state.value is State.Ready && stillCurrent -> null
-                    else -> scope.async { doFetch() }.also { inflight = it }
+                    reuseInflight -> {
+                        current
+                    }
+
+                    _state.value is State.Ready && invalidation.get() == generation -> {
+                        null
+                    }
+
+                    else -> {
+                        scope.async { doFetch(generation) }.also {
+                            inflight = it
+                            inflightGeneration = generation
+                        }
+                    }
                 }
             }
         try {
@@ -113,16 +133,22 @@ class ProviderDirectory(
         }
     }
 
-    private suspend fun doFetch() {
-        _state.value = State.Loading
-        _state.value =
+    private suspend fun doFetch(generation: Long) {
+        // Publish only while this fetch is still the current generation: an
+        // invalidate() mid-fetch means a newer result is (or will be) in flight,
+        // and letting the older one land afterwards would resurrect stale data.
+        if (invalidation.get() == generation) _state.value = State.Loading
+        val next =
             try {
                 val resp = fetch()
-                loadedAtMs = System.currentTimeMillis()
                 State.Ready(resp.all, resp.connected.toSet())
             } catch (e: Exception) {
                 State.Failed(e.message ?: e::class.java.simpleName)
             }
+        if (invalidation.get() == generation) {
+            if (next is State.Ready) loadedAtMs = System.currentTimeMillis()
+            _state.value = next
+        }
     }
 
     /** Drops the cache; the next [load] refetches. */

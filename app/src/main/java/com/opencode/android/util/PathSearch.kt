@@ -5,20 +5,30 @@ package com.opencode.android.util
  * makes the server return [] (the "Open project search does nothing" bug).
  * Returns "." when [dir] IS the home root.
  */
-fun relativeSearchDir(dir: String, home: String): String {
+fun relativeSearchDir(
+    dir: String,
+    home: String,
+): String {
     val base = home.trimEnd('/').ifEmpty { "/" }
     val d = dir.trimEnd('/').ifEmpty { "/" }
     if (d == base) return "."
+    // Home = "/" used to build the prefix "//" ("" + "/" + "/"), so EVERY path
+    // looked "outside home" and the search silently ran against the root.
+    val prefix = if (base == "/") "/" else "$base/"
     // Outside home there is no valid relative base; fall back to the root.
-    if (!d.startsWith("$base/")) return "."
-    return d.removePrefix("$base/").ifBlank { "." }
+    if (!d.startsWith(prefix)) return "."
+    return d.removePrefix(prefix).ifBlank { "." }
 }
 
 /** True when [dir] is [home] or inside it (so a relative search is valid). */
-fun isUnderHome(dir: String, home: String): Boolean {
+fun isUnderHome(
+    dir: String,
+    home: String,
+): Boolean {
     val base = home.trimEnd('/').ifEmpty { "/" }
     val d = dir.trimEnd('/').ifEmpty { "/" }
-    return d == base || d.startsWith("$base/")
+    val prefix = if (base == "/") "/" else "$base/"
+    return d == base || d.startsWith(prefix)
 }
 
 /**

@@ -118,7 +118,11 @@ class ChatRepository(
                     }
                     if (fetched.tooLarge) {
                         // Remember where to continue, then try a smaller size —
-                        // the page may still fit at limit=1.
+                        // the page may still fit at limit=1. `oversized` only
+                        // guards the legacy fallback below (a second huge fetch);
+                        // it must NOT end the ladder, or the smaller sizes the
+                        // ladder exists for would never be tried and a heavy
+                        // session would open blank.
                         skippedCursor = fetched.nextCursor
                         oversized = true
                         break
@@ -131,7 +135,7 @@ class ChatRepository(
                     if (attempt == 3) emptyConfirmed = true
                     if (attempt < 3) delay(300L * attempt)
                 }
-                if (emptyConfirmed || oversized) break
+                if (emptyConfirmed) break
             }
             // The web endpoint (`/session/{id}/message` → {info,parts}) returned
             // nothing. Newer runs expose their history ONLY through the legacy

@@ -69,12 +69,36 @@ object Notifier {
 
     // Request ids already posted. The server re-serves the whole pending list on
     // every load, so without this each reconcile re-notified the same prompt.
-    // Capped so a long-lived process cannot grow them without bound.
+    // Capped so a long-lived process cannot grow them without bound. Guarded by
+    // [notifiedLock]: the old "size check + clear()" was not atomic and, worse,
+    // clearing dropped the dedupe for STILL-pending requests, so the next list
+    // load re-notified them.
     private const val MAX_NOTIFIED_IDS = 500
-    private val notifiedPermissions: MutableSet<String> =
-        java.util.Collections.synchronizedSet(mutableSetOf())
-    private val notifiedQuestions: MutableSet<String> =
-        java.util.Collections.synchronizedSet(mutableSetOf())
+    private val notifiedLock = Any()
+    private val notifiedPermissions: MutableSet<String> = LinkedHashSet()
+    private val notifiedQuestions: MutableSet<String> = LinkedHashSet()
+
+    /** Adds [id] unless already notified; trims the oldest ids past the cap. */
+    private fun markNotified(
+        ids: MutableSet<String>,
+        id: String,
+    ): Boolean =
+        synchronized(notifiedLock) {
+            if (!ids.add(id)) return false
+            val iterator = ids.iterator()
+            while (ids.size > MAX_NOTIFIED_IDS && iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+            true
+        }
+
+    private fun forgetNotified(
+        ids: MutableSet<String>,
+        id: String,
+    ) {
+        synchronized(notifiedLock) { ids.remove(id) }
+    }
 
     fun init(context: Context) {
         appContext = context.applicationContext
@@ -157,12 +181,9 @@ object Notifier {
     ) {
         if (!AppSettingsStore.state.value.notifyPermissions) return
         val context = appContext ?: return
-        // Bound the dedupe set: a long-lived process could accumulate ids for
-        // requests that are never answered/cleared.
-        if (notifiedPermissions.size > MAX_NOTIFIED_IDS) notifiedPermissions.clear()
         requests.forEach { request ->
             val requestId = request.id ?: return@forEach
-            if (!notifiedPermissions.add(requestId)) return@forEach
+            if (!markNotified(notifiedPermissions, requestId)) return@forEach
             val title = request.title?.ifBlank { null } ?: "Permission required"
             val text =
                 request.description?.ifBlank { null }
@@ -203,7 +224,7 @@ object Notifier {
 
     /** Cancels the notification for a request that was answered (or expired). */
     fun clearPermission(requestId: String) {
-        notifiedPermissions.remove(requestId)
+        forgetNotified(notifiedPermissions, requestId)
         val context = appContext ?: return
         try {
             NotificationManagerCompat.from(context).cancel(permissionNotificationId(requestId))
@@ -221,8 +242,7 @@ object Notifier {
         sessionId: String? = null,
     ) {
         if (!AppSettingsStore.state.value.notifyPermissions) return
-        if (notifiedQuestions.size > MAX_NOTIFIED_IDS) notifiedQuestions.clear()
-        if (!notifiedQuestions.add(question.id)) return
+        if (!markNotified(notifiedQuestions, question.id)) return
         val context = appContext ?: return
         val text =
             question.questions
@@ -256,6 +276,17 @@ object Notifier {
                 .notify(questionNotificationId(question.id), notification)
         } catch (e: SecurityException) {
             AppLog.e(APP_LOG_TAG, "Notifier: question notify denied: ${e.message}")
+        }
+    }
+
+    /** Cancels the notification and dedupe entry for a resolved question. */
+    fun clearQuestion(requestId: String) {
+        forgetNotified(notifiedQuestions, requestId)
+        val context = appContext ?: return
+        try {
+            NotificationManagerCompat.from(context).cancel(questionNotificationId(requestId))
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS revoked — nothing to cancel.
         }
     }
 

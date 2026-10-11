@@ -15,6 +15,14 @@ const val LIVE_TEXT_MAX_CHARS = 24_000
 /** Bound on live tool parts: a long step can accumulate many (each holds state). */
 const val LIVE_PARTS_MAX = 40
 
+/**
+ * Bound on the part-id → type map. It is consulted to classify deltas, and an
+ * unbounded map was the real memory leak: a long autonomous turn (or many
+ * remote-started turns, which never pass through `resetLive`) added one entry per
+ * part id and never dropped any.
+ */
+private const val MAX_PART_TYPES = 240
+
 /** How many recent user-message ids the stream remembers to filter echoed parts. */
 private const val MAX_TRACKED_USER_MESSAGES = 20
 
@@ -211,6 +219,22 @@ object StreamReducer {
             if (event.type == "message.part.updated" &&
                 part != null &&
                 !state.isUserMessage(part.messageId) &&
+                part.type == "step-start"
+            ) {
+                // A new step means a new turn is running. Without clearing the
+                // flag here, the first frames of the next turn were discarded
+                // (the classic schema sends no separate status event first), so
+                // the answer only appeared once some status arrived.
+                return reduce(
+                    state.copy(turnEnded = false),
+                    event,
+                    models,
+                    friendlyError,
+                )
+            }
+            if (event.type == "message.part.updated" &&
+                part != null &&
+                !state.isUserMessage(part.messageId) &&
                 (part.type == "text" || part.type == "reasoning")
             ) {
                 val live =
@@ -258,7 +282,7 @@ object StreamReducer {
                 val kind = props.partId?.let { state.partTypes[it] } ?: props.field
                 val types =
                     if (kind != null && props.partId != null) {
-                        state.partTypes + (props.partId to kind)
+                        putPartType(state.partTypes, props.partId, kind)
                     } else {
                         state.partTypes
                     }
@@ -294,7 +318,7 @@ object StreamReducer {
                 // the prompt until the assistant's step-start reset it.
                 if (state.isUserMessage(part.messageId ?: p?.messageId)) return state.noEffects()
                 val finished = part.time?.end != null
-                val types = part.id?.let { state.partTypes + (it to part.type) } ?: state.partTypes
+                val types = part.id?.let { putPartType(state.partTypes, it, part.type) } ?: state.partTypes
                 when (part.type) {
                     "reasoning" -> {
                         state.copy(
@@ -306,7 +330,10 @@ object StreamReducer {
                                     thinking = !finished,
                                 ),
                             isGenerating = true,
-                            isStreaming = true,
+                            // A FINISHED part (time.end set) means the block is done:
+                            // re-arming the streaming caret on an `*.ended` snapshot
+                            // made it jump back on at the end of every block.
+                            isStreaming = !finished,
                             effects = emptyList(),
                         )
                     }
@@ -321,7 +348,7 @@ object StreamReducer {
                                     response = part.text?.let(::cap) ?: state.live.response,
                                 ),
                             isGenerating = true,
-                            isStreaming = true,
+                            isStreaming = !finished,
                             statusError = null,
                             effects = emptyList(),
                         )
@@ -348,7 +375,10 @@ object StreamReducer {
 
                     "step-start" -> {
                         state.copy(
-                            partTypes = types,
+                            // A new step cleared the live parts, so the previous
+                            // step's part ids are dead weight: restart the map
+                            // instead of letting it grow for the whole turn.
+                            partTypes = part.id?.let { mapOf(it to part.type) } ?: emptyMap(),
                             // Classic event schema (this server sends no
                             // `session.next.step.started`): each step arrives as a
                             // `message.part.updated` with a step-start part. Without
@@ -378,6 +408,10 @@ object StreamReducer {
                             // keep `isGenerating` so the composer stays on "stop"
                             // until the server reports the turn idle.
                             isStreaming = false,
+                            // A plain step must not clear the compaction indicator:
+                            // only the compaction's OWN end part (id "compaction",
+                            // mapped from `session.compaction.ended`) does.
+                            isCompacting = if (part.id == "compaction") false else state.isCompacting,
                             effects =
                                 listOf(
                                     StreamEffect.Finalize,
@@ -451,16 +485,21 @@ object StreamReducer {
                     }
 
                     "idle" -> {
+                        // Notify only on the FIRST idle of a turn: the server can
+                        // deliver both `session.status idle` and `session.idle`
+                        // for one turn, which rang the "agent finished" sound
+                        // twice. `turnEnded` marks the turn already closed.
+                        val firstIdle = !state.turnEnded
                         state.copy(
                             isGenerating = false,
                             isStreaming = false,
                             turnEnded = true,
                             effects =
-                                listOf(
-                                    StreamEffect.EndTurn,
-                                    StreamEffect.Reconcile(includeMeta = true),
-                                    StreamEffect.NotifyDone,
-                                ),
+                                buildList {
+                                    add(StreamEffect.EndTurn)
+                                    add(StreamEffect.Reconcile(includeMeta = true))
+                                    if (firstIdle) add(StreamEffect.NotifyDone)
+                                },
                         )
                     }
 
@@ -471,17 +510,47 @@ object StreamReducer {
             }
 
             "session.idle" -> {
+                // Same once-per-turn rule as `status idle`: some servers send both.
+                val firstIdle = !state.turnEnded
                 state.copy(
                     isGenerating = false,
                     isStreaming = false,
+                    isCompacting = false,
+                    turnEnded = true,
+                    effects =
+                        buildList {
+                            add(StreamEffect.EndTurn)
+                            add(StreamEffect.Reconcile(includeMeta = true))
+                            add(StreamEffect.LoadPendingQuestions)
+                            if (firstIdle) add(StreamEffect.NotifyDone)
+                        },
+                )
+            }
+
+            // An abort (user/web/TUI) ends the turn like `session.idle`, but it is
+            // NOT a success: no "the agent finished" notification.
+            "session.aborted" -> {
+                state.copy(
+                    isGenerating = false,
+                    isStreaming = false,
+                    isCompacting = false,
                     turnEnded = true,
                     effects =
                         listOf(
                             StreamEffect.EndTurn,
                             StreamEffect.Reconcile(includeMeta = true),
                             StreamEffect.LoadPendingQuestions,
-                            StreamEffect.NotifyDone,
                         ),
+                )
+            }
+
+            // A failed compaction surfaces an error but does not end the turn.
+            "session.compaction.failed" -> {
+                val msg = friendlyError(p?.error) ?: "Compaction failed"
+                state.copy(
+                    isCompacting = false,
+                    statusError = msg,
+                    effects = listOf(StreamEffect.Reconcile(includeMeta = false)),
                 )
             }
 
@@ -566,9 +635,11 @@ object StreamReducer {
                                 // the answer deep-link instead of the
                                 // misleading "agent finished" alert.
                                 add(StreamEffect.NotifyQuestion(asked))
-                            } else {
-                                add(StreamEffect.NotifyDone)
                             }
+                            // No id means the payload was incomplete, so the card
+                            // cannot be built from the event. That is still NOT a
+                            // finished turn — the agent is blocked on a question —
+                            // so the load is nudged and no success is announced.
                             add(StreamEffect.LoadPendingQuestions)
                         },
                 )
@@ -734,6 +805,29 @@ object StreamReducer {
         }
 
     private fun StreamState.noEffects(): StreamState = copy(effects = emptyList())
+
+    /**
+     * Adds (or updates) a part id → type entry, bound to [MAX_PART_TYPES].
+     * Updating an existing key is the common case and stays a cheap copy; only a
+     * NEW key rebuilds the (small, insertion-ordered) map and evicts the oldest
+     * id when full.
+     */
+    private fun putPartType(
+        map: Map<String, String>,
+        id: String,
+        type: String,
+    ): Map<String, String> {
+        if (map[id] == type) return map
+        if (map.containsKey(id)) return map + (id to type)
+        val bounded = LinkedHashMap(map)
+        bounded[id] = type
+        val iterator = bounded.keys.iterator()
+        while (bounded.size > MAX_PART_TYPES && iterator.hasNext()) {
+            iterator.next()
+            iterator.remove()
+        }
+        return bounded
+    }
 
     /** True when [messageId] belongs to a USER message seen on this stream. */
     private fun StreamState.isUserMessage(messageId: String?): Boolean = messageId != null && messageId in userMessageIds

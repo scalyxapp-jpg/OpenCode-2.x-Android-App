@@ -5,7 +5,6 @@ import org.junit.Test
 
 /** A raw Double printed as "$2.1897245279999997" is not a price. */
 class CostTest {
-
     @Test
     fun `rounds a long double to cents`() {
         assertEquals("$2.19", formatCost(2.1897245279999997))
@@ -20,5 +19,12 @@ class CostTest {
     fun `calls out sub-cent amounts`() {
         assertEquals("<$0.01", formatCost(0.004))
         assertEquals("<$0.01", formatCost(0.0))
+    }
+
+    @Test
+    fun `handles a credit and non-finite values`() {
+        assertEquals("-$2.50", formatCost(-2.5))
+        assertEquals("\u2014", formatCost(Double.NaN))
+        assertEquals("\u2014", formatCost(Double.POSITIVE_INFINITY))
     }
 }

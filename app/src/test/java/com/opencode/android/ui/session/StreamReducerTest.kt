@@ -6,7 +6,9 @@ import com.opencode.android.domain.Model
 import com.opencode.android.domain.Part
 import com.opencode.android.domain.PartTime
 import com.opencode.android.domain.SessionModel
+import com.opencode.android.domain.SessionStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -731,5 +733,64 @@ class StreamReducerTest {
 
         val rejected = reduce(StreamState(), Event(type = "question.v2.rejected"))
         assertTrue(rejected.effects.contains(StreamEffect.LoadPendingQuestions))
+    }
+
+    @Test
+    fun `a step-start after the turn ended resumes the stream`() {
+        // The trailing "final text" frame after session.idle leaves turnEnded set;
+        // a NEW turn's first frame (classic schema: a step-start part, no status
+        // event first) must not be discarded or the answer stays invisible.
+        val ended = StreamState(turnEnded = true, isGenerating = false)
+        val next =
+            reduce(
+                ended,
+                Event(
+                    type = "message.part.updated",
+                    properties =
+                        props(
+                            part =
+                                Part(
+                                    id = "p1",
+                                    type = "step-start",
+                                    time = PartTime(start = 2),
+                                ),
+                        ),
+                ),
+            )
+        assertFalse("turnEnded must be cleared by a new step", next.turnEnded)
+        assertTrue("the new turn must be reported as generating", next.isGenerating)
+    }
+
+    @Test
+    fun `the finished notification is emitted once per turn`() {
+        val first = reduce(StreamState(isGenerating = true), Event(type = "session.idle", properties = props()))
+        assertTrue(first.effects.contains(StreamEffect.NotifyDone))
+        // Both `session.status idle` and `session.idle` can arrive for one turn;
+        // the second must not ring the sound again.
+        val second =
+            reduce(
+                first.copy(effects = emptyList()),
+                Event(type = "session.status", properties = props(status = SessionStatus(type = "idle"))),
+            )
+        assertTrue(
+            "a repeated idle must not notify again",
+            second.effects.none { it == StreamEffect.NotifyDone },
+        )
+    }
+
+    @Test
+    fun `the part type map stays bounded over a long turn`() {
+        var state = StreamState()
+        repeat(400) { index ->
+            state =
+                reduce(
+                    state.copy(effects = emptyList()),
+                    Event(
+                        type = "message.part.updated",
+                        properties = props(part = Part(id = "tool-$index", type = "tool")),
+                    ),
+                )
+        }
+        assertTrue("partTypes must not grow without limit (was ${state.partTypes.size})", state.partTypes.size <= 240)
     }
 }

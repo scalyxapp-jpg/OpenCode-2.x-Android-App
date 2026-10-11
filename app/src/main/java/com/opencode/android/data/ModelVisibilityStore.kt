@@ -24,6 +24,12 @@ object ModelVisibilityStore {
     @Volatile
     private var prefs: SharedPreferences? = null
 
+    // setVisibility/setProviderVisibility/saveSelection are read-modify-write on
+    // JSON blobs; without a lock, concurrent writers (a provider-wide toggle loop
+    // racing a per-model toggle or a selection save) overwrite each other and
+    // lose toggles.
+    private val lock = Any()
+
     fun init(context: Context) {
         // Eager: AppStartup runs this on a background dispatcher, so the disk
         // load is off the main thread and later reads are in-memory.
@@ -96,35 +102,37 @@ object ModelVisibilityStore {
         modelId: String,
         show: Boolean,
     ) {
-        val bareId = bareModelId(providerId, modelId)
-        val obj = readModel()
-        val user = obj.optJSONArray("user") ?: JSONArray()
-        val newUser = JSONArray()
-        var replaced = false
-        for (i in 0 until user.length()) {
-            val e = user.optJSONObject(i) ?: continue
-            if (e.optString("modelID") == bareId && e.optString("providerID") == providerId) {
-                val updated =
+        synchronized(lock) {
+            val bareId = bareModelId(providerId, modelId)
+            val obj = readModel()
+            val user = obj.optJSONArray("user") ?: JSONArray()
+            val newUser = JSONArray()
+            var replaced = false
+            for (i in 0 until user.length()) {
+                val e = user.optJSONObject(i) ?: continue
+                if (e.optString("modelID") == bareId && e.optString("providerID") == providerId) {
+                    val updated =
+                        JSONObject()
+                            .put("modelID", bareId)
+                            .put("providerID", providerId)
+                            .put("visibility", if (show) "show" else "hide")
+                    newUser.put(updated)
+                    replaced = true
+                } else {
+                    newUser.put(e)
+                }
+            }
+            if (!replaced) {
+                newUser.put(
                     JSONObject()
                         .put("modelID", bareId)
                         .put("providerID", providerId)
-                        .put("visibility", if (show) "show" else "hide")
-                newUser.put(updated)
-                replaced = true
-            } else {
-                newUser.put(e)
+                        .put("visibility", if (show) "show" else "hide"),
+                )
             }
+            obj.put("user", newUser)
+            writeModel(obj)
         }
-        if (!replaced) {
-            newUser.put(
-                JSONObject()
-                    .put("modelID", bareId)
-                    .put("providerID", providerId)
-                    .put("visibility", if (show) "show" else "hide"),
-            )
-        }
-        obj.put("user", newUser)
-        writeModel(obj)
     }
 
     fun setProviderVisibility(
@@ -159,30 +167,32 @@ object ModelVisibilityStore {
         modelId: String?,
         variant: String? = null,
     ) {
-        val obj =
-            try {
-                JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
-            } catch (_: Exception) {
-                JSONObject()
+        synchronized(lock) {
+            val obj =
+                try {
+                    JSONObject(p()?.getString(KEY_SELECTION, null) ?: "{}")
+                } catch (_: Exception) {
+                    JSONObject()
+                }
+            val sessions = obj.optJSONObject("session") ?: JSONObject()
+            val existing = sessions.optJSONObject(sessionId)
+            val entry = JSONObject()
+            val effectiveAgent = agent ?: existing?.optStringOrNull("agent")
+            if (!effectiveAgent.isNullOrBlank()) entry.put("agent", effectiveAgent)
+            if (!providerId.isNullOrBlank() && !modelId.isNullOrBlank()) {
+                entry.put(
+                    "model",
+                    JSONObject().put("modelID", modelId).put("providerID", providerId),
+                )
+            } else {
+                existing?.optJSONObject("model")?.let { entry.put("model", it) }
             }
-        val sessions = obj.optJSONObject("session") ?: JSONObject()
-        val existing = sessions.optJSONObject(sessionId)
-        val entry = JSONObject()
-        val effectiveAgent = agent ?: existing?.optStringOrNull("agent")
-        if (!effectiveAgent.isNullOrBlank()) entry.put("agent", effectiveAgent)
-        if (!providerId.isNullOrBlank() && !modelId.isNullOrBlank()) {
-            entry.put(
-                "model",
-                JSONObject().put("modelID", modelId).put("providerID", providerId),
-            )
-        } else {
-            existing?.optJSONObject("model")?.let { entry.put("model", it) }
+            val effectiveVariant = variant ?: existing?.optStringOrNull("variant")
+            if (!effectiveVariant.isNullOrBlank()) entry.put("variant", effectiveVariant)
+            sessions.put(sessionId, entry)
+            obj.put("session", sessions)
+            p()?.edit { putString(KEY_SELECTION, obj.toString()) }
         }
-        val effectiveVariant = variant ?: existing?.optStringOrNull("variant")
-        if (!effectiveVariant.isNullOrBlank()) entry.put("variant", effectiveVariant)
-        sessions.put(sessionId, entry)
-        obj.put("session", sessions)
-        p()?.edit { putString(KEY_SELECTION, obj.toString()) }
     }
 
     data class SessionSelection(

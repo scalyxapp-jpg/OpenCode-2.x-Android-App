@@ -17,8 +17,9 @@ import android.content.pm.ApplicationInfo
  *     without user content.
  *
  * Everything (including release [d]/[w]) is recorded into the in-memory ring
- * buffer so it can be inspected on-device. The buffer is bounded, so it never
- * grows without limit. Nothing is uploaded anywhere automatically.
+ * buffer **in debug builds** so it can be inspected on-device; in release the
+ * buffer is empty on purpose (nothing consumes it, and it would retain user
+ * content for the process lifetime). Nothing is uploaded anywhere automatically.
  *
  * Enabled from `Application.onCreate` via [init]; the flag mirrors the
  * debuggable attribute so no `BuildConfig` (disabled in this project) is needed.
@@ -48,6 +49,12 @@ object AppLog {
         tag: String,
         message: String,
     ) {
+        // The ring buffer is only populated in debug builds: it holds user
+        // content in memory (prompts, tool output, paths) and NOTHING reads it in
+        // release — the old code grew it to 4000 entries and kept it for the whole
+        // process without ever uploading or clearing it. Errors still reach logcat
+        // in release (see [e]); user-facing failures go through [UserMessages].
+        if (!enabled) return
         synchronized(lock) {
             if (buffer.size >= MAX_BUFFER) buffer.removeFirst()
             nextSeq += 1

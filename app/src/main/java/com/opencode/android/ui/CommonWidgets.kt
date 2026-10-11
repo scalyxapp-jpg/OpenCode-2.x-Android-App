@@ -54,6 +54,8 @@ internal fun EmptyState(
     subtitle: String? = null,
     icon: ImageVector? = null,
     compact: Boolean = false,
+    /** Optional call-to-action rendered under the text. */
+    action: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -88,6 +90,9 @@ internal fun EmptyState(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
             )
+        }
+        action?.let {
+            Box(modifier = Modifier.padding(top = MaterialTheme.spacing.medium)) { it() }
         }
     }
 }

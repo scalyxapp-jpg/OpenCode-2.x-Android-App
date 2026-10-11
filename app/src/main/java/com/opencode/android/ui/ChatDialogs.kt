@@ -677,8 +677,11 @@ internal fun QuestionRequestCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
+                    // ALL, not ANY: with `any` a multi-question request could be
+                    // submitted after answering one question, sending empty answer
+                    // lists for the rest.
                     val canSubmit =
-                        items.indices.any { qi ->
+                        items.indices.all { qi ->
                             (selections[qi]?.isNotEmpty() == true) || !customs[qi].isNullOrBlank()
                         }
                     FilledTonalButton(

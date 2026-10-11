@@ -60,21 +60,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleIntent(intent)
-        // Route client errors to the server log (POST /log). Best-effort.
-        com.opencode.android.data.ClientLog
-            .install { backendSession.api }
+        // Only the FIRST create handles the launch intent: on recreate() (theme
+        // switch) or a process restore the same intent is still attached, and
+        // re-handling it re-opened the deep-linked session.
+        if (savedInstanceState == null) handleIntent(intent)
         // Keep the process (and the session SSE connection) alive while the app
-        // is open, so backgrounding does not force a reconnect. Started here,
-        // in the foreground, because Android 12+ forbids a background start.
-        // Idempotent: do not re-start (and flicker the notification) if the
-        // keep-alive service is already running.
-        if (!ConnectionService.isRunning) {
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, ConnectionService::class.java),
-            )
-        }
+        // is open, so backgrounding does not force a reconnect. Started here, in
+        // the foreground, because Android 12+ forbids a background start.
+        //
+        // Started unconditionally: gating on `isRunning` was a stale-flag TOCTOU
+        // (the flag is only reset in onDestroy, which the OS may skip), and then the
+        // keeper stayed dead without the app noticing. Starting an already-running
+        // service is a no-op beyond another onStartCommand.
+        ContextCompat.startForegroundService(
+            this,
+            Intent(this, ConnectionService::class.java),
+        )
         enableEdgeToEdge()
         setContent {
             // Apply the persisted appearance settings (color scheme, theme,
@@ -146,10 +147,20 @@ class MainActivity : ComponentActivity() {
     /** Routes every entry-point intent: deep link, new session, or share. */
     private fun handleIntent(intent: Intent?) {
         intent ?: return
-        deepLinkSessionId.value = intent.getStringExtra(Notifier.EXTRA_SESSION_ID)
+        // Read and CONSUME the session extra. It must not survive on the retained
+        // launch intent: on a later recreate() it would be re-processed and the
+        // user teleported back into that chat. (A null value must also not be
+        // written: that flipped the deep-link state on every share/new-session
+        // intent and re-triggered the navigation effect.)
+        intent.getStringExtra(Notifier.EXTRA_SESSION_ID)?.let { sessionId ->
+            intent.removeExtra(Notifier.EXTRA_SESSION_ID)
+            deepLinkSessionId.value = sessionId
+        }
         when (intent.action) {
             ACTION_NEW_SESSION -> {
-                newSessionSignal.value = System.currentTimeMillis()
+                // Monotonic counter, not wall-clock: two taps inside the same
+                // millisecond produced the same value and Compose saw no change.
+                newSessionSignal.value = newSessionSignal.value + 1
             }
 
             Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
@@ -188,7 +199,7 @@ class MainActivity : ComponentActivity() {
                 }
             if (text.isNullOrBlank() && cached.isEmpty()) return@launch
             PendingShare.set(text, cached)
-            shareSignal.value = System.currentTimeMillis()
+            shareSignal.value = shareSignal.value + 1
         }
     }
 
@@ -200,7 +211,9 @@ class MainActivity : ComponentActivity() {
                 android.webkit.MimeTypeMap
                     .getSingleton()
                     .getExtensionFromMimeType(mime ?: "") ?: "bin"
-            val target = java.io.File(cacheDir, "shared_${System.currentTimeMillis()}.$ext")
+            // Unique per file: ACTION_SEND_MULTIPLE copies several URIs in the same
+            // millisecond, and an identical name overwrote the earlier attachment.
+            val target = java.io.File(cacheDir, "shared_${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}.$ext")
             file = target
             var total = 0L
             contentResolver.openInputStream(uri)?.use { input ->
@@ -226,6 +239,17 @@ class MainActivity : ComponentActivity() {
                 "share: could not cache $uri: ${e.message}",
             )
             null
+        }
+    }
+
+    /**
+     * The widget is a snapshot of the last session; pushing a render on the way out
+     * makes the home screen agree with what the user just saw. Best-effort.
+     */
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) {
+            com.opencode.android.ui.widget.refreshSessionWidget(this)
         }
     }
 

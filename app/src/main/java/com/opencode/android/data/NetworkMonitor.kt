@@ -38,6 +38,12 @@ object NetworkMonitor {
     @Volatile
     private var callback: ConnectivityManager.NetworkCallback? = null
 
+    /**
+     * Registers the network callback once. Synchronized: two concurrent callers
+     * both passed the plain `registered` check and registered a callback each,
+     * leaving the first one registered forever (leak, duplicate wake-ups).
+     */
+    @Synchronized
     fun init(context: Context) {
         if (registered) return
         val cm =

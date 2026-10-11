@@ -31,12 +31,29 @@ object MessageEcho {
     fun pendingEchoes(
         local: List<Row>,
         server: List<Row>,
-    ): List<Row> =
-        local
+    ): List<Row> {
+        // One server row can only "confirm" ONE local row. The old
+        // "exists at least once" test matched every duplicate: sending the same
+        // text twice (e.g. "continue") hid the second echo immediately, although
+        // the server had persisted only the first.
+        val available =
+            server
+                .filter { it.role == "user" }
+                .groupingBy { it.text }
+                .eachCount()
+                .toMutableMap()
+        return local
             .filter { isLocal(it) && it.text.isNotBlank() }
-            .filterNot { candidate ->
-                server.any { it.role == "user" && it.text == candidate.text }
+            .filter { candidate ->
+                val remaining = available[candidate.text] ?: 0
+                if (remaining > 0) {
+                    available[candidate.text] = remaining - 1
+                    false
+                } else {
+                    true
+                }
             }
+    }
 
     /**
      * [messages] with EVERY optimistic echo removed. The refresh merges the
@@ -56,8 +73,16 @@ object MessageEcho {
      */
     fun firstText(message: Message): String =
         (
-            message.parts.firstOrNull { it.type.trim() == "text" }?.text
-                ?: message.content.firstOrNull { it.type?.trim() == "text" }?.text
+            message.parts
+                .firstOrNull { it.type.trim() == "text" }
+                ?.text
+                // A leading EMPTY text part must not shadow a later one: an empty
+                // string is not null, so the elvis chain below was never taken.
+                ?.takeIf { it.isNotBlank() }
+                ?: message.content
+                    .firstOrNull { it.type?.trim() == "text" }
+                    ?.text
+                    ?.takeIf { it.isNotBlank() }
                 ?: message.text
         )?.trim()
             .orEmpty()

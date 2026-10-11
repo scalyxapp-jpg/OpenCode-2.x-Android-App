@@ -160,4 +160,35 @@ class ProviderDirectoryTest {
         assertFalse(provider.hasModel("glm-5.3"))
         assertFalse(provider.hasModel("other/z-ai/glm-5.3"))
     }
+
+    @Test
+    fun `invalidate during an in-flight fetch forces a fresh fetch`() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            var calls = 0
+            val directory =
+                ProviderDirectory(
+                    fetch = {
+                        calls++
+                        if (calls == 1) gate.await()
+                        response("nvidia")
+                    },
+                    scope = this,
+                )
+
+            launch { directory.load() }
+            runCurrent()
+            assertEquals(1, calls)
+
+            // A concurrent invalidate() must not be swallowed by the running
+            // fetch: the forced refresh has to start its own request.
+            directory.invalidate()
+            launch { directory.load() }
+            runCurrent()
+            assertEquals("invalidate must not reuse the pre-invalidate fetch", 2, calls)
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertTrue(directory.state.value is ProviderDirectory.State.Ready)
+        }
 }

@@ -33,6 +33,14 @@ object AppStartup {
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready
 
+    /**
+     * Message of the last store-initialisation failure, or null. The UI used to
+     * release the splash and silently continue with empty stores, which made a
+     * partial init look identical to success (settings/backends "disappeared").
+     */
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError
+
     fun initialize(context: Context) {
         val app = context.applicationContext
         scope.launch {
@@ -47,11 +55,17 @@ object AppStartup {
                 WidgetStateStore.init(app)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "AppStartup init failed: ${e.message}")
+                _lastError.value = e.message ?: e::class.java.simpleName
             } finally {
                 // Always release the UI, even if a store failed: the app falls
                 // back to defaults rather than hanging on the splash.
                 _ready.value = true
             }
+            // The widget's "generating" flag is persisted by the chat screen; if
+            // the process died mid-turn it stayed true forever and the widget kept
+            // showing "Working…" with no session open. A fresh process is never
+            // generating.
+            resetStaleWidgetState()
             // AFTER releasing the UI, so the splash is never held by cache I/O:
             // warm the in-memory caches in the background so the first Home
             // paint and the first session tap are memory hits, not disk reads.
@@ -64,6 +78,23 @@ object AppStartup {
      * into their in-memory layers. Best-effort: a miss just means the normal
      * read happens later.
      */
+    /**
+     * A fresh process cannot be mid-turn, so the persisted widget "generating"
+     * flag is stale by definition (it is only written while the chat screen is
+     * composed). Left alone, the widget showed "Working…" indefinitely after the
+     * process was killed during a turn.
+     */
+    private fun resetStaleWidgetState() {
+        try {
+            val snapshot = WidgetStateStore.snapshot()
+            if (snapshot.generating) {
+                WidgetStateStore.save(status = null, model = snapshot.model, generating = false)
+            }
+        } catch (e: Exception) {
+            AppLog.w(APP_LOG_TAG) { "widget state reset failed: ${e.message}" }
+        }
+    }
+
     private suspend fun warmCaches() {
         try {
             HomeCache.read()

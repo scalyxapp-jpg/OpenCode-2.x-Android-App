@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.2.0] - 2026-10-11
+
+Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
+
+### Fixed (Auswahl)
+- **Paging ladder** no longer stops at the first oversized page (heavy sessions opened blank).
+- **Optimistic echo** is rolled back on every early failure (phantom message + lost prompt).
+- **HTTP error-body leaks** closed on all reply/rename/revert/message-list routes; `getFileContent` no longer shows error bodies as file content.
+- **Permission replies** work through the canonical route (session lookup was never populated).
+- **Provider catalog**: `invalidate()` is honoured during an in-flight fetch; a stale fetch can no longer publish after it.
+- **Caches**: a slow disk read can no longer overwrite a fresher in-memory entry; message cache stores the real session id for search hits.
+- **Stores** (backends, model visibility, recent models, settings) serialise read-modify-write; a keystore hiccup no longer deletes saved passwords/token.
+- **SSE control events** (`sse.connected`) can no longer be evicted by a data storm; connection-level response leak fixed.
+- **Streaming state**: bounded part map, `turnEnded` cleared by a new step, one "finished" notification per turn, retry status no longer flickers away.
+- **Reload of the same session** keeps the running flag and live buffers.
+- **Attachments**: atomic add off the main thread; base64 embed runs on IO with progress.
+- **Lifecycle**: keep-alive service stops on task removal; deep-link intent consumed once; widget waits for store init; ClientLog no longer holds the Activity.
+- **Semantics**: aborts no longer report success, failed compactions surface an error, `session.error` ends the "running" badge, per-question submit requires all answers, honest labels/messages (restore, permissions, questions, selection, guard) and German guard strings moved to resources.
+- **GUI logic**: body-search results appear, error bubbles render without text, folder navigation no longer jumps to the top, Enter respects an upload, skills dialog reports failures.
+- **UX**: discoverable per-message actions (⋮), confirmations for revert/project/backend deletion, empty-state CTA, "Running" filter, Esc stops a turn, copy session id.
+- **Workflows**: backend switch is verified before it is applied, notification replies target the saved backend, a failed send retries on text OR attachment, rejected slash commands restore the typed line, settings export no longer reports false success, switch-backend cleanup is consistent, stale widget state is reset, OAuth-only providers no longer send a bogus key type.
+
 ## [1.1.1] - 2026-10-11
 
 ### Changed
@@ -151,7 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/releases/tag/v1.0.0

@@ -136,11 +136,10 @@ class OpenCodeApiAdapter(
         }
     }
 
-    override suspend fun createSession(body: Map<String, String>): SessionResponse =
-        SessionResponse(
-            data = (v2.createSession(CreateSessionBody()).data ?: error("empty session response")).withDirectory(),
-        )
-
+    // Only ONE creation path exists on purpose. A former `createSession(body:
+    // Map<String, String>)` accepted title/agent/model in a map and then dropped
+    // all of them silently (it always sent an empty body) — two creation routes
+    // with contradictory contract fidelity. `createSessionIn` carries the fields.
     override suspend fun createSessionIn(body: SessionCreateRequest): SessionResponse =
         SessionResponse(
             data =
@@ -207,8 +206,14 @@ class OpenCodeApiAdapter(
     ): PromptResponse {
         // V1 carried selection in the prompt; V2 stores it on the session.
         val model = request.model?.let(::parseModelRef)
-        if (model != null) setModel(sessionId, ModelRefRequest(model))
-        request.agent?.takeIf { it.isNotBlank() }?.let { setAgent(sessionId, mapOf("agent" to it)) }
+        if (model != null) requireSuccess(setModel(sessionId, ModelRefRequest(model)), "set model")
+        request.agent?.takeIf { it.isNotBlank() }?.let {
+            requireSuccess(setAgent(sessionId, mapOf("agent" to it)), "set agent")
+        }
+        // Only prompt once the selection actually took: previously a rejected
+        // setModel/setAgent was ignored and the prompt silently ran on the
+        // PREVIOUS model/agent, so the user's picker choice appeared to be used
+        // while a different model answered.
         v2.prompt(sessionId, PromptBody(text = request.prompt.text))
         return PromptResponse(data = PromptResult(sessionId = sessionId))
     }
@@ -273,6 +278,10 @@ class OpenCodeApiAdapter(
         body: Map<String, String>,
     ): Session = patchSession(sessionId, SessionUpdateRequest(title = body["title"]))
 
+    /**
+     * Only the TITLE is applied: V2 has no `time.archived` patch, so
+     * [SessionUpdateRequest.time] is intentionally ignored (V1 compatibility).
+     */
     override suspend fun updateSession(
         sessionId: String,
         body: SessionUpdateRequest,
@@ -319,6 +328,11 @@ class OpenCodeApiAdapter(
         }
     }
 
+    /**
+     * READ-ONLY despite the name: it re-reads the session, whose `share` block
+     * holds the link the SERVER already created (sharing is a server `share`
+     * config concern, not an endpoint). It never creates or enables a share.
+     */
     override suspend fun shareSession(sessionId: String): Session = getSessionFull(sessionId)
 
     override suspend fun exportSession(sessionId: String): List<Message> =
@@ -347,10 +361,12 @@ class OpenCodeApiAdapter(
         v2.revertCommit(sessionId)
     }
 
-    override suspend fun revertStage(sessionId: String) {
-        // V2 requires a message id; the bare V1 stage call has none, so nothing
-        // can be staged. Kept for interface compatibility.
-    }
+    /**
+     * NO-OP, deliberately: V2 stages a revert by MESSAGE id and the bare V1
+     * "stage everything" call has none. Kept only for interface compatibility —
+     * callers must not expect a staged revert after this returns.
+     */
+    override suspend fun revertStage(sessionId: String) = Unit
 
     override suspend fun getContext(sessionId: String): ContextUsage = ContextUsage(data = v2.context(sessionId).data.orEmpty())
 
@@ -379,14 +395,21 @@ class OpenCodeApiAdapter(
             .map { it.path }
 
     override suspend fun getPathInfo(): PathInfo {
-        // V2 has no dedicated "home" route; seed the browser at the active
-        // location (which the UI can navigate up from).
+        // V2 has no dedicated "home" route, so BOTH fields carry the ACTIVE
+        // location directory (the UI navigates up from there). `home` is the V1
+        // wire name — it is NOT the serve host's home directory; do not use it as
+        // one.
         val dir = v2.location().directory
         return PathInfo(home = dir, directory = dir)
     }
 
     override suspend fun getFileContent(path: String): FileContent {
         val response = v2.fsRead(path)
+        if (!response.isSuccessful) {
+            // A 4xx/5xx must not be rendered as the file's content.
+            response.errorBody()?.close()
+            throw IOException("file read HTTP ${response.code()}")
+        }
         val body = response.body() ?: return FileContent(content = null, path = path)
         val text = body.use { it.string() }
         return FileContent(content = text, path = path)
@@ -569,6 +592,9 @@ class OpenCodeApiAdapter(
         return v2.vcsDiff(mode = v2Mode, directory = directory).data.orEmpty()
     }
 
+    // UNSUPPORTED: V2 has no GET /session/{id}/todo, so an empty list here means
+    // "no endpoint", never "the session has no todos". Todos arrive exclusively
+    // through the `todo.updated` event.
     override suspend fun getTodos(sessionId: String): List<TodoItem> = emptyList()
 
     // --- providers / auth --------------------------------------------------
@@ -742,16 +768,25 @@ class OpenCodeApiAdapter(
 
     override suspend fun disconnectMcp(name: String): ResponseBody = requireBody(v2.mcpDisconnect(name))
 
+    /** Alias of [connectMcp]: V2 has no separate authenticate route. */
     override suspend fun authenticateMcp(name: String): ResponseBody = requireBody(v2.mcpConnect(name))
 
     // --- permissions / questions (v2 forms) --------------------------------
 
-    override suspend fun getPermissions(directory: String?): List<PermissionRequest> =
-        v2
-            .permissionRequests(directory)
-            .data
-            .orEmpty()
-            .map { it.toDomain() }
+    override suspend fun getPermissions(directory: String?): List<PermissionRequest> {
+        val permissions = v2.permissionRequests(directory).data.orEmpty()
+        // Register the session for each pending permission. The handler called by
+        // the notification (`PermissionReply` → `replyPermission`) resolves the
+        // session from here; without it the canonical route threw "unknown
+        // permission request" for EVERY reply and only the session-scoped
+        // fallback worked — which fails outright when the notification carries no
+        // session id.
+        for (permission in permissions) {
+            val id = permission.id ?: continue
+            permission.sessionId?.let { formSessionIds[id] = it }
+        }
+        return permissions.map { it.toDomain() }
+    }
 
     override suspend fun replyPermission(
         requestId: String,
@@ -759,6 +794,7 @@ class OpenCodeApiAdapter(
     ): ResponseBody {
         val sessionId = formSessionIds[requestId] ?: throw IOException("unknown permission request $requestId")
         return requireBody(v2.replyPermission(sessionId, requestId, PermissionDecision(decision = body.reply)))
+            .also { forgetForm(requestId) }
     }
 
     override suspend fun replySessionPermission(
@@ -785,11 +821,12 @@ class OpenCodeApiAdapter(
     ): ResponseBody {
         val sessionId = formSessionIds[requestId] ?: throw IOException("unknown question $requestId")
         return requireBody(v2.replyForm(sessionId, requestId, FormReplyBody(answerMap(requestId, body))))
+            .also { forgetForm(requestId) }
     }
 
     override suspend fun rejectQuestion(requestId: String): ResponseBody {
         val sessionId = formSessionIds[requestId] ?: throw IOException("unknown question $requestId")
-        return requireBody(v2.cancelForm(sessionId, requestId))
+        return requireBody(v2.cancelForm(sessionId, requestId)).also { forgetForm(requestId) }
     }
 
     override suspend fun replySessionQuestion(
@@ -881,6 +918,24 @@ class OpenCodeApiAdapter(
             form.sessionId?.let { formSessionIds[id] = it }
             formFields[id] = form.fields
         }
+        // Pending forms/permissions are short-lived; cap the maps so a long-lived
+        // process cannot accumulate an entry per request forever.
+        trimFormMaps()
+    }
+
+    /** Drops the cached form/permission entry once it has been answered. */
+    private fun forgetForm(requestId: String) {
+        formSessionIds.remove(requestId)
+        formFields.remove(requestId)
+    }
+
+    private fun trimFormMaps() {
+        if (formSessionIds.size <= MAX_REMEMBERED_FORMS) return
+        // Oldest-insertion order is not tracked separately; drop an arbitrary
+        // slice so the map shrinks and re-listing refills the live entries.
+        val excess = formSessionIds.size - MAX_REMEMBERED_FORMS
+        val stale = formSessionIds.keys.take(excess)
+        stale.forEach { forgetForm(it) }
     }
 
     private fun answerMap(
@@ -904,9 +959,39 @@ class OpenCodeApiAdapter(
         return ModelRef(id = modelId, providerId = providerId, variant = variant)
     }
 
+    /**
+     * Unwraps a `Response<ResponseBody>`, closing the error body before
+     * throwing.
+     *
+     * Retrofit hands the raw error stream back via `errorBody()`; a plain throw
+     * leaves it open, and the callers retry (up to three times per page size, and
+     * every reply/rename/revert route), so a persistent server error leaked one
+     * connection per attempt until the pool was exhausted.
+     */
     private fun requireBody(response: Response<ResponseBody>): ResponseBody {
-        if (!response.isSuccessful) throw IOException("HTTP ${response.code()}")
+        if (!response.isSuccessful) {
+            val code = response.code()
+            response.errorBody()?.close()
+            throw IOException("HTTP $code")
+        }
         return response.body() ?: emptyBody()
+    }
+
+    /**
+     * Throws when [response] is not 2xx, closing the error body. Used for calls
+     * whose failure must not be swallowed (session model/agent selection).
+     */
+    private fun requireSuccess(
+        response: Response<ResponseBody>,
+        what: String,
+    ) {
+        if (response.isSuccessful) {
+            response.body()?.close() ?: response.errorBody()?.close()
+            return
+        }
+        val code = response.code()
+        response.errorBody()?.close()
+        throw IOException("$what HTTP $code")
     }
 
     private fun emptyBody(): ResponseBody = ResponseBody.create(null, ByteArray(0))
@@ -1008,5 +1093,8 @@ class OpenCodeApiAdapter(
     companion object {
         /** Web home list fetches `/api/session?limit=5000&order=desc&parentID=null`. */
         private const val HOME_SESSION_LIMIT = 5000
+
+        /** Upper bound for the form/permission lookup maps (see `trimFormMaps`). */
+        private const val MAX_REMEMBERED_FORMS = 64
     }
 }

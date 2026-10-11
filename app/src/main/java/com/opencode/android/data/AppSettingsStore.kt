@@ -118,10 +118,18 @@ object AppSettingsStore {
         )
     }
 
+    // Serialises update/reset/importJson: they are read-modify-write on the same
+    // SharedPreferences, and `_state.value = load()` from one thread could
+    // otherwise overwrite the freshly published state of another with a
+    // snapshot taken in between.
+    private val lock = Any()
+
     private fun update(block: (SharedPreferences.Editor) -> Unit) {
-        val prefs = p() ?: return
-        prefs.edit { block(this) }
-        _state.value = load()
+        synchronized(lock) {
+            val prefs = p() ?: return
+            prefs.edit { block(this) }
+            _state.value = load()
+        }
     }
 
     fun setLanguage(v: String) = update { it.putString("language", v) }
@@ -178,21 +186,28 @@ object AppSettingsStore {
 
     fun setGuardToken(v: String) {
         val trimmed = v.trim()
-        update {
-            it.putString(
-                "guardToken",
-                // encrypt() is fail-closed (null when the Keystore is
-                // unavailable): store "" rather than a plaintext secret.
-                if (trimmed.isBlank()) "" else SecretBox.encrypt(trimmed) ?: "",
-            )
+        if (trimmed.isBlank()) {
+            update { it.putString("guardToken", "") }
+            return
         }
+        // encrypt() is fail-closed (null when the Keystore is unavailable).
+        // Writing "" then would silently DESTROY the working token; keep the
+        // stored value and tell the user instead.
+        val encrypted = SecretBox.encrypt(trimmed)
+        if (encrypted == null) {
+            AppLog.w(APP_LOG_TAG) { "setGuardToken: encryption unavailable; keeping stored token" }
+            return
+        }
+        update { it.putString("guardToken", encrypted) }
     }
 
     /** Restores every setting to its default ("Reset to defaults"). */
     fun reset() {
-        val prefs = p() ?: return
-        prefs.edit { clear() }
-        _state.value = AppSettings()
+        synchronized(lock) {
+            val prefs = p() ?: return
+            prefs.edit { clear() }
+            _state.value = AppSettings()
+        }
     }
 
     // --- Settings transfer -------------------------------------------------
@@ -234,40 +249,42 @@ object AppSettingsStore {
                 return e.message ?: "malformed file"
             }
         val prefs = p() ?: return "settings storage unavailable"
-        prefs.edit {
-            putString("language", parsed.language)
-            putBoolean("autoApprove", parsed.autoApprove)
-            putString("terminalShell", parsed.terminalShell)
-            putBoolean("showReasoningSummaries", parsed.showReasoningSummaries)
-            putBoolean("shellToolPartsExpanded", parsed.shellToolPartsExpanded)
-            putBoolean("editToolPartsExpanded", parsed.editToolPartsExpanded)
-            putString("colorScheme", parsed.colorScheme)
-            putString("theme", parsed.theme)
-            putInt("fontSize", parsed.fontSize)
-            putString("sansFont", parsed.sansFont)
-            putString("monoFont", parsed.monoFont)
-            putString("terminalFont", parsed.terminalFont)
-            putBoolean("notifyAgent", parsed.notifyAgent)
-            putBoolean("notifyPermissions", parsed.notifyPermissions)
-            putBoolean("notifyErrors", parsed.notifyErrors)
-            putBoolean("soundAgentEnabled", parsed.soundAgentEnabled)
-            putString("soundAgent", parsed.soundAgent)
-            putBoolean("soundPermissionsEnabled", parsed.soundPermissionsEnabled)
-            putString("soundPermissions", parsed.soundPermissions)
-            putBoolean("soundErrorsEnabled", parsed.soundErrorsEnabled)
-            putString("soundErrors", parsed.soundErrors)
-            putBoolean("showFileTree", parsed.showFileTree)
-            putBoolean("showCommandPalette", parsed.showCommandPalette)
-            putBoolean("showServerStatus", parsed.showServerStatus)
-            putBoolean("showCustomAgents", parsed.showCustomAgents)
-            // Previously omitted: the auto-adopt preference was silently lost
-            // on import.
-            putBoolean("autoAdoptGuard", parsed.autoAdoptGuard)
-            // The guard token is deliberately NOT imported: it is redacted in
-            // the export, and overwriting the device's working secret with the
-            // empty redacted value would break the guard connection.
+        synchronized(lock) {
+            prefs.edit {
+                putString("language", parsed.language)
+                putBoolean("autoApprove", parsed.autoApprove)
+                putString("terminalShell", parsed.terminalShell)
+                putBoolean("showReasoningSummaries", parsed.showReasoningSummaries)
+                putBoolean("shellToolPartsExpanded", parsed.shellToolPartsExpanded)
+                putBoolean("editToolPartsExpanded", parsed.editToolPartsExpanded)
+                putString("colorScheme", parsed.colorScheme)
+                putString("theme", parsed.theme)
+                putInt("fontSize", parsed.fontSize)
+                putString("sansFont", parsed.sansFont)
+                putString("monoFont", parsed.monoFont)
+                putString("terminalFont", parsed.terminalFont)
+                putBoolean("notifyAgent", parsed.notifyAgent)
+                putBoolean("notifyPermissions", parsed.notifyPermissions)
+                putBoolean("notifyErrors", parsed.notifyErrors)
+                putBoolean("soundAgentEnabled", parsed.soundAgentEnabled)
+                putString("soundAgent", parsed.soundAgent)
+                putBoolean("soundPermissionsEnabled", parsed.soundPermissionsEnabled)
+                putString("soundPermissions", parsed.soundPermissions)
+                putBoolean("soundErrorsEnabled", parsed.soundErrorsEnabled)
+                putString("soundErrors", parsed.soundErrors)
+                putBoolean("showFileTree", parsed.showFileTree)
+                putBoolean("showCommandPalette", parsed.showCommandPalette)
+                putBoolean("showServerStatus", parsed.showServerStatus)
+                putBoolean("showCustomAgents", parsed.showCustomAgents)
+                // Previously omitted: the auto-adopt preference was silently lost
+                // on import.
+                putBoolean("autoAdoptGuard", parsed.autoAdoptGuard)
+                // The guard token is deliberately NOT imported: it is redacted in
+                // the export, and overwriting the device's working secret with the
+                // empty redacted value would break the guard connection.
+            }
+            _state.value = load()
         }
-        _state.value = load()
         return null
     }
 }

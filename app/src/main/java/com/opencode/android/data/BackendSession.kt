@@ -33,8 +33,20 @@ class BackendSession(
 
     // HTTP Basic auth (opencode serve sets it via OPENCODE_SERVER_PASSWORD).
     // Observed 401: www-authenticate: Basic realm="Secure Area".
+    //
+    // (baseUrl, authHeader, host) are published as ONE immutable snapshot so the
+    // interceptor can never pair one host with another host's credentials. With
+    // separate @Volatile fields a setBackend() landing between the interceptor's
+    // host test and its authHeader read sent the new backend's request the old
+    // backend's credentials.
+    private class BackendConfig(
+        val baseUrl: String,
+        val authHeader: String?,
+        val host: String?,
+    )
+
     @Volatile
-    private var authHeader: String? = null
+    private var config = BackendConfig(DEFAULT_BASE_URL, null, hostOf(DEFAULT_BASE_URL))
 
     @Volatile
     private var guardTokenSource: () -> String = guardTokenProvider
@@ -52,11 +64,11 @@ class BackendSession(
                 // targets the currently configured host. A request built from
                 // the previous backend's Retrofit instance still carries the old
                 // host in its URL; without this check it would be sent the NEW
-                // backend's Basic credentials (the TOCTOU the config lock alone
-                // did not close). The guard token likewise only ever goes to the
-                // configured backend, never to an arbitrary host.
-                if (request.url.host == currentHost()) {
-                    authHeader?.let { builder.header("Authorization", it) }
+                // backend's Basic credentials. One atomic snapshot read closes
+                // the TOCTOU the config lock alone did not.
+                val current = config
+                if (current.host != null && request.url.host == current.host) {
+                    current.authHeader?.let { builder.header("Authorization", it) }
                     val guardToken = guardTokenSource()
                     if (guardToken.isNotBlank()) {
                         builder.header("X-Session-Guard-Token", guardToken)
@@ -66,18 +78,7 @@ class BackendSession(
             }.build()
     }
 
-    /** Host of the currently configured backend, or null when unconfigured. */
-    private fun currentHost(): String? =
-        try {
-            java.net.URI(currentBaseUrl).host
-        } catch (_: Exception) {
-            null
-        }
-
     private val configLock = Any()
-
-    @Volatile
-    private var currentBaseUrl: String = DEFAULT_BASE_URL
 
     @Volatile
     private var _api: OpenCodeApi = buildApi(DEFAULT_BASE_URL)
@@ -85,15 +86,22 @@ class BackendSession(
     val api: OpenCodeApi
         get() = _api
 
-    fun currentBaseUrl(): String = currentBaseUrl
+    fun currentBaseUrl(): String = config.baseUrl
 
     /** The active backend base URL. */
-    val baseUrl: String get() = currentBaseUrl
+    val baseUrl: String get() = config.baseUrl
 
     /** Replaces the source of the X-Session-Guard-Token request header. */
     fun setGuardTokenProvider(provider: () -> String) {
         guardTokenSource = provider
     }
+
+    private fun hostOf(url: String): String? =
+        try {
+            java.net.URI(url).host
+        } catch (_: Exception) {
+            null
+        }
 
     /**
      * Atomically points the session at [url] with the given Basic credentials.
@@ -105,18 +113,16 @@ class BackendSession(
         username: String?,
         password: String?,
     ) = synchronized(configLock) {
-        currentBaseUrl = url
-        authHeader = basicAuth(username, password)
+        config = BackendConfig(url, basicAuth(username, password), hostOf(url))
         _api = buildApi(url)
     }
 
     fun setBaseUrl(url: String) =
         synchronized(configLock) {
-            currentBaseUrl = url
             // Clear the credentials of the previous backend: otherwise they would be
             // sent to the new host until setAuth() runs (or forever, if the new
             // backend needs no auth).
-            authHeader = null
+            config = BackendConfig(url, null, hostOf(url))
             _api = buildApi(url)
         }
 
@@ -125,11 +131,12 @@ class BackendSession(
         username: String?,
         password: String?,
     ) = synchronized(configLock) {
-        authHeader = basicAuth(username, password)
-        _api = buildApi(currentBaseUrl)
+        val current = config
+        config = BackendConfig(current.baseUrl, basicAuth(username, password), current.host)
+        _api = buildApi(current.baseUrl)
     }
 
-    fun hasAuth(): Boolean = authHeader != null
+    fun hasAuth(): Boolean = config.authHeader != null
 
     private fun basicAuth(
         username: String?,
@@ -229,9 +236,13 @@ class BackendSession(
                     // Same contract as the old ResponseBody path (Retrofit threw
                     // HttpException): surface the error so the caller can log it
                     // and fall through to a smaller page, rather than silently
-                    // treating it as an empty conversation.
+                    // treating it as an empty conversation. Close the error body
+                    // first — the caller retries this up to 3× per page size, and
+                    // each leaked stream held a pooled connection.
+                    val code = response.code()
+                    response.errorBody()?.close()
                     throw java.io.IOException(
-                        "message list HTTP ${response.code()} (limit=$limit before=${before != null})",
+                        "message list HTTP $code (limit=$limit before=${before != null})",
                     )
                 }
                 val body = response.body() ?: return@withContext MessagePage(emptyList(), null)
@@ -245,8 +256,9 @@ class BackendSession(
                             "getMessagesStreamed: body $declared B > cap $MAX_MESSAGE_BODY_BYTES B " +
                                 "(limit=$limit) — keeping previous messages",
                         )
-                        // Keep the cursor: a caller walking older pages can skip
-                        // this oversized page instead of stopping here.
+                        // The body was never decoded (that is what the cap
+                        // protects against), so no cursor is available: the
+                        // caller must stop here rather than skip this page.
                         return@withContext MessagePage(emptyList(), null, tooLarge = true)
                     }
                     @OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
@@ -300,9 +312,16 @@ class BackendSession(
             guardAvailable = ok
             guardProbeUrl = url
             ok
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Structured concurrency: a cancelled caller must stay cancelled.
+            throw e
         } catch (e: Exception) {
-            guardAvailable = false
-            guardProbeUrl = url
+            // A transient failure (timeout, radio wake-up, server restart) must
+            // NOT be cached: it used to disable guard-backed features for the
+            // whole lifetime of this backend URL, silently downgrading uploads
+            // to the data-URL fallback. Leaving guardProbeUrl unset makes the
+            // next call probe again.
+            AppLog.d(APP_LOG_TAG) { "hasGuard probe failed, not caching: ${e.message}" }
             false
         }
     }

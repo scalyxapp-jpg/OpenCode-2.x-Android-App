@@ -33,6 +33,7 @@ import com.opencode.android.data.WidgetStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -48,6 +49,14 @@ class SessionWidget : GlanceAppWidget() {
         context: Context,
         id: GlanceId,
     ) {
+        // The disk-backed stores are initialised asynchronously from
+        // Application.onCreate; a widget update that raced that load read the
+        // stores' defaults and rendered "No session yet" for a session that
+        // exists. Wait (bounded) for readiness first.
+        kotlinx.coroutines.withTimeoutOrNull(3_000L) {
+            com.opencode.android.AppStartup.ready
+                .first { it }
+        }
         provideContent { SessionWidgetContent() }
     }
 }

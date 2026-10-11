@@ -116,4 +116,27 @@ class ChatRepositoryApiProviderTest {
             assertEquals("C2", result.nextCursor)
             assertEquals(3, result.messages.size)
         }
+
+    @Test
+    fun `walks down the page ladder after an oversized page`() =
+        runBlocking {
+            // `tooLarge` means the requested page exceeded the body cap — exactly
+            // the case the ladder (30 -> 15 -> ...) exists for. Treating it as
+            // "stop" left a heavy session blank even though limit=1 fits.
+            val small = listOf(Message(id = "m1"))
+            val seen = mutableListOf<Int>()
+            val repo =
+                ChatRepository(
+                    apiProvider = { throw IllegalStateException("no api") },
+                    streamedMessages = { _, limit, _ ->
+                        seen += limit ?: -1
+                        if (limit == 1) MessagePage(small, null) else MessagePage(emptyList(), "C1", tooLarge = true)
+                    },
+                )
+
+            val page = repo.loadMessages("ses_1", 30)
+
+            assertEquals(1, page.messages.size)
+            assertEquals("the ladder must be walked down", listOf(30, 15, 10, 5, 3, 1), seen)
+        }
 }

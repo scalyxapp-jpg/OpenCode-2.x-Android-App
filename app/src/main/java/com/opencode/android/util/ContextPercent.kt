@@ -11,7 +11,12 @@ import com.opencode.android.domain.ProviderEntry
 fun contextPercent(
     totalTokens: Long,
     limit: Long?,
-): Int? = limit?.takeIf { it > 0 }?.let { ((totalTokens * 100) / it).coerceIn(0, 100).toInt() }
+): Int? =
+    limit?.takeIf { it > 0 }?.let {
+        // Compute in Double: `totalTokens * 100` overflowed to a negative Long at
+        // absurd token counts and then clamped to a wrong "0%".
+        ((totalTokens.toDouble() * 100.0) / it).coerceIn(0.0, 100.0).toInt()
+    }
 
 /**
  * Context window for a (provider, model) pair, taken from the provider catalog.

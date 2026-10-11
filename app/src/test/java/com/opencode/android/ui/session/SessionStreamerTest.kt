@@ -173,4 +173,37 @@ class SessionStreamerTest {
             assertFalse(streamer.projection.value.pendingPersist)
             assertEquals("", streamer.liveState.value.response)
         }
+
+    @Test
+    fun `a delta flush keeps a retry status error`() =
+        runTest {
+            val source =
+                EventSource { _, _ ->
+                    flow {
+                        emit(
+                            Event(
+                                type = "session.status",
+                                properties =
+                                    EventProperties(
+                                        sessionId = "s1",
+                                        status = com.opencode.android.domain.SessionStatus(
+                                            type = "retry",
+                                            message = "link down",
+                                        ),
+                                    ),
+                            ),
+                        )
+                        emit(delta("p", "text", "retry-continues"))
+                    }
+                }
+            val streamer = SessionStreamer(source, this, { models }, noError) { }
+            streamer.start("s1", "http://x")
+            advanceUntilIdle()
+
+            assertEquals(
+                "a streamed delta must not wipe the retry status",
+                "link down",
+                streamer.projection.value.statusError,
+            )
+        }
 }

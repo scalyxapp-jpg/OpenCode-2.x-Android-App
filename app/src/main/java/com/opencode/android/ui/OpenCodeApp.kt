@@ -147,6 +147,17 @@ internal fun OpenCodeApp(
         }
         return
     }
+    // A failed store init is surfaced once: it silently produced empty settings,
+    // backends and caches, which the user experiences as "everything was lost".
+    val startupError by com.opencode.android.AppStartup.lastError.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(startupError) {
+        startupError?.let { reason ->
+            com.opencode.android.util.UserMessages.post(
+                com.opencode.android.R.string.startup_partial_failure,
+                reason,
+            )
+        }
+    }
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -210,9 +221,10 @@ internal fun OpenCodeApp(
         // Every user-facing error surfaces here, on top of whatever screen is open
         // (see UserMessages).
         val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
-        val resources = androidx.compose.runtime.rememberUpdatedState(
-            androidx.compose.ui.platform.LocalResources.current,
-        )
+        val resources =
+            androidx.compose.runtime.rememberUpdatedState(
+                androidx.compose.ui.platform.LocalResources.current,
+            )
         LaunchedEffect(Unit) {
             UserMessages.events.collect { event ->
                 val text =
@@ -448,8 +460,19 @@ internal fun OpenCodeApp(
                                     true
                                 } ?: false
                             }
+                        // One-shot guard for the "resume the last conversation"
+                        // behaviour. Without it, every recreate() (theme switch) or
+                        // process restore re-ran this effect and teleported the user
+                        // out of Home/Settings back into the last chat.
+                        val resumeDone =
+                            androidx.compose.runtime.saveable.rememberSaveable {
+                                androidx.compose.runtime.mutableStateOf(false)
+                            }
                         LaunchedEffect(deepLinkSessionId) {
                             val backend = savedBackend ?: return@LaunchedEffect
+                            val deepLinked = deepLinkSessionId != null
+                            if (!deepLinked && resumeDone.value) return@LaunchedEffect
+                            resumeDone.value = true
                             try {
                                 providerDirectory.invalidate()
                                 providerDirectory.prefetch()
@@ -618,9 +641,25 @@ internal fun OpenCodeApp(
                                 )
                             }
                             composable(Routes.SETTINGS) {
+                                val settingsSwitchScope = rememberCoroutineScope()
                                 SettingsScreen(
                                     onBack = { navController.popBackStack() },
-                                    onSwitchBackend = { navController.navigate(Routes.BACKENDS) },
+                                    // Same cleanup as the Home path: without it the
+                                    // tabs, the remembered session and both caches
+                                    // still belonged to the OLD backend after the
+                                    // switch.
+                                    onSwitchBackend = {
+                                        openTabs = emptyList()
+                                        activeTabId = null
+                                        LastSessionStore.clear()
+                                        settingsSwitchScope.launch {
+                                            MessageCache.clearAll()
+                                            HomeCache.clearAll()
+                                        }
+                                        navController.navigate(Routes.BACKENDS) {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                    },
                                 )
                             }
                         } // NavHost

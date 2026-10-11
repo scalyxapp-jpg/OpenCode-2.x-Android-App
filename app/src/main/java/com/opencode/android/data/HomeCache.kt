@@ -37,9 +37,13 @@ object HomeCache : HomeStore {
     private var file: File? = null
 
     // Parsed snapshot kept in memory so a repeat read (or the startup warm-up)
-    // does not touch the disk. Invalidated by clearAll().
+    // does not touch the disk. Invalidated by clearAll(). Guarded by [lock]:
+    // read() and write() race (a cold read while a refresh writes) and the
+    // disk-parsed value must never clobber a newer in-memory one.
     @Volatile
     private var memory: HomeSnapshot? = null
+
+    private val lock = Any()
 
     fun init(context: Context) {
         // Only the application context is captured; resolving filesDir touches
@@ -53,7 +57,7 @@ object HomeCache : HomeStore {
     }
 
     override suspend fun read(): HomeSnapshot? {
-        memory?.let { return it }
+        synchronized(lock) { memory }?.let { return it }
         return withContext(Dispatchers.IO) {
             val f = fileFor() ?: return@withContext null
             if (!f.exists()) return@withContext null
@@ -66,7 +70,11 @@ object HomeCache : HomeStore {
                 }
                 val text = f.readText()
                 if (text.isBlank()) return@withContext null
-                json.decodeFromString<HomeSnapshot>(text).also { memory = it }
+                val parsed = json.decodeFromString<HomeSnapshot>(text)
+                // A write (fresh network result) may have landed while this disk
+                // read ran; keep the newer in-memory snapshot instead of
+                // overwriting it with the older file content.
+                synchronized(lock) { memory ?: parsed.also { memory = it } }
             } catch (e: OutOfMemoryError) {
                 AppLog.e(APP_LOG_TAG, "HomeCache read OOM — dropping cache")
                 null
@@ -79,7 +87,7 @@ object HomeCache : HomeStore {
 
     override suspend fun write(snapshot: HomeSnapshot) {
         val bounded = snapshot.bounded()
-        memory = bounded
+        synchronized(lock) { memory = bounded }
         withContext(Dispatchers.IO) {
             val f = fileFor() ?: return@withContext
             try {
@@ -112,7 +120,7 @@ object HomeCache : HomeStore {
 
     override suspend fun clearAll(): Unit =
         withContext(Dispatchers.IO) {
-            memory = null
+            synchronized(lock) { memory = null }
             try {
                 fileFor()?.delete()
             } catch (e: Exception) {

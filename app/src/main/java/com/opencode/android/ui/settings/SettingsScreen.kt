@@ -343,9 +343,13 @@ internal fun GeneralTab() {
                 ) { uri ->
                     if (uri != null) {
                         runCatching {
-                            context.contentResolver.openOutputStream(uri)?.use { out ->
-                                out.write(AppSettingsStore.exportJson().toByteArray())
-                            }
+                            // `openOutputStream` can return null (no write access or
+                            // a provider error). The `?.use` no-op let the success
+                            // branch report "saved" although nothing was written.
+                            val out =
+                                context.contentResolver.openOutputStream(uri)
+                                    ?: error("the selected location cannot be written to")
+                            out.use { it.write(AppSettingsStore.exportJson().toByteArray()) }
                         }.onSuccess {
                             UserMessages.post(R.string.settings_exported)
                         }.onFailure { e ->
@@ -418,6 +422,10 @@ private fun ServerSection() {
     var busy by remember { mutableStateOf(false) }
     var showSkills by remember { mutableStateOf(false) }
     var skills by remember { mutableStateOf<List<String>>(emptyList()) }
+    // A failed load used to be swallowed into an empty list, so the dialog claimed
+    // "no skills" when the server was unreachable (and double taps fired parallel
+    // requests).
+    var skillsError by remember { mutableStateOf<String?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
         Row(
@@ -426,17 +434,24 @@ private fun ServerSection() {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(stringResource(R.string.settings_skills))
-            androidx.compose.material3.TextButton(onClick = {
+            androidx.compose.material3.TextButton(enabled = !busy, onClick = {
                 scope.launch {
-                    skills =
-                        runCatching {
+                    busy = true
+                    skillsError = null
+                    try {
+                        skills =
                             backendSession.api.getSkills().mapNotNull { el ->
                                 (el as? kotlinx.serialization.json.JsonObject)
                                     ?.get("name")
                                     ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
                             }
-                        }.getOrDefault(emptyList())
-                    showSkills = true
+                    } catch (e: Exception) {
+                        skills = emptyList()
+                        skillsError = e.message ?: e::class.java.simpleName
+                    } finally {
+                        busy = false
+                        showSkills = true
+                    }
                 }
             }) { Text(stringResource(R.string.settings_skills)) }
         }
@@ -447,10 +462,11 @@ private fun ServerSection() {
             onDismissRequest = { showSkills = false },
             title = { Text(stringResource(R.string.settings_skills)) },
             text = {
-                if (skills.isEmpty()) {
-                    Text(stringResource(R.string.settings_no_skills))
-                } else {
-                    Column { skills.forEach { Text(it) } }
+                val error = skillsError
+                when {
+                    error != null -> Text(stringResource(R.string.could_not_load_skills, error))
+                    skills.isEmpty() -> Text(stringResource(R.string.settings_no_skills))
+                    else -> Column { skills.forEach { Text(it) } }
                 }
             },
             confirmButton = {

@@ -16,9 +16,9 @@ import kotlinx.coroutines.CoroutineExceptionHandler
  */
 val LogAndSwallow: CoroutineExceptionHandler =
     CoroutineExceptionHandler { _, throwable ->
-        AppLog.e(
-            APP_LOG_TAG,
-            "uncaught coroutine: ${throwable::class.java.simpleName}: ${throwable.message}",
-            throwable,
-        )
+        // Only the exception TYPE goes into the (release-visible) message: an
+        // exception message can embed prompts, file paths and URLs with tokens,
+        // which is exactly what the [AppLog] contract promises never to log in a
+        // release build. In debug the full throwable (message + stack) is attached.
+        AppLog.e(APP_LOG_TAG, "uncaught coroutine: ${throwable::class.java.simpleName}", throwable)
     }

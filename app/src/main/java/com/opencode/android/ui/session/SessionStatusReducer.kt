@@ -24,7 +24,13 @@ object SessionStatusReducer {
     ): Pair<Set<String>, Set<String>>? {
         val sessionId = event.properties?.sessionId ?: return null
         return when (event.type) {
-            "session.idle" -> {
+            "session.idle", "session.aborted" -> {
+                (running - sessionId) to (retrying - sessionId)
+            }
+
+            // A turn can also end in a failure; without this the row stayed
+            // "running" until the next reconnect resync.
+            "session.error" -> {
                 (running - sessionId) to (retrying - sessionId)
             }
 
@@ -32,8 +38,10 @@ object SessionStatusReducer {
                 when (event.properties?.status?.type) {
                     "busy" -> (running + sessionId) to (retrying - sessionId)
 
-                    // A retry is a running turn that is being re-attempted; the
-                    // row renders "retrying", so it must not stay in `running`.
+                    // A retry is a turn that is STILL in flight (the conversation
+                    // keeps `isGenerating`), but the list renders it with the
+                    // dedicated "retrying" badge, so the two sets are mutually
+                    // exclusive here on purpose.
                     "retry" -> (running - sessionId) to (retrying + sessionId)
 
                     "idle" -> (running - sessionId) to (retrying - sessionId)

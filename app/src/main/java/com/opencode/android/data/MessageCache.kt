@@ -39,6 +39,12 @@ object MessageCache : MessageStore {
     // Hoisted: fileFor() runs on every read and write.
     private val UNSAFE_FILENAME_CHARS = Regex("[^A-Za-z0-9_-]")
 
+    // The file name is a SANITISED session id, so it cannot be used to recover
+    // the real id for the home search. The id is stored in a header line
+    // instead; files written by older versions (no header, plain JSON) still
+    // load, they just fall back to the file name for search.
+    private const val ID_HEADER = "#sid:"
+
     @Volatile
     private var appContext: Context? = null
 
@@ -60,6 +66,17 @@ object MessageCache : MessageStore {
         return File(base, "${sessionId.replace(UNSAFE_FILENAME_CHARS, "_")}.json")
     }
 
+    /** Drops the `#sid:` header line added by [write]; legacy files pass through. */
+    private fun stripSessionHeader(text: String): String = if (text.startsWith(ID_HEADER)) text.substringAfter('\n', "") else text
+
+    /** The real session id from the header, or null for legacy/header-less files. */
+    private fun headerSessionId(text: String): String? =
+        if (text.startsWith(ID_HEADER)) {
+            text.removePrefix(ID_HEADER).substringBefore('\n')
+        } else {
+            null
+        }
+
     /** Returns the cached tail, or null when there is nothing usable. */
     override suspend fun read(sessionId: String): List<Message>? {
         // Memory first: a repeat open returns without suspending or parsing.
@@ -77,9 +94,15 @@ object MessageCache : MessageStore {
                 val text = file.readText()
                 if (text.isBlank()) return@withContext null
                 json
-                    .decodeFromString<List<Message>>(text)
+                    .decodeFromString<List<Message>>(stripSessionHeader(text))
                     .takeIf { it.isNotEmpty() }
-                    ?.also { memory.put(sessionId, it) }
+                    // A network write that started AFTER our memory check but
+                    // completed while this disk read ran has already put its
+                    // (newer) tail into memory. Storing the just-parsed disk
+                    // content unconditionally would roll the conversation back to
+                    // an older state until the next refresh; putIfAbsent keeps the
+                    // newer entry and returns it.
+                    ?.let { memory.putIfAbsent(sessionId, it) }
             } catch (e: OutOfMemoryError) {
                 // A best-effort cache must never take the process down.
                 AppLog.e(APP_LOG_TAG, "MessageCache read OOM — dropping cache")
@@ -125,10 +148,13 @@ object MessageCache : MessageStore {
                             .size
                     }
                 val text =
-                    json.encodeToString(
-                        kotlinx.serialization.serializer(),
-                        CacheTrimming.trim(fitted),
-                    )
+                    ID_HEADER +
+                        sessionId +
+                        "\n" +
+                        json.encodeToString(
+                            kotlinx.serialization.serializer(),
+                            CacheTrimming.trim(fitted),
+                        )
                 // Byte size, not String.length: a character count is not a size
                 // and undercounts non-ASCII content.
                 val bytes = text.toByteArray(Charsets.UTF_8)
@@ -203,14 +229,18 @@ object MessageCache : MessageStore {
                             // Same size guard as read(): never read a pathological
                             // file into memory during a search.
                             if (file.length() > MAX_BYTES) return@mapNotNull null
-                            val messages = json.decodeFromString<List<Message>>(file.readText())
+                            val text = file.readText()
+                            val messages = json.decodeFromString<List<Message>>(stripSessionHeader(text))
                             val hit =
                                 messages.any { message ->
                                     message.parts.any { part ->
                                         part.text?.contains(q, ignoreCase = true) == true
                                     }
                                 }
-                            if (hit) file.nameWithoutExtension else null
+                            // The file name is sanitised; the header carries the
+                            // REAL id, so opening a search hit targets the right
+                            // session. Legacy files fall back to the file name.
+                            if (hit) headerSessionId(text) ?: file.nameWithoutExtension else null
                         } catch (_: Exception) {
                             null
                         }

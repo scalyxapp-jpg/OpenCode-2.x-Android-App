@@ -222,4 +222,53 @@ class SessionConversationTest {
             assertTrue(conversation.state.value.isGenerating)
             assertTrue(port.generatingSets > 0)
         }
+
+    @Test
+    fun `reloading the same session keeps the running state`() =
+        runTest {
+            val port = FakePort()
+            val transport = FakeTransport()
+            // A long-lived stream (like the real SSE feed): the second Load must
+            // not tear it down and reset the flags mid-turn.
+            val source =
+                EventSource { _, _ ->
+                    kotlinx.coroutines.flow.flow {
+                        emit(
+                            Event(
+                                type = "session.status",
+                                properties =
+                                    EventProperties(
+                                        sessionId = "s1",
+                                        status = SessionStatus(type = "busy"),
+                                    ),
+                            ),
+                        )
+                        kotlinx.coroutines.awaitCancellation()
+                    }
+                }
+            // A dedicated scope: the fake stream never completes (like the real SSE
+            // feed) and must not keep the TestScope waiting for a child job. An
+            // unconfined dispatcher applies the first event during dispatch, so the
+            // assertions below are deterministic.
+            val streamScope =
+                kotlinx.coroutines.CoroutineScope(
+                    kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler),
+                )
+            val conversation = SessionConversation(source, streamScope, noModels, noError, transport, port)
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+            assertTrue(conversation.state.value.isGenerating)
+            val resetsBefore = port.generatingSets
+
+            conversation.dispatch(SessionCommand.Load("s1", "http://x"))
+
+            assertTrue(
+                "reloading the same session must not clear the running flag",
+                conversation.state.value.isGenerating,
+            )
+            assertEquals(
+                "reloading the same session must not push a reset",
+                resetsBefore,
+                port.generatingSets,
+            )
+        }
 }

@@ -135,8 +135,19 @@ internal fun HomeScreen(
             uiState.sessions,
             uiState.searchQuery,
             uiState.showOnlyGuarded,
+            uiState.showOnlyRunning,
+            uiState.runningSessionIds,
+            // The body-search hits are filled asynchronously (MessageCache.search);
+            // without this key the list was computed once with an empty set and
+            // never recomputed, so content matches never showed up.
+            uiState.messageMatchIds,
         ) {
-            filterSessions(uiState.sessions, uiState.searchQuery, uiState.showOnlyGuarded, uiState.messageMatchIds)
+            filterSessions(
+                uiState.sessions,
+                uiState.searchQuery,
+                uiState.showOnlyGuarded,
+                uiState.messageMatchIds,
+            ).filter { !uiState.showOnlyRunning || it.id in uiState.runningSessionIds || it.id in uiState.retryingSessionIds }
         }
     val grouped =
         remember(filteredSessions, uiState.pinnedIds) {
@@ -161,6 +172,10 @@ internal fun HomeScreen(
                     if (appSettings.showServerStatus) {
                         IconButton(onClick = {
                             showServerStatus = true
+                            // Reset the "already checked" flag: it was sticky, so the
+                            // dialog showed the PREVIOUS result while the new probe
+                            // was still running.
+                            serverStatusChecked = false
                             statusScope.launch {
                                 serverHealth =
                                     try {
@@ -317,6 +332,8 @@ internal fun HomeScreen(
                                         },
                                         onlyGuarded = uiState.showOnlyGuarded,
                                         onToggleGuarded = viewModel::setShowOnlyGuarded,
+                                        onlyRunning = uiState.showOnlyRunning,
+                                        onToggleRunning = viewModel::setShowOnlyRunning,
                                     )
                                 }
 
@@ -346,6 +363,19 @@ internal fun HomeScreen(
                                                     null
                                                 },
                                             icon = Icons.AutoMirrored.Filled.Chat,
+                                            // A CTA inside the empty state: the only
+                                            // other way in was the small "+" in the
+                                            // search row above.
+                                            action =
+                                                if (uiState.searchQuery.isBlank()) {
+                                                    {
+                                                        Button(onClick = {
+                                                            viewModel.createSession { onSessionClick(it.id) }
+                                                        }) { Text(stringResource(R.string.new_session)) }
+                                                    }
+                                                } else {
+                                                    null
+                                                },
                                         )
                                     }
                                 } else {
@@ -611,6 +641,9 @@ private fun ProjectChip(
     onDelete: () -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    // The project menu deleted immediately (no confirmation), unlike the session
+    // menu right next to it.
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val (pressModifier, pressInteraction) = rememberPressScale()
     Box {
@@ -678,7 +711,32 @@ private fun ProjectChip(
                 },
                 onClick = {
                     showMenu = false
-                    onDelete()
+                    showDeleteConfirm = true
+                },
+            )
+        }
+        if (showDeleteConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirm = false },
+                title = { Text(stringResource(R.string.delete_project)) },
+                text = { Text(stringResource(R.string.delete_project_confirm, project.name)) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirm = false
+                            onDelete()
+                        },
+                        colors =
+                            androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                                contentColor = MaterialTheme.colorScheme.onError,
+                            ),
+                    ) { Text(stringResource(R.string.delete_2)) }
+                },
+                dismissButton = {
+                    OutlinedButton(onClick = { showDeleteConfirm = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
                 },
             )
         }
@@ -693,6 +751,8 @@ private fun SearchRow(
     onNewSession: () -> Unit,
     onlyGuarded: Boolean,
     onToggleGuarded: (Boolean) -> Unit,
+    onlyRunning: Boolean,
+    onToggleRunning: (Boolean) -> Unit,
 ) {
     Row(
         modifier =
@@ -719,13 +779,22 @@ private fun SearchRow(
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
         )
+        // "Only running" — with many sessions, finding the one that is actually
+        // generating meant scrolling; the badge was the only hint.
+        FilterChip(
+            selected = onlyRunning,
+            onClick = { onToggleRunning(!onlyRunning) },
+            label = { Text(stringResource(R.string.running_only)) },
+        )
         FilterChip(
             selected = onlyGuarded,
             onClick = { onToggleGuarded(!onlyGuarded) },
             label = {
                 Icon(
                     Icons.Default.Security,
-                    contentDescription = null,
+                    // An unlabelled 14 dp icon gave no clue what was filtered; the
+                    // description is the only affordance for screen readers.
+                    contentDescription = stringResource(R.string.guarded_only),
                     modifier = Modifier.size(14.dp),
                 )
             },

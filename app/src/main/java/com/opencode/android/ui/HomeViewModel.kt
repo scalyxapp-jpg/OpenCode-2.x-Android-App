@@ -55,6 +55,8 @@ data class HomeUiState(
     // best-effort). Lets the search find conversations by content, not title.
     val messageMatchIds: Set<String> = emptySet(),
     val showOnlyGuarded: Boolean = false,
+    /** Session list filtered to the ones currently generating (badge shortcut). */
+    val showOnlyRunning: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
     // Session ids the user pinned; shown in a "Pinned" group at the top.
@@ -593,6 +595,10 @@ class HomeViewModel
                     _uiState.update { it.copy(messageMatchIds = ids) }
                 }
             }
+        }
+
+        fun setShowOnlyRunning(enabled: Boolean) {
+            _uiState.update { it.copy(showOnlyRunning = enabled) }
         }
 
         fun setShowOnlyGuarded(enabled: Boolean) {

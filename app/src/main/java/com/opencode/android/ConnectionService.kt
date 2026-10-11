@@ -67,6 +67,20 @@ class ConnectionService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * The user swiped the app out of Recents (or the task was cleared).
+     *
+     * `onDestroy` is NOT guaranteed on a task removal — it is OEM/OS dependent —
+     * and a foreground service is deliberately not stopped by the platform then.
+     * The result was a keep-alive notification and a running `dataSync` FGS that
+     * outlived the app (battery drain, stale "Connected" notification).
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {

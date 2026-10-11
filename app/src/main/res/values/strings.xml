@@ -315,4 +315,35 @@
     <string name="widget_description">Last session status and a new-session shortcut</string>
     <string name="tile_label">New OpenCode session</string>
     <string name="shared_content_ready">Shared content added to the prompt</string>
+    <string name="could_not_load_permissions" formatted="false">Could not load permission requests: %1$s</string>
+    <string name="could_not_load_questions" formatted="false">Could not load the pending questions: %1$s</string>
+    <string name="could_not_load_messages" formatted="false">Could not refresh the messages: %1$s</string>
+    <string name="could_not_save_selection" formatted="false">Could not save the selection: %1$s</string>
+    <string name="could_not_answer_permission" formatted="false">Could not answer the permission request: %1$s</string>
+    <string name="no_session_open" formatted="false">No session is open</string>
+    <string name="reset_all_settings_warning" formatted="false">This resets ALL app settings to their defaults (appearance, notifications, sounds, server settings and the guard token). This cannot be undone.</string>
+    <string name="guarded_only" formatted="false">Only sessions with a session guard</string>
+    <string name="revert_message_confirm" formatted="false">Discard this message and everything after it? The server keeps the data, but the conversation continues from this point.</string>
+    <string name="delete_project_confirm" formatted="false">Remove “%1$s” from the project list? Sessions on the server are kept.</string>
+    <string name="remove_backend" formatted="false">Remove backend</string>
+    <string name="remove_backend_confirm" formatted="false">Remove %1$s from this device? The saved credentials are deleted; the server itself is not changed.</string>
+    <string name="could_not_load_skills" formatted="false">Could not load skills: %1$s</string>
+    <string name="guard_no_selection" formatted="false">no session selection</string>
+    <string name="guard_conflict" formatted="false">Guard conflict</string>
+    <string name="guard_drift" formatted="false">Guard drift</string>
+    <string name="guard_offline" formatted="false">Guard offline</string>
+    <string name="guard_active" formatted="false">Guard active</string>
+    <string name="guard_fix" formatted="false">Fix</string>
+    <string name="guard_sync" formatted="false">Sync</string>
+    <string name="guard_title" formatted="false">Session Guard</string>
+    <string name="guard_remove" formatted="false">Remove guard</string>
+    <string name="guard_adopt_from_server" formatted="false">Adopt server selection</string>
+    <string name="guard_push_to_server" formatted="false">Push selection to server</string>
+    <string name="could_not_adopt_guard" formatted="false">Could not adopt the server selection: %1$s</string>
+    <string name="could_not_push_guard" formatted="false">Could not push the selection: %1$s</string>
+    <string name="could_not_remove_guard" formatted="false">Could not remove the guard selection: %1$s</string>
+    <string name="running_only" formatted="false">Running</string>
+    <string name="copy_session_id" formatted="false">Copy session ID</string>
+    <string name="session_id_copied" formatted="false">Session ID copied</string>
+    <string name="startup_partial_failure" formatted="false">Some saved data could not be loaded (%1$s). Settings or servers may be missing until the app is restarted.</string>
 </resources>

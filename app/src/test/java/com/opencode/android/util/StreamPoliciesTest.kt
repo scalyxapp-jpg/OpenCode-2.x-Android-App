@@ -78,4 +78,12 @@ class StreamPoliciesTest {
         assertFalse(t.allow(now = 1_500))
         assertTrue(t.allow(now = 2_100))
     }
+
+    @Test
+    fun `a first request with an active job still starts a batch`() {
+        val coalescer = RefreshCoalescer(maxWaitMs = 1000)
+        // No batch tracked yet: `now - 0` is huge, so the old 0-sentinel returned
+        // KeepRunning forever and no refresh ever ran.
+        assertEquals(RefreshCoalescer.Decision.Start, coalescer.onRequest(now = 5_000_000, jobActive = true))
+    }
 }

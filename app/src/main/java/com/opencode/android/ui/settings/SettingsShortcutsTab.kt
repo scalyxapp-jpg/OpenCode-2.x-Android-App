@@ -167,7 +167,7 @@ internal fun ShortcutsTab() {
         AlertDialog(
             onDismissRequest = { showReset = false },
             title = { Text(stringResource(R.string.reset_to_defaults)) },
-            text = { Text(stringResource(R.string.settings_backup_hint)) },
+            text = { Text(stringResource(R.string.reset_all_settings_warning)) },
             confirmButton = {
                 Button(onClick = {
                     AppSettingsStore.reset()

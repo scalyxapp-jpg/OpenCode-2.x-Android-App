@@ -25,6 +25,32 @@ internal class MessageMemoryCache(
 
     fun get(sessionId: String): List<Message>? = synchronized(lock) { entries[sessionId] }
 
+    /**
+     * Stores [messages] only when nothing is cached yet, and returns the entry
+     * that ends up cached.
+     *
+     * Used by the disk-backed cache after a slow read: while the read ran on IO,
+     * a [put] from a fresh network result may already have landed. Returning the
+     * existing (newer) entry keeps the stale disk content from overwriting it.
+     */
+    fun putIfAbsent(
+        sessionId: String,
+        messages: List<Message>,
+    ): List<Message> {
+        synchronized(lock) {
+            entries[sessionId]?.let { return it }
+            if (messages.isNotEmpty()) {
+                entries[sessionId] = messages
+                val iterator = entries.entries.iterator()
+                while (entries.size > maxEntries && iterator.hasNext()) {
+                    iterator.next()
+                    iterator.remove()
+                }
+            }
+            return messages
+        }
+    }
+
     fun put(
         sessionId: String,
         messages: List<Message>,

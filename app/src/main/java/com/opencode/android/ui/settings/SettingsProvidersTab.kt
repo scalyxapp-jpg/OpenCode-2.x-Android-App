@@ -482,14 +482,19 @@ internal fun ConnectProviderDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                OutlinedTextField(
-                    value = key,
-                    onValueChange = { key = it },
-                    label = { Text("${provider.name ?: provider.id} API key") },
-                    placeholder = { Text(stringResource(R.string.api_key)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (apiMethod != null) {
+                    // Shown only when the provider really has a key-based method: it
+                    // used to be visible for OAuth-only providers too, and "Continue"
+                    // then sent a bogus type="api" write.
+                    OutlinedTextField(
+                        value = key,
+                        onValueChange = { key = it },
+                        label = { Text("${provider.name ?: provider.id} API key") },
+                        placeholder = { Text(stringResource(R.string.api_key)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 error?.let {
                     Text(
                         text = it,
@@ -501,7 +506,10 @@ internal fun ConnectProviderDialog(
         },
         confirmButton = {
             Button(
-                enabled = !busy && (key.isNotBlank() || visiblePrompts.any { !prompts[it.key].isNullOrBlank() }),
+                enabled =
+                    !busy &&
+                        (key.isNotBlank() || visiblePrompts.any { !prompts[it.key].isNullOrBlank() }) &&
+                        (apiMethod != null || visiblePrompts.isNotEmpty()),
                 onClick = {
                     busy = true
                     error = null
@@ -511,7 +519,9 @@ internal fun ConnectProviderDialog(
                                 backendSession.api.setProviderAuth(
                                     provider.id,
                                     AuthSetRequest(
-                                        type = apiMethod?.type ?: "api",
+                                        // Never invent a type: no method means the
+                                        // caller must not be here at all.
+                                        type = apiMethod?.type ?: error("no authentication method available"),
                                         key = key.ifBlank { null },
                                         prompts = prompts.filterValues { it.isNotBlank() },
                                     ),

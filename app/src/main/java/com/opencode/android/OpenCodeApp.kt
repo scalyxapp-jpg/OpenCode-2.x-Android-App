@@ -1,13 +1,19 @@
 package com.opencode.android
-import com.opencode.android.util.AppLog
-
 import android.app.Application
 import com.opencode.android.data.MessageCache
 import com.opencode.android.data.NetworkMonitor
 import com.opencode.android.data.Notifier
+import com.opencode.android.util.AppLog
 
 @dagger.hilt.android.HiltAndroidApp
 class OpenCodeApp : Application() {
+    // Injected so the client-log provider can capture a PROCESS singleton
+    // instead of an Activity. Installing it from MainActivity captured the
+    // Activity in this process-wide object and leaked it on every recreate()
+    // (theme switch).
+    @javax.inject.Inject
+    lateinit var backendSession: com.opencode.android.data.BackendSession
+
     override fun onCreate() {
         super.onCreate()
         AppLog.init(applicationInfo)
@@ -17,6 +23,9 @@ class OpenCodeApp : Application() {
         MessageCache.init(this)
         NetworkMonitor.init(this)
         Notifier.init(this)
+        // Route client errors to the server log (POST /log). Best-effort.
+        com.opencode.android.data.ClientLog
+            .install { backendSession.api }
         // Disk-backed stores load off the main thread (StrictMode disk reads).
         AppStartup.initialize(this)
     }
@@ -28,11 +37,15 @@ class OpenCodeApp : Application() {
      * violation instead of as jank in the field. No-op in release builds.
      */
     private fun installStrictMode() {
-        val debuggable = (applicationInfo.flags and
-            android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        val debuggable =
+            (
+                applicationInfo.flags and
+                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
+            ) != 0
         if (!debuggable) return
         android.os.StrictMode.setThreadPolicy(
-            android.os.StrictMode.ThreadPolicy.Builder()
+            android.os.StrictMode.ThreadPolicy
+                .Builder()
                 .detectDiskReads()
                 .detectDiskWrites()
                 .detectNetwork()
@@ -40,7 +53,8 @@ class OpenCodeApp : Application() {
                 .build(),
         )
         android.os.StrictMode.setVmPolicy(
-            android.os.StrictMode.VmPolicy.Builder()
+            android.os.StrictMode.VmPolicy
+                .Builder()
                 .detectLeakedClosableObjects()
                 .detectActivityLeaks()
                 .penaltyLog()

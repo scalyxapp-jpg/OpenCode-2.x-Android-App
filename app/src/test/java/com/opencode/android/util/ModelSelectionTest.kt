@@ -166,4 +166,25 @@ class ModelSelectionTest {
         val unique = listOf(Model(id = "only-one", name = "Unique", providerId = "deepseek"))
         assertEquals("Unique", ModelSelection.activeLabel(unique, "deepseek/only-one", providers))
     }
+
+    @Test
+    fun `an explicit provider is not rewritten by a tail match`() {
+        // A bare catalog entry (the flattened /api/model list) carries no
+        // providerId; resolving a provider-qualified ref must keep that provider
+        // instead of falling back to the hardcoded default.
+        val bare = listOf(Model(id = "gpt-5", name = "GPT-5", providerId = null))
+        assertEquals("opencode" to "gpt-5", ModelSelection.resolve("gpt-5", bare))
+        assertEquals("mine" to "gpt-5", ModelSelection.resolve("mine/gpt-5", bare))
+
+        // And a ref naming a provider that does not offer that tail must not be
+        // silently routed to the provider that does.
+        val catalog = listOf(Model(id = "gpt-5", name = "GPT-5", providerId = "opencode"))
+        assertEquals("mine" to "gpt-5", ModelSelection.resolve("mine/gpt-5", catalog))
+    }
+
+    @Test
+    fun `a leading slash cannot produce an empty provider`() {
+        assertEquals("opencode" to "model", ModelSelection.resolve("/model", models))
+        assertEquals("opencode" to "trailing", ModelSelection.resolve("trailing/", models))
+    }
 }

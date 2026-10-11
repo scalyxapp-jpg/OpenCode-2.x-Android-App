@@ -25,7 +25,11 @@ interface SessionTransport {
 
     suspend fun abort(sessionId: String): Response<ResponseBody>
 
-    /** Fallback for servers without the abort endpoint. */
+    /**
+     * Legacy alias of [abort] for servers that do not answer the abort route.
+     * NOTE: both currently hit the same server route; there is no separate
+     * fallback endpoint.
+     */
     suspend fun interrupt(sessionId: String)
 
     fun guardRevision(sessionId: String): Long?

@@ -119,7 +119,15 @@ class SessionConversation(
     private val scope = scope
     val streamer = SessionStreamer(source, scope, models, friendlyError, ::handleEffect)
 
-    private val _commands = MutableSharedFlow<SessionCommand>(extraBufferCapacity = 16)
+    // Buffer with a drop-oldest policy: `tryEmit` on a plain buffer silently
+    // FAILS when full or when no collector is attached yet, which silently lost
+    // commands. With DROP_OLDEST the emit always succeeds and the observer seam
+    // can never block control flow.
+    private val _commands =
+        MutableSharedFlow<SessionCommand>(
+            extraBufferCapacity = 64,
+            onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_OLDEST,
+        )
 
     /** Observers (e.g. analytics/tests) can see commands without changing control flow. */
     val commands: SharedFlow<SessionCommand> = _commands.asSharedFlow()
@@ -137,18 +145,29 @@ class SessionConversation(
         _commands.tryEmit(command)
         when (command) {
             is SessionCommand.Load -> {
-                // Reset conversation flags for the new session; the ViewModel
-                // re-seeds isGenerating/selected* from the loaded session.
-                _state.value = ConversationState(sessionId = command.sessionId)
-                // Push the reset through the mirror too: otherwise the previous
-                // session's generating/persist/compacting flags stayed in
-                // `ChatUiState` and bled into the newly opened session.
-                port.setGenerating(false)
-                port.setPendingPersist(false)
-                port.setCompacting(false)
-                port.setStatusError(null)
-                port.setSseConnected(false)
-                streamer.start(command.sessionId, command.baseUrl)
+                if (_state.value.sessionId == command.sessionId) {
+                    // Re-loading the SAME session (retry, tab re-entry, a load
+                    // that races a remote turn) must not reset the conversation
+                    // flags or the live buffers: doing so flipped the composer
+                    // back to "send" mid-turn and discarded the answer that was
+                    // streaming. Only make sure the stream is running.
+                    if (!streamer.isActiveFor(command.sessionId)) {
+                        streamer.start(command.sessionId, command.baseUrl)
+                    }
+                } else {
+                    // Reset conversation flags for the new session; the ViewModel
+                    // re-seeds isGenerating/selected* from the loaded session.
+                    _state.value = ConversationState(sessionId = command.sessionId)
+                    // Push the reset through the mirror too: otherwise the previous
+                    // session's generating/persist/compacting flags stayed in
+                    // `ChatUiState` and bled into the newly opened session.
+                    port.setGenerating(false)
+                    port.setPendingPersist(false)
+                    port.setCompacting(false)
+                    port.setStatusError(null)
+                    port.setSseConnected(false)
+                    streamer.start(command.sessionId, command.baseUrl)
+                }
             }
 
             SessionCommand.Send -> {
@@ -193,6 +212,9 @@ class SessionConversation(
                 throw e
             } catch (e: Exception) {
                 port.notifyInterruptFailed(e.message)
+                // The abort failed, so the turn may well still be running while the
+                // composer already flipped to "send": ask the server for the truth.
+                port.resyncSessionStatus()
             } finally {
                 port.refreshMessages(sessionId)
             }
@@ -205,10 +227,16 @@ class SessionConversation(
 
     fun finalize() = streamer.finalize()
 
-    /** Ends the whole turn: the only path that clears the running flag. */
+    /**
+     * Ends the whole turn: the only path that clears the turn-level running flag,
+     * and it also finalizes the live buffers (so a partial answer stays visible).
+     */
     fun endTurn() = streamer.endTurn()
 
-    /** Clears the generating flag when the server confirms the turn is over. */
+    /**
+     * Alias of [endTurn]: clears the turn-level running flag AND finalizes the
+     * live buffers (arming the persist timeout). It is not a flag-only reset.
+     */
     fun forceIdle() = streamer.endTurn()
 
     /**

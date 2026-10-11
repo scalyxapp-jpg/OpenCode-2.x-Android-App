@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.opencode.android.data.BackendSession
+import com.opencode.android.data.BackendStore
+import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.Notifier
 import com.opencode.android.data.replyPermission
 import com.opencode.android.util.APP_LOG_TAG
@@ -34,18 +36,33 @@ class NotificationActionReceiver : BroadcastReceiver() {
         intent: Intent,
     ) {
         when (intent.action) {
-            Notifier.ACTION_PERMISSION_REPLY -> handlePermissionReply(intent)
+            Notifier.ACTION_PERMISSION_REPLY -> handlePermissionReply(context, intent)
         }
     }
 
-    private fun handlePermissionReply(intent: Intent) {
+    private fun handlePermissionReply(
+        context: Context,
+        intent: Intent,
+    ) {
         val requestId = intent.getStringExtra(Notifier.EXTRA_REQUEST_ID) ?: return
         val reply = intent.getStringExtra(Notifier.EXTRA_REPLY) ?: return
         val sessionId = intent.getStringExtra(Notifier.EXTRA_SESSION_ID)
 
-        // Optimistic: drop the notification immediately so the actions are gone
-        // while the reply is in flight (the server also re-syncs the list).
-        Notifier.clearPermission(requestId)
+        // A broadcast can START the process with the app gone: the stores are then
+        // not initialised yet (AppStartup runs asynchronously) and BackendSession
+        // still points at its unconfigured 127.0.0.1 stand-in, so the reply went
+        // nowhere. Initialise the stores and aim the session at the SAVED backend.
+        val app = context.applicationContext
+        BackendStore.init(app)
+        AppSettingsStore.init(app)
+        BackendStore.mostRecent()?.let { saved ->
+            if (saved.password != null) {
+                // Atomic triple update (url + credentials + api instance).
+                backendSession.setBackend(saved.url, saved.username, saved.password)
+            } else {
+                backendSession.setBaseUrl(saved.url)
+            }
+        }
 
         val pending = goAsync()
         CoroutineScope(
@@ -58,7 +75,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
                     kotlinx.coroutines.withTimeoutOrNull(9_000L) {
                         replyPermission(backendSession.api, sessionId, requestId, reply)
                     }
-                if (ok != true) {
+                if (ok == true) {
+                    // Only drop the notification once the server accepted the reply
+                    // — a failed answer kept vanishing, leaving the user unable to
+                    // retry it from the notification.
+                    Notifier.clearPermission(requestId)
+                } else {
                     AppLog.e(APP_LOG_TAG, "notification permission reply failed/timed out: $requestId")
                 }
             } finally {

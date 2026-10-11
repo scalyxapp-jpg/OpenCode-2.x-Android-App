@@ -13,11 +13,11 @@ import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.SseClient
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.BUILTIN_COMMANDS
-import com.opencode.android.domain.IMPLEMENTED_BUILTIN_COMMANDS
 import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.ContextUsage
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.ForkRequest
+import com.opencode.android.domain.IMPLEMENTED_BUILTIN_COMMANDS
 import com.opencode.android.domain.McpEntry
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.Model
@@ -166,11 +166,14 @@ data class ChatUiState(
     // Attachment URIs currently being uploaded, so each chip can show its own
     // spinner (uploads run in parallel).
     val uploadingUris: Set<String> = emptySet(),
-    // "/compact" is running (server summarizes the session).
+    // A compaction is running ON THE SERVER for this session, whatever client
+    // started it (local /compact, web UI or TUI). Cleared by the compaction's own
+    // end event or when the turn ends.
     val isCompacting: Boolean = false,
-    // The model finished but the persisted assistant message has not landed in
-    // `messages` yet. The live content stays on screen until it does, so the
-    // answer never blanks out and reappears a network round-trip later.
+    // A STEP finished and the live buffers are still on screen waiting for the
+    // persisted message to land in `messages` (or for the persist timeout). It is
+    // set at every step boundary, not only at turn end; the answer never blanks
+    // out and reappears a network round-trip later.
     val pendingPersist: Boolean = false,
     // True while the loaded tail is still the full requested page, i.e. the
     // session very likely has older messages the user can pull in.
@@ -189,7 +192,10 @@ data class ChatUiState(
     // message with Retry) instead of a silent blank panel.
     val vcsDiffLoading: Boolean = false,
     val vcsDiffError: String? = null,
-    // SSE connection health (drives a subtle "reconnecting" hint).
+    // SSE connection health for the UI. NOTE: this is the GRACE-DEBOUNCED banner
+    // value (a blip shorter than the grace window never flips it), while
+    // StreamProjection.sseConnected is the raw transport state. Same name, two
+    // latencies — do not use this one for logic that must be exact.
     val sseConnected: Boolean = false,
     // Session-guard proxy status and conflict UX.
     val guardEnabled: Boolean = false,
@@ -939,15 +945,22 @@ class ChatViewModel
         fun loadCommands(directory: String? = null) {
             viewModelScope.launch {
                 try {
-                    val server = api.getCommands(directory)
-                    // Built-ins first, then the server commands; a server command
-                    // with the same name wins (dedupe by name, builtin kept only
-                    // when the server does not define it).
+                    val server =
+                        api.getCommands(directory)
+                            // A server command that shares a name with a CLIENT
+                            // built-in is dropped: otherwise the same typed
+                            // "/compact" ran locally or was forwarded to the server
+                            // depending on the server's configuration, so one user
+                            // action had two behaviours.
+                            .filterNot { it.name in IMPLEMENTED_BUILTIN_COMMANDS }
+                    // Built-ins first, then the server commands (no name is defined
+                    // by both any more).
                     val names = server.map { it.name }.toSet()
                     // Only built-ins this app implements are listed; the rest of
                     // the picker is exactly what the server offers.
                     val commands =
-                        BUILTIN_COMMANDS.filterNot { it.name in names }
+                        BUILTIN_COMMANDS
+                            .filterNot { it.name in names }
                             .filter { canRunBuiltin(it.name) } + server
                     _uiState.update { it.copy(commands = commands) }
                 } catch (e: Exception) {
@@ -962,6 +975,7 @@ class ChatViewModel
         }
 
         // "/mcp" (web: "Toggle MCPs"): open the MCP dialog and refresh the list.
+
         /**
          * Built-ins this app actually IMPLEMENTS. Anything not in here must come
          * from the server, so a client command can never be listed that would do
@@ -1187,7 +1201,7 @@ class ChatViewModel
                         .permissionRequests(sessionId, pending)
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "loadPermissions failed: ${e.message}")
-                    UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                    UserMessages.post(R.string.could_not_load_permissions, "${e.message}")
                 }
             }
         }
@@ -1216,7 +1230,11 @@ class ChatViewModel
                 val ok =
                     com.opencode.android.data
                         .replyPermission(api, sessionId, requestId, reply)
-                if (!ok) UserMessages.post(R.string.action_failed, "replyPermission")
+                if (!ok) {
+                    // Was an internal method name ("replyPermission"), which tells
+                    // the user nothing.
+                    UserMessages.post(R.string.could_not_answer_permission, "the server rejected the reply")
+                }
                 if (_uiState.value.session?.id == sessionId) loadPermissions()
             }
         }
@@ -1256,7 +1274,7 @@ class ChatViewModel
                     }
                     // The background poll must not toast on every transient miss.
                     if (notifyOnError) {
-                        UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                        UserMessages.post(R.string.could_not_load_questions, "${e.message}")
                     }
                 }
             }
@@ -1278,6 +1296,11 @@ class ChatViewModel
 
         /** The question was answered/rejected (locally or in another client). */
         fun onQuestionResolved(requestId: String) {
+            // Stop deduping this request: once it is resolved, a re-ask with the
+            // same id (server retry) must be able to notify again, and the entry
+            // otherwise lingered until the cap trimmed it.
+            com.opencode.android.data.Notifier
+                .clearQuestion(requestId)
             _uiState.update { current ->
                 current.copy(
                     pendingQuestions = current.pendingQuestions.filterNot { it.id == requestId },
@@ -2101,7 +2124,7 @@ class ChatViewModel
                 throw e // refresh race: no error state, no toast (see above)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "refreshMessages ERROR: ${e.message}")
-                UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                UserMessages.post(R.string.could_not_load_messages, "${e.message}")
             }
         }
 
@@ -2133,6 +2156,11 @@ class ChatViewModel
         ) {
             val generation = selectionGuard.beginModelSync()
             viewModelScope.launch {
+                // "pending" means "the user's choice wins until the server has
+                // ACKNOWLEDGED it" (see EffectiveSelection). Clearing it in the
+                // finally block regardless of the outcome silently reverted the
+                // user's pick to the server value after a failed save.
+                var confirmed = false
                 try {
                     val (providerId, modelId) = resolveModelRef(modelRef, _uiState.value.models)
                     if (providerId.isBlank() || modelId.isBlank()) return@launch
@@ -2160,16 +2188,17 @@ class ChatViewModel
                         selectionGuard.recordGuardRevision(sessionId, revision)
                     }
                     response.body()?.close()
+                    confirmed = true
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "set session model failed: ${e.message}")
                     UserMessages.post(
-                        R.string.could_not_send,
-                        "Model selection could not be saved: ${e.message}",
+                        R.string.could_not_save_selection,
+                        "${e.message}",
                     )
                 } finally {
-                    if (selectionGuard.isLatestModel(generation)) modelSelectionPending = false
+                    if (confirmed && selectionGuard.isLatestModel(generation)) modelSelectionPending = false
                 }
             }
         }
@@ -2180,6 +2209,9 @@ class ChatViewModel
         ) {
             val generation = selectionGuard.beginAgentSync()
             viewModelScope.launch {
+                // See syncSessionModel: pending is cleared only once the server
+                // confirmed the write.
+                var confirmed = false
                 try {
                     if (agent.isNotBlank()) {
                         val response = api.setAgent(sessionId, mapOf("agent" to agent))
@@ -2196,16 +2228,17 @@ class ChatViewModel
                         }
                         response.body()?.close()
                     }
+                    confirmed = true
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "set session agent failed: ${e.message}")
                     UserMessages.post(
-                        R.string.could_not_send,
-                        "Agent selection could not be saved: ${e.message}",
+                        R.string.could_not_save_selection,
+                        "${e.message}",
                     )
                 } finally {
-                    if (selectionGuard.isLatestAgent(generation)) agentSelectionPending = false
+                    if (confirmed && selectionGuard.isLatestAgent(generation)) agentSelectionPending = false
                 }
             }
         }
@@ -2363,28 +2396,43 @@ class ChatViewModel
 
         fun addAttachments(uris: List<Pair<String, String>>) {
             if (uris.isEmpty()) return
-            val current = _uiState.value.attachments.toMutableList()
-            for ((uri, name) in uris) {
-                if (current.none { it.uri == uri }) {
-                    val parsed = android.net.Uri.parse(uri)
-                    val mime = runCatching { appContext.contentResolver.getType(parsed) }.getOrNull()
-                    val size =
-                        runCatching {
-                            appContext.contentResolver
-                                .query(
-                                    parsed,
-                                    arrayOf(android.provider.OpenableColumns.SIZE),
-                                    null,
-                                    null,
-                                    null,
-                                )?.use { cursor ->
-                                    if (cursor.moveToFirst()) cursor.getLong(0) else null
-                                }
-                        }.getOrNull()
-                    current.add(Attachment(uri = uri, name = name, mime = mime, size = size))
+            viewModelScope.launch {
+                // ContentResolver lookups block on the (possibly slow) provider, so
+                // they run off Main; the result is then applied as ONE `update`
+                // transformation. The old code read the attachment list, filled it
+                // in and wrote the whole snapshot back — a concurrent
+                // removeAttachment/clearAttachments (or a second add) was silently
+                // overwritten by the stale snapshot.
+                val resolved =
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        uris.mapNotNull { (uri, name) ->
+                            val parsed = android.net.Uri.parse(uri)
+                            val mime = runCatching { appContext.contentResolver.getType(parsed) }.getOrNull()
+                            val size =
+                                runCatching {
+                                    appContext.contentResolver
+                                        .query(
+                                            parsed,
+                                            arrayOf(android.provider.OpenableColumns.SIZE),
+                                            null,
+                                            null,
+                                            null,
+                                        )?.use { cursor ->
+                                            if (cursor.moveToFirst()) cursor.getLong(0) else null
+                                        }
+                                }.getOrNull()
+                            Attachment(uri = uri, name = name, mime = mime, size = size)
+                        }
+                    }
+                if (resolved.isEmpty()) return@launch
+                _uiState.update { current ->
+                    val merged = current.attachments.toMutableList()
+                    for (attachment in resolved) {
+                        if (merged.none { it.uri == attachment.uri }) merged.add(attachment)
+                    }
+                    current.copy(attachments = merged)
                 }
             }
-            _uiState.update { it.copy(attachments = current) }
         }
 
         fun removeAttachment(uri: String) {
@@ -2408,7 +2456,7 @@ class ChatViewModel
          * proxy). Capped because base64 inflates the payload ~33% and the whole
          * thing is held in memory for the request.
          */
-        private fun attachmentDataUrl(attachment: Attachment): String {
+        private suspend fun attachmentDataUrl(attachment: Attachment): String {
             val size = attachment.size
             if (size != null && size > MAX_EMBED_BYTES) {
                 throw java.io.IOException(
@@ -2416,11 +2464,15 @@ class ChatViewModel
                         "(${size / (1024 * 1024)} MB, max ${MAX_EMBED_BYTES / (1024 * 1024)} MB without a guard proxy)",
                 )
             }
-            val resolver = appContext.contentResolver
-            val uri = android.net.Uri.parse(attachment.uri)
+            // Reading + base64-encoding up to 20 MB used to run on the main
+            // thread (the send path is Main.immediate) and froze the UI with no
+            // spinner at all.
             val bytes =
-                resolver.openInputStream(uri)?.use { it.readBytes() }
-                    ?: throw java.io.IOException("Attachment could not be read: ${attachment.name}")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val resolver = appContext.contentResolver
+                    val uri = android.net.Uri.parse(attachment.uri)
+                    resolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: throw java.io.IOException("Attachment could not be read: ${attachment.name}")
             val encoded = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
             return "data:${attachmentMime(attachment)};base64,$encoded"
         }
@@ -2496,11 +2548,52 @@ class ChatViewModel
 
         fun sendMessage() = conversation.dispatch(SessionCommand.Send)
 
+        /**
+         * Undoes an optimistic echo after the send failed *before* the prompt
+         * reached the server (model unavailable, conflict, upload/embed error).
+         *
+         * Every early exit of [performSend] must use this: dropping only the row
+         * (or nothing at all) left the user's message on screen although the
+         * server never received it — and, because the composer had already been
+         * cleared, the prompt text was lost.
+         *
+         * Also clears the `optimisticEchoIds` entry (otherwise the set grew for
+         * the process lifetime) and re-syncs the conversation mirror's
+         * `isGenerating`, which the `_uiState`-only writes used to leave stuck at
+         * `true`.
+         */
+        private fun rollbackOptimisticEcho(
+            optimisticId: String,
+            rawText: String,
+            attachments: List<Attachment>,
+            statusError: String,
+        ) {
+            optimisticEchoIds.remove(optimisticId)
+            _uiState.update { current ->
+                current.copy(
+                    messages = current.messages.filterNot { it.id == optimisticId },
+                    // Restore the composer so a failed send is retryable without
+                    // retyping; never clobber text the user typed meanwhile.
+                    inputText = if (current.inputText.isBlank()) rawText else current.inputText,
+                    attachments = if (current.attachments.isEmpty()) attachments else current.attachments,
+                    isGenerating = false,
+                    isUploading = false,
+                    uploadDone = 0,
+                    uploadTotal = 0,
+                    uploadingUris = emptySet(),
+                    statusError = statusError,
+                    error = statusError,
+                )
+            }
+            // Mirror + `_uiState` in one step (see the doc above).
+            conversation.seedGenerating(false)
+        }
+
         private fun performSend() {
             val session =
                 _uiState.value.session ?: run {
                     AppLog.e(APP_LOG_TAG, "sendMessage: no session")
-                    UserMessages.post(R.string.could_not_send, "no session")
+                    UserMessages.post(R.string.could_not_send, appContext.getString(R.string.no_session_open))
                     return
                 }
             val rawText = _uiState.value.inputText.trim()
@@ -2519,7 +2612,8 @@ class ChatViewModel
             // them from the "/" list; posting "/compact" as a prompt would do
             // nothing.
             com.opencode.android.ui.session
-                .parseBuiltinCommand(rawText, _uiState.value.commands)?.takeIf { canRunBuiltin(it) }
+                .parseBuiltinCommand(rawText, _uiState.value.commands)
+                ?.takeIf { canRunBuiltin(it) }
                 ?.let { name ->
                     _uiState.update { it.copy(inputText = "", attachments = emptyList()) }
                     runBuiltinCommand(name)
@@ -2538,7 +2632,14 @@ class ChatViewModel
                                 if (!api.runCommand(session.id, command.name, command.arguments, session.directory)) {
                                     AppLog.e(APP_LOG_TAG, "runCommand rejected: /${command.name}")
                                     UserMessages.post(R.string.action_failed, "/${command.name} was rejected")
-                                    _uiState.update { it.copy(statusError = "Command /${command.name} was rejected") }
+                                    // Put the line back so the user does not have to
+                                    // retype it (same rule as a failed send).
+                                    _uiState.update {
+                                        it.copy(
+                                            statusError = "Command /${command.name} was rejected",
+                                            inputText = if (it.inputText.isBlank()) rawText else it.inputText,
+                                        )
+                                    }
                                 } else {
                                     refreshMessages(session.id)
                                 }
@@ -2547,7 +2648,12 @@ class ChatViewModel
                             } catch (e: Exception) {
                                 AppLog.e(APP_LOG_TAG, "runCommand failed: ${e.message}")
                                 UserMessages.post(R.string.action_failed, "${e.message}")
-                                _uiState.update { it.copy(statusError = e.message) }
+                                _uiState.update {
+                                    it.copy(
+                                        statusError = e.message,
+                                        inputText = if (it.inputText.isBlank()) rawText else it.inputText,
+                                    )
+                                }
                             }
                         }
                     return
@@ -2657,7 +2763,7 @@ class ChatViewModel
                             val errorMsg = "Model $providerId/$modelId not available on server"
                             AppLog.e(APP_LOG_TAG, errorMsg)
                             UserMessages.post(R.string.could_not_send, errorMsg)
-                            _uiState.update { it.copy(isGenerating = false, error = errorMsg) }
+                            rollbackOptimisticEcho(messageId, rawText, attachments, errorMsg)
                             return@launch
                         }
                         // The guard proxy uploads attachments to the server HOST
@@ -2681,19 +2787,12 @@ class ChatViewModel
                                     uploadAttachments(attachments)
                                 } catch (e: Exception) {
                                     AppLog.e(APP_LOG_TAG, "attachment upload failed: ${e.message}")
-                                    _uiState.update { current ->
-                                        current.copy(
-                                            messages = current.messages.filterNot { it.id == optimistic.id },
-                                            inputText = rawText,
-                                            attachments = attachments,
-                                            isGenerating = false,
-                                            isUploading = false,
-                                            uploadDone = 0,
-                                            uploadTotal = 0,
-                                            uploadingUris = emptySet(),
-                                            statusError = "Attachment upload failed: ${e.message}",
-                                        )
-                                    }
+                                    rollbackOptimisticEcho(
+                                        messageId,
+                                        rawText,
+                                        attachments,
+                                        "Attachment upload failed: ${e.message}",
+                                    )
                                     return@launch
                                 }
                             } else {
@@ -2703,6 +2802,14 @@ class ChatViewModel
                         val fileParts =
                             if (attachments.isNotEmpty() && !useGuardUpload) {
                                 try {
+                                    // Same visible progress as the upload path.
+                                    _uiState.update {
+                                        it.copy(
+                                            isUploading = true,
+                                            uploadDone = 0,
+                                            uploadTotal = attachments.size,
+                                        )
+                                    }
                                     attachments.map { attachment ->
                                         PromptAsyncPart(
                                             id = generateOpenCodeId("prt"),
@@ -2714,17 +2821,12 @@ class ChatViewModel
                                     }
                                 } catch (e: Exception) {
                                     AppLog.e(APP_LOG_TAG, "attachment embed failed: ${e.message}")
-                                    _uiState.update { current ->
-                                        current.copy(
-                                            messages = current.messages.filterNot { it.id == optimistic.id },
-                                            inputText = rawText,
-                                            attachments = attachments,
-                                            isGenerating = false,
-                                            isUploading = false,
-                                            uploadingUris = emptySet(),
-                                            statusError = "Attachment failed: ${e.message}",
-                                        )
-                                    }
+                                    rollbackOptimisticEcho(
+                                        messageId,
+                                        rawText,
+                                        attachments,
+                                        "Attachment failed: ${e.message}",
+                                    )
                                     return@launch
                                 }
                             } else {
@@ -2764,13 +2866,13 @@ class ChatViewModel
                             }
 
                             PromptSendResult.Conflict -> {
-                                _uiState.update {
-                                    it.copy(
-                                        isGenerating = false,
-                                        guardConflict = true,
-                                        statusError = "Selection changed in another client. Review Guard status, then retry.",
-                                    )
-                                }
+                                rollbackOptimisticEcho(
+                                    messageId,
+                                    rawText,
+                                    attachments,
+                                    "Selection changed in another client. Review Guard status, then retry.",
+                                )
+                                _uiState.update { it.copy(guardConflict = true) }
                                 return@launch
                             }
 
@@ -2783,7 +2885,8 @@ class ChatViewModel
                                 }
                                 // Fallback to the legacy prompt endpoint.
                                 AppLog.e(APP_LOG_TAG, "sendMessage: prompt_async failed, fallback: ${result.message}")
-                                UserMessages.post(R.string.could_not_send, "prompt_async failed, fallback: ${result.message}")
+                                // No endpoint name in a user-facing message.
+                                UserMessages.post(R.string.could_not_send, result.message)
                                 api.sendPrompt(
                                     session.id,
                                     PromptRequest(
@@ -2802,29 +2905,16 @@ class ChatViewModel
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "sendMessage ERROR: ${e.message}", e)
                         UserMessages.post(R.string.action_failed, "${e.message}")
-                        val sendError = e.message ?: "Message could not be sent"
-                        _uiState.update { current ->
-                            current.copy(
-                                isGenerating = false,
-                                isUploading = false,
-                                uploadDone = 0,
-                                uploadTotal = 0,
-                                uploadingUris = emptySet(),
-                                statusError = sendError,
-                                // Drop the optimistic echo — it will never be persisted, so
-                                // leaving it made the conversation show a message that the
-                                // server never received — and put the text back in the
-                                // composer so a failed send is retryable without retyping.
-                                messages = current.messages.filterNot { it.id == optimistic.id },
-                                inputText =
-                                    if (current.inputText.isBlank()) {
-                                        rawText
-                                    } else {
-                                        current.inputText
-                                    },
-                                error = sendError,
-                            )
-                        }
+                        // Drop the optimistic echo — it will never be persisted, so
+                        // leaving it made the conversation show a message the server
+                        // never received — and put the text back in the composer so a
+                        // failed send is retryable without retyping.
+                        rollbackOptimisticEcho(
+                            messageId,
+                            rawText,
+                            attachments,
+                            e.message ?: "Message could not be sent",
+                        )
                     }
                 }
         }
@@ -2860,7 +2950,12 @@ class ChatViewModel
                     throw e
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "adopt server selection failed: ${e.message}")
-                    _uiState.update { it.copy(statusError = "Guard übernehmen fehlgeschlagen: ${e.message}") }
+                    _uiState.update {
+                        it.copy(
+                            statusError =
+                                appContext.getString(R.string.could_not_adopt_guard, e.message ?: ""),
+                        )
+                    }
                 }
             }
         }
@@ -2897,7 +2992,12 @@ class ChatViewModel
                     throw e
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "push guard selection failed: ${e.message}")
-                    _uiState.update { it.copy(statusError = "Guard pushen fehlgeschlagen: ${e.message}") }
+                    _uiState.update {
+                        it.copy(
+                            statusError =
+                                appContext.getString(R.string.could_not_push_guard, e.message ?: ""),
+                        )
+                    }
                 }
             }
         }
@@ -2929,7 +3029,12 @@ class ChatViewModel
                     throw e
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "remove guard selection failed: ${e.message}")
-                    _uiState.update { it.copy(statusError = "Guard entfernen fehlgeschlagen: ${e.message}") }
+                    _uiState.update {
+                        it.copy(
+                            statusError =
+                                appContext.getString(R.string.could_not_remove_guard, e.message ?: ""),
+                        )
+                    }
                 }
             }
         }
@@ -2950,7 +3055,11 @@ class ChatViewModel
             // A failed send restores the text + attachments and shows the error
             // banner. Its Retry must re-run that send, not just reload the session
             // (which would leave the user staring at the same unsent prompt).
-            if (_uiState.value.attachments.isNotEmpty() && _uiState.value.inputText.isNotBlank()) {
+            // OR, not AND: rollbackOptimisticEcho restores the text OR the
+            // attachments (each only when it is currently empty), so a text-only or
+            // attachment-only failure never met the "&&" condition and Retry only
+            // reloaded the session.
+            if (_uiState.value.attachments.isNotEmpty() || _uiState.value.inputText.isNotBlank()) {
                 _uiState.update { it.copy(error = null, statusError = null) }
                 performSend()
                 return
@@ -3089,7 +3198,7 @@ class ChatViewModel
                     onDone(true)
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "restoreMessages failed: ${e.message}")
-                    UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                    UserMessages.post(R.string.restore_failed, "${e.message}")
                     onDone(false)
                 }
             }

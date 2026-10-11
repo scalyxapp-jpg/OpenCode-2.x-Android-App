@@ -37,6 +37,10 @@ object SseFilter {
             "question.v2.asked",
             "question.replied",
             "question.rejected",
+            // The V2 spellings are emitted by the normaliser and handled by the
+            // reducer; without them a session-less v2 reply was dropped.
+            "question.v2.replied",
+            "question.v2.rejected",
         )
 
     /**
@@ -44,8 +48,11 @@ object SseFilter {
      * session. Without this a global collector would also be flooded with every
      * other session's message traffic, whose bursts can drop the status events
      * from the bounded buffer.
+     *
+     * `session.error` is a terminal turn state too: without it a turn that ends
+     * with an error stayed "running" in the list until the next resync.
      */
-    val STATUS_TYPES = setOf("session.status", "session.idle")
+    val STATUS_TYPES = setOf("session.status", "session.idle", "session.error", "session.aborted")
 
     /** True when [event] should be delivered to the [sessionId] collector. */
     fun shouldDeliver(

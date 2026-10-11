@@ -13,6 +13,9 @@ data class Session(
     val directory: String? = null,
     // OpenCode 2.x nests the working directory under `location`.
     val location: SessionLocation? = null,
+    // Working directory as reported by the server in some V1 payloads. Use
+    // [directory] (filled from `location.directory` by the adapter) as the
+    // canonical path; this field is only a fallback.
     val path: String? = null,
     val title: String? = null,
     val version: String? = null,
@@ -378,9 +381,12 @@ data class ModelLimit(
 @Serializable
 @Immutable
 data class Model(
+    /** Canonical model id (wire `id` / `modelID`, provider prefix stripped). */
     val id: String,
     val name: String? = null,
     @SerialName("providerID") val providerId: String? = null,
+    // Second, wire-side model id (V1 `model` field). Use [id] as the canonical
+    // id; this one is only kept so the availability guard accepts both forms.
     val model: String? = null,
     // GET /provider models carry { limit: { context, output } }; this is the
     // authoritative context window the web UI shows ("Context Limit").
@@ -401,7 +407,14 @@ data class Provider(
 @Immutable
 data class ProvidersResponse(
     val all: List<ProviderEntry> = emptyList(),
+    // Never populated by the V2 adapter (the route has no default map). An empty
+    // map therefore means "not reported", NOT "the server has no default".
     val default: Map<String, String> = emptyMap(),
+    /**
+     * Provider ids the SERVER OFFERS (V2 `/api/provider` = available/activated).
+     * This is NOT an auth signal: a provider can be listed without credentials.
+     * The name is carried over from the V1 wire field.
+     */
     val connected: List<String> = emptyList(),
 )
 
@@ -413,7 +426,8 @@ data class HealthResponse(
     val version: String? = null,
 )
 
-// GET /session/{id}/todo → [{ content, status, priority }]
+// V1 route only. V2 has no GET /session/{id}/todo; todos arrive via the
+// `todo.updated` event (an empty list is therefore "unsupported", not "none").
 @Serializable
 @Immutable
 data class TodoItem(
@@ -460,7 +474,9 @@ data class ProviderEntry(
     val id: String,
     val name: String? = null,
     val models: Map<String, Model> = emptyMap(),
-    // Where the credentials came from: "env" | "config" | "custom" | "api".
+    // Where the credentials came from: "env" | "config" | "api" | null.
+    // null = the provider only exists because the config file names it (no
+    // connection), so the UI shows no badge and offers no Disconnect.
     // Drives the badge and whether Disconnect is offered (web parity).
     val source: String? = null,
     val env: List<String> = emptyList(),
@@ -743,8 +759,9 @@ data class FileEntry(
     val ignored: Boolean = false,
 )
 
-// GET /path → the serve host's filesystem locations; "home" seeds the
-// "Open project" folder browser (web starts the dialog at ~/).
+// GET /path → filesystem locations for the file/project browser. In V2 the route
+// only exposes the ACTIVE location, so `home` (the V1 wire name) is filled with
+// that directory, NOT the serve host's home directory.
 @Serializable
 @Immutable
 data class PathInfo(
@@ -774,6 +791,12 @@ data class CommandEntry(
     val template: kotlinx.serialization.json.JsonElement? = null,
 )
 
+/**
+ * The command's template, when the server actually reports one. The V2
+ * `/api/command` payload carries only `{name, description}`, so this is
+ * effectively always null in production — callers must fall back to
+ * "/name " and let the user type the arguments.
+ */
 fun commandTemplate(command: CommandEntry): String? =
     (command.template as? kotlinx.serialization.json.JsonPrimitive)
         ?.takeIf { it.isString }

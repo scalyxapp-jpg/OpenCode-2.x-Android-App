@@ -136,12 +136,14 @@ internal fun ModelsTab() {
             item(key = "h-${p.id}") {
                 SectionSubheader(
                     title = p.name ?: p.id,
-                    // Provider heading = bulk toggle for all its models (web parity).
+                    // Provider heading = bulk toggle for ALL its models (web parity).
+                    // Using the search-filtered `models` here meant "Show all" only
+                    // toggled the currently visible matches.
                     trailing = {
                         OutlinedButton(onClick = {
                             ModelVisibilityStore.setProviderVisibility(
                                 p.id,
-                                models.map { it.id },
+                                p.models.values.map { it.id },
                                 !allOn,
                             )
                             revision++
