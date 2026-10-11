@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -130,6 +131,20 @@ internal fun ChatScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val appSettings by AppSettingsStore.state.collectAsStateWithLifecycle()
+    // Tell the ViewModel when the chat is actually visible: its 5 s status poll runs
+    // in viewModelScope and would otherwise keep polling with the screen off.
+    val chatLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.LaunchedEffect(chatLifecycleOwner, sessionId) {
+        chatLifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            viewModel.setScreenVisible(true)
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                viewModel.setScreenVisible(false)
+            }
+        }
+    }
+
     val listState = rememberLazyListState()
     var selectedTab by remember { mutableIntStateOf(0) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -420,19 +435,24 @@ internal fun ChatScreen(
                                     showRename = true
                                 },
                             )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.share)) },
-                                onClick = {
-                                    showMore = false
-                                    viewModel.shareSession { slug ->
-                                        toast(
-                                            context,
-                                            slug?.let { resources.getString(R.string.shared_fmt, it) }
-                                                ?: resources.getString(R.string.share_failed),
-                                        )
-                                    }
-                                },
-                            )
+                            // Only when the server actually exposes a share link: the
+                            // action is a pure re-read (V2 has no "create share" write
+                            // path), so for every other session it could only fail.
+                            if (!uiState.session?.share?.url.isNullOrBlank()) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.share)) },
+                                    onClick = {
+                                        showMore = false
+                                        viewModel.shareSession { slug ->
+                                            toast(
+                                                context,
+                                                slug?.let { resources.getString(R.string.shared_fmt, it) }
+                                                    ?: resources.getString(R.string.share_failed),
+                                            )
+                                        }
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.export)) },
                                 onClick = {
@@ -456,6 +476,23 @@ internal fun ChatScreen(
                                 onClick = {
                                     showMore = false
                                     viewModel.archiveSession { onBack() }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_transcript)) },
+                                onClick = {
+                                    showMore = false
+                                    val transcript = buildTranscript(uiState.messages)
+                                    if (transcript.isBlank()) {
+                                        toast(resources.getString(R.string.nothing_to_copy))
+                                    } else {
+                                        copyToClipboard(
+                                            context,
+                                            resources.getString(R.string.copy_transcript),
+                                            transcript,
+                                        )
+                                        toast(resources.getString(R.string.transcript_copied))
+                                    }
                                 },
                             )
                             DropdownMenuItem(
@@ -678,7 +715,9 @@ internal fun ChatScreen(
                     },
                     text = {
                         Text(
-                            stringResource(R.string.review),
+                            // "Review" promised a code review, but this tab renders session/token
+    // statistics (the diff lives in the "Changes" tab).
+    stringResource(R.string.session_info),
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                         )
                     },
@@ -1458,10 +1497,28 @@ internal fun SessionTab(
                             // the value as it was BEFORE the list changed.
                             var atBottom by remember { mutableStateOf(true) }
                             var unreadBaseline by remember { mutableIntStateOf(0) }
+                            // Identity of the newest message the badge was computed
+                            // against. "Load older" PREPENDS entries and grows the list
+                            // without anything being unread, so a pure size comparison
+                            // made the badge jump by the number of older messages.
+                            var unreadNewestId by remember { mutableStateOf<String?>(null) }
                             // Key on size too: otherwise messages that arrive
                             // while parked at the bottom were still counted as
                             // "unread" once the user later scrolled up.
                             LaunchedEffect(atBottom, uiState.messages.size) {
+                                val newestId =
+                                    uiState.messages.lastOrNull()?.let { it.id ?: it.info?.id }
+                                if (newestId != null && newestId != unreadNewestId) {
+                                    // A newer message landed. Older-only prepends keep
+                                    // the newest id, so they no longer inflate the count.
+                                    unreadBaseline =
+                                        if (atBottom) {
+                                            uiState.messages.size
+                                        } else {
+                                            unreadBaseline
+                                        }
+                                    unreadNewestId = newestId
+                                }
                                 if (atBottom) unreadBaseline = uiState.messages.size
                             }
                             LaunchedEffect(listState) {
@@ -1998,4 +2055,26 @@ internal fun TodoPanel(todos: List<TodoItem>) {
             }
         }
     }
+}
+
+/**
+ * Renders the conversation as plain Markdown-ish text for the clipboard: useful for
+ * bug reports and for pasting an exchange into another tool.
+ */
+internal fun buildTranscript(messages: List<com.opencode.android.domain.Message>): String {
+    val out = StringBuilder()
+    for (message in messages) {
+        val role = message.role ?: message.info?.role ?: message.type ?: continue
+        if (role == "model-switched") continue
+        val text =
+            message.parts
+                .filter { it.type.trim() == "text" }
+                .mapNotNull { it.text?.takeIf(String::isNotBlank) }
+                .joinToString("\n")
+                .ifBlank { message.text ?: "" }
+        if (text.isBlank()) continue
+        out.append(if (role == "user") "## User" else "## Assistant").append('\n')
+        out.append(text).append("\n\n")
+    }
+    return out.toString().trim()
 }

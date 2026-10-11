@@ -4,6 +4,7 @@ import androidx.core.content.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.opencode.android.R
+import com.opencode.android.data.ArchivedSessionsStore
 import com.opencode.android.data.BackendSession
 import com.opencode.android.data.CachedProject
 import com.opencode.android.data.HomeSnapshot
@@ -56,7 +57,11 @@ data class HomeUiState(
     val messageMatchIds: Set<String> = emptySet(),
     val showOnlyGuarded: Boolean = false,
     /** Session list filtered to the ones currently generating (badge shortcut). */
-    val showOnlyRunning: Boolean = false,
+    val showOnlyRunning: Boolean = com.opencode.android.data.HomePrefs.onlyRunning(),
+    /** Show the locally archived sessions instead of hiding them. */
+    val showArchived: Boolean = com.opencode.android.data.HomePrefs.showArchived(),
+    /** Bumped when an archive/unarchive changes the local set (drives the filter). */
+    val archivedRevision: Int = 0,
     val isLoading: Boolean = false,
     val error: String? = null,
     // Session ids the user pinned; shown in a "Pinned" group at the top.
@@ -210,19 +215,28 @@ class HomeViewModel
                         val server =
                             try {
                                 api.getProjects()
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                // The single-flight cancel above lands here; swallowing
+                                // it let the stale load continue and publish.
+                                throw e
                             } catch (e: Exception) {
                                 AppLog.e(APP_LOG_TAG, "getProjects failed: ${e.message}")
                                 UserMessages.post(R.string.could_not_load_projects, "${e.message}")
                                 emptyList()
                             }
+                        val nameOverrides = com.opencode.android.data.HomePrefs.projectNames()
                         val fromServer =
                             server.mapNotNull { p ->
                                 val dir = p.worktree ?: p.canonical ?: return@mapNotNull null
                                 HomeProject(
                                     id = p.id.takeIf { it != "global" },
+                                    // A user-chosen name wins over the path segment: V2's
+                                    // project payload has no name, which made "Rename" a
+                                    // no-op.
                                     name =
-                                        com.opencode.android.util
-                                            .lastPathSegment(dir),
+                                        nameOverrides[dir]
+                                            ?: com.opencode.android.util
+                                                .lastPathSegment(dir),
                                     directory = dir,
                                 )
                             }
@@ -332,7 +346,12 @@ class HomeViewModel
                     ?: projects.firstOrNull { it.directory != "/" }
                     ?: projects.firstOrNull()
             _uiState.update { it.copy(projects = projects, selectedProject = selected) }
-            if (selected != null) {
+            if (selected == null) {
+            // The last project went away: its sessions must not stay on screen.
+            _uiState.update { it.copy(sessions = emptyList()) }
+            LastSessionStore.clear()
+        }
+        if (selected != null) {
                 LastSessionStore.saveDirectory(selected.directory)
                 loadSessions(selected)
             }
@@ -390,6 +409,8 @@ class HomeViewModel
             }
             viewModelScope.launch {
                 try {
+                    // Local display-name override first: it is what the UI shows.
+                    com.opencode.android.data.HomePrefs.setProjectName(project.directory, newName)
                     api.renameProject(id, mapOf("name" to newName))
                     loadProjects()
                     onDone()
@@ -471,9 +492,19 @@ class HomeViewModel
                                 if (attempt < 2) kotlinx.coroutines.delay(400L)
                             }
                         }
+                        val archivedVisible = _uiState.value.showArchived
                         val sessions =
                             (fetched ?: throw (lastError ?: IllegalStateException("load failed")))
-                                .filter { it.time?.archived == null }
+                                // Either the archived ones (the dedicated view) or the
+                                // normal list with them hidden. `archivedVisible || ...`
+                                // showed EVERYTHING in the archived view.
+                                .filter {
+                                    if (archivedVisible) {
+                                        ArchivedSessionsStore.isArchived(it.id)
+                                    } else {
+                                        !ArchivedSessionsStore.isArchived(it.id)
+                                    }
+                                }
                                 .sortedByDescending { it.time?.updated ?: it.time?.created ?: 0L }
                         // Drop a stale result: another project was selected meanwhile.
                         if (_uiState.value.selectedProject?.directory != project.directory) return@launch
@@ -598,6 +629,7 @@ class HomeViewModel
         }
 
         fun setShowOnlyRunning(enabled: Boolean) {
+            com.opencode.android.data.HomePrefs.setOnlyRunning(enabled)
             _uiState.update { it.copy(showOnlyRunning = enabled) }
         }
 
@@ -667,19 +699,35 @@ class HomeViewModel
             }
         }
 
+        /**
+         * Hides [session] from the list. Local on purpose: V2 has no archive write
+         * path, so the previous implementation issued a no-op request and the row
+         * came back on the next reload. Reversible via the Snackbar action.
+         */
         fun archiveSession(session: Session) {
-            viewModelScope.launch {
-                try {
-                    api.updateSession(
-                        session.id,
-                        SessionUpdateRequest(time = SessionTimeUpdate(archived = System.currentTimeMillis())),
-                    )
-                    _uiState.value.selectedProject?.let { loadSessions(it) }
-                } catch (e: Exception) {
-                    AppLog.e(APP_LOG_TAG, "archiveSession failed: ${e.message}")
-                    UserMessages.post(R.string.could_not_archive, "${e.message}")
-                }
-            }
+            ArchivedSessionsStore.archive(session.id)
+            _uiState.value.selectedProject?.let { loadSessions(it) }
+            UserMessages.postWithAction(
+                R.string.session_archived,
+                actionLabel = "Undo",
+                onAction = { unarchiveSession(session) },
+            )
+        }
+
+        /** Restores an archived session to the list. */
+        fun unarchiveSession(session: Session) {
+            ArchivedSessionsStore.unarchive(session.id)
+            _uiState.value.selectedProject?.let { loadSessions(it) }
+            _uiState.update { it.copy(archivedRevision = it.archivedRevision + 1) }
+        }
+
+        /** Shows (or hides) the locally archived sessions. */
+        fun setShowArchived(enabled: Boolean) {
+            com.opencode.android.data.HomePrefs.setShowArchived(enabled)
+            _uiState.update { it.copy(showArchived = enabled) }
+            // The filter is applied while FETCHING, so the already-loaded list has to
+            // be refetched — otherwise the archived sessions never appeared.
+            _uiState.value.selectedProject?.let { loadSessions(it) }
         }
 
         fun deleteSession(session: Session) {

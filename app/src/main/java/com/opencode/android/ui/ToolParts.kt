@@ -257,17 +257,29 @@ internal fun cappedForDisplay(text: String): String =
  * a row) otherwise rendered ten near-identical rows and recomposed the whole
  * live tool column on every arrival. Pure, so the grouping is unit-tested.
  */
-internal fun coalesceConsecutiveTools(parts: List<Part>): List<Pair<Part, Int>> {
-    val out = ArrayList<Pair<Part, Int>>()
+internal fun coalesceConsecutiveTools(parts: List<Part>): List<ToolGroup> {
+    val out = ArrayList<ToolGroup>()
     for (part in parts) {
         val name = part.toolName()
         val last = out.lastOrNull()
-        if (last != null && name != null && last.first.toolName() == name) {
-            // Keep the NEWEST part (it carries the current status) and count.
-            out[out.size - 1] = part to (last.second + 1)
+        if (last != null && name != null && last.part.toolName() == name) {
+            // Keep the NEWEST part (it carries the current status), but keep the
+            // FIRST part's id as the group identity: the UI keys its row state on it,
+            // and a changing key collapsed an expanded tool output on every call.
+            out[out.size - 1] = last.copy(part = part, count = last.count + 1)
         } else {
-            out.add(part to 1)
+            out.add(ToolGroup(id = part.id ?: "", part = part, count = 1))
         }
     }
     return out
 }
+
+/**
+ * One consecutive-run of same-named tool calls. [id] is the identity of the FIRST
+ * call in the run (stable while the run grows).
+ */
+data class ToolGroup(
+    val id: String,
+    val part: Part,
+    val count: Int,
+)

@@ -895,6 +895,10 @@ class ChatViewModel
                         contextInfo = info,
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Structured concurrency: a cancelled load must stay cancelled
+                // instead of reporting "could not load".
+                throw e
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "loadContext failed: ${e.message}")
                 UserMessages.post(R.string.could_not_load_context, "${e.message}")
@@ -1131,6 +1135,7 @@ class ChatViewModel
                 modelEntry?.id
                     ?: session.model?.id?.takeIf { it.isNotBlank() }
                     ?: modelRef.substringAfter('/', modelRef)
+            val compactSessionId = session.id
             _uiState.update { it.copy(isCompacting = true, statusError = null) }
             viewModelScope.launch {
                 try {
@@ -1151,7 +1156,9 @@ class ChatViewModel
                             )
                         AppLog.e(APP_LOG_TAG, "compactSession failed: HTTP ${response.code()} $message")
                         UserMessages.post(R.string.compact_failed, "HTTP ${response.code()} $message")
-                        _uiState.update { it.copy(statusError = message) }
+                        _uiState.update { current ->
+                            if (current.session?.id != compactSessionId) current else current.copy(statusError = message)
+                        }
                         return@launch
                     }
                     response.body()?.close()
@@ -1177,7 +1184,9 @@ class ChatViewModel
                         )
                     }
                 } finally {
-                    _uiState.update { it.copy(isCompacting = false) }
+                    _uiState.update { current ->
+                        if (current.session?.id != compactSessionId) current else current.copy(isCompacting = false)
+                    }
                 }
             }
         }
@@ -1353,10 +1362,12 @@ class ChatViewModel
                         R.string.action_failed,
                         "Could not send the answer — the question may have expired",
                     )
-                    _uiState.update {
-                        it.copy(
-                            statusError = "Could not send the answer — the question may have expired",
-                        )
+                    _uiState.update { current ->
+                        if (current.session?.id != session.id) {
+                            current
+                        } else {
+                            current.copy(statusError = "Could not send the answer — the question may have expired")
+                        }
                     }
                     loadPendingQuestions()
                     onDone(false)
@@ -1399,10 +1410,12 @@ class ChatViewModel
                         R.string.action_failed,
                         "Could not reject the question — it may have expired",
                     )
-                    _uiState.update {
-                        it.copy(
-                            statusError = "Could not reject the question — it may have expired",
-                        )
+                    _uiState.update { current ->
+                        if (current.session?.id != session.id) {
+                            current
+                        } else {
+                            current.copy(statusError = "Could not reject the question — it may have expired")
+                        }
                     }
                     loadPendingQuestions()
                     onDone(false)
@@ -1558,7 +1571,12 @@ class ChatViewModel
             val scoped =
                 try {
                     api.getProjectAgents(directory).map { p ->
-                        Agent(id = p.name, name = p.name, description = p.description, mode = p.mode)
+                        Agent(
+                            id = p.id,
+                            name = p.name?.takeIf { it.isNotBlank() } ?: p.id,
+                            description = p.description,
+                            mode = p.mode,
+                        )
                     }
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     // Never swallow cancellation: doing so broke structured concurrency
@@ -1584,6 +1602,18 @@ class ChatViewModel
             return fetched.ifEmpty { cachedAgentsByDirectory[key].orEmpty() }
         }
 
+        /**
+         * Set by [ChatScreen] while the chat is actually visible. The 5 s status poll
+         * runs in `viewModelScope` (not lifecycle-bound), so without this it kept
+         * issuing requests with the screen off.
+         */
+        @Volatile
+        private var screenVisible: Boolean = true
+
+        fun setScreenVisible(visible: Boolean) {
+            screenVisible = visible
+        }
+
         private fun startPolling(sessionId: String) {
             pollJob?.cancel()
             lastPollUpdated = null
@@ -1595,6 +1625,9 @@ class ChatViewModel
                     while (isActive) {
                         kotlinx.coroutines.delay(POLL_INTERVAL_MS * (1 + minOf(failures, 6)))
                         if (_uiState.value.session?.id != sessionId) break
+                        // Backgrounded: stay quiet (the SSE feed already keeps the
+                        // running state fresh) instead of polling every 5 s.
+                        if (!screenVisible) continue
                         try {
                             // Agent questions can be missed by the SSE stream (the
                             // legacy question.asked bus event is not reliably forwarded
@@ -2403,6 +2436,8 @@ class ChatViewModel
                 // in and wrote the whole snapshot back — a concurrent
                 // removeAttachment/clearAttachments (or a second add) was silently
                 // overwritten by the stale snapshot.
+                // Session at the time the pick was made (see the guard below).
+                val targetSessionId = _uiState.value.session?.id
                 val resolved =
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                         uris.mapNotNull { (uri, name) ->
@@ -2426,6 +2461,10 @@ class ChatViewModel
                     }
                 if (resolved.isEmpty()) return@launch
                 _uiState.update { current ->
+                    // The ContentResolver lookup runs on IO; if the user switched
+                    // sessions meanwhile (the draft re-populates `attachments`), the
+                    // files chosen in the OLD session must not appear in the new one.
+                    if (current.session?.id != targetSessionId) return@update current
                     val merged = current.attachments.toMutableList()
                     for (attachment in resolved) {
                         if (merged.none { it.uri == attachment.uri }) merged.add(attachment)
@@ -2759,7 +2798,9 @@ class ChatViewModel
                         val effectiveAgent = effective.agent
                         val effectiveVariant = effective.variant
                         val (providerId, modelId) = parseModelRef(effectiveModelRef)
-                        if (!providerDirectory.isAvailable(providerId, modelId)) {
+                        // `isKnownMissing` (not `isAvailable`): an unloaded catalog
+                        // must not cancel a valid send.
+                        if (providerDirectory.isKnownMissing(providerId, modelId)) {
                             val errorMsg = "Model $providerId/$modelId not available on server"
                             AppLog.e(APP_LOG_TAG, errorMsg)
                             UserMessages.post(R.string.could_not_send, errorMsg)
@@ -2883,24 +2924,35 @@ class ChatViewModel
                                     AppLog.e(APP_LOG_TAG, "sendMessage: attachment prompt failed: ${result.message}")
                                     throw java.io.IOException(result.message)
                                 }
-                                // Fallback to the legacy prompt endpoint.
+                                // Fallback to the legacy prompt endpoint. The failure is
+                                // reported only if THIS also fails: announcing "could not
+                                // send" while the retry succeeds told the user the opposite
+                                // of what happened.
                                 AppLog.e(APP_LOG_TAG, "sendMessage: prompt_async failed, fallback: ${result.message}")
-                                // No endpoint name in a user-facing message.
-                                UserMessages.post(R.string.could_not_send, result.message)
-                                api.sendPrompt(
-                                    session.id,
-                                    PromptRequest(
-                                        prompt = PromptInput(text = finalText),
-                                        agent = effectiveAgent,
-                                        model = modelId.takeIf { it.isNotBlank() },
-                                    ),
-                                )
+                                try {
+                                    api.sendPrompt(
+                                        session.id,
+                                        PromptRequest(
+                                            prompt = PromptInput(text = finalText),
+                                            agent = effectiveAgent,
+                                            model = modelId.takeIf { it.isNotBlank() },
+                                        ),
+                                    )
+                                } catch (fallbackError: Exception) {
+                                    UserMessages.post(R.string.could_not_send, fallbackError.message ?: result.message)
+                                    throw fallbackError
+                                }
                             }
                         }
                         _uiState.update { it.copy(guardConflict = false) }
                         AppLog.d(APP_LOG_TAG) { "sendMessage: API ok" }
                         refreshMessages(session.id)
                     } catch (e: kotlinx.coroutines.CancellationException) {
+                        // A session switch cancels this job. The rollback must still
+                        // run: otherwise the optimistic id stayed in the (unbounded)
+                        // set and the prompt text the composer already cleared was
+                        // lost. The echo row itself is dropped with the conversation.
+                        optimisticEchoIds.remove(messageId)
                         throw e
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "sendMessage ERROR: ${e.message}", e)
@@ -3131,7 +3183,13 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     val updated = api.renameSession(session.id, mapOf("title" to newTitle))
-                    _uiState.update { it.copy(session = updated) }
+                    // Session-guard: the user can switch sessions while the rename
+                    // is in flight. Writing the (old session's) payload unchecked
+                    // replaced the NEW session's id/directory/model/title, so the
+                    // header, Changes tab and VCS pointed at the previous session.
+                    _uiState.update { current ->
+                        if (current.session?.id != session.id) current else current.copy(session = updated)
+                    }
                     onDone()
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "renameSession failed: ${e.message}")
@@ -3140,20 +3198,23 @@ class ChatViewModel
             }
         }
 
+        /**
+         * Hides the session locally and leaves the chat.
+         *
+         * V2 has no server-side archive (`PATCH /api/session/{id}` only takes a
+         * title), so the previous call changed NOTHING while the UI closed the chat —
+         * the session reappeared on the next reload. The id now goes into the local
+         * archived set, with an Undo action in the Snackbar.
+         */
         fun archiveSession(onDone: () -> Unit) {
             val session = _uiState.value.session ?: return
-            viewModelScope.launch {
-                try {
-                    api.updateSession(
-                        session.id,
-                        SessionUpdateRequest(time = SessionTimeUpdate(archived = System.currentTimeMillis())),
-                    )
-                    onDone()
-                } catch (e: Exception) {
-                    AppLog.e(APP_LOG_TAG, "archiveSession failed: ${e.message}")
-                    UserMessages.post(R.string.could_not_archive, "${e.message}")
-                }
-            }
+            com.opencode.android.data.ArchivedSessionsStore.archive(session.id)
+            UserMessages.postWithAction(
+                R.string.session_archived,
+                actionLabel = "Undo",
+                onAction = { com.opencode.android.data.ArchivedSessionsStore.unarchive(session.id) },
+            )
+            onDone()
         }
 
         fun deleteSession(onDone: () -> Unit) {

@@ -45,6 +45,9 @@ object HomeCache : HomeStore {
 
     private val lock = Any()
 
+    /** Bumped by clearAll(); a write from before a backend switch must not publish. */
+    private val generation = java.util.concurrent.atomic.AtomicLong(0L)
+
     fun init(context: Context) {
         // Only the application context is captured; resolving filesDir touches
         // the disk and init() runs on the main thread from AppStartup.
@@ -87,8 +90,11 @@ object HomeCache : HomeStore {
 
     override suspend fun write(snapshot: HomeSnapshot) {
         val bounded = snapshot.bounded()
+        val startedAtGeneration = generation.get()
+        if (generation.get() != startedAtGeneration) return
         synchronized(lock) { memory = bounded }
         withContext(Dispatchers.IO) {
+            if (generation.get() != startedAtGeneration) return@withContext
             val f = fileFor() ?: return@withContext
             try {
                 f.parentFile?.mkdirs()
@@ -118,7 +124,8 @@ object HomeCache : HomeStore {
         }
     }
 
-    override suspend fun clearAll(): Unit =
+    override suspend fun clearAll(): Unit {
+        generation.incrementAndGet()
         withContext(Dispatchers.IO) {
             synchronized(lock) { memory = null }
             try {
@@ -127,4 +134,5 @@ object HomeCache : HomeStore {
                 AppLog.w(APP_LOG_TAG) { "HomeCache clearAll failed: ${e.message}" }
             }
         }
+    }
 }

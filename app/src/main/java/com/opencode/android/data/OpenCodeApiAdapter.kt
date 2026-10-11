@@ -99,6 +99,9 @@ class OpenCodeApiAdapter(
     private val formSessionIds = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val formFields = java.util.concurrent.ConcurrentHashMap<String, List<WireFormField>>()
 
+    /** Insertion order of [formSessionIds], so trimming drops the OLDEST ids. */
+    private val formOrder = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
     // Integration (provider auth) methods and OAuth attempts, cached per provider.
     private val integrationMethods =
         java.util.concurrent.ConcurrentHashMap<String, List<com.opencode.android.domain.WireIntegrationMethod>>()
@@ -411,7 +414,25 @@ class OpenCodeApiAdapter(
             throw IOException("file read HTTP ${response.code()}")
         }
         val body = response.body() ?: return FileContent(content = null, path = path)
-        val text = body.use { it.string() }
+        // Bounded read: a huge file (log, artifact) otherwise pulls the whole body
+        // into a String and kills the process, exactly what the message path's cap
+        // prevents.
+        val text =
+            try {
+                body.use { responseBody ->
+                    com.opencode.android.util.LimitedInputStream(
+                        responseBody.byteStream(),
+                        MAX_FILE_BYTES,
+                        "file content",
+                    ).use { stream ->
+                        // The JSON string in the body is decoded through the shared
+                        // length-bounded read.
+                        stream.readBytes().toString(Charsets.UTF_8)
+                    }
+                }
+            } catch (e: com.opencode.android.util.BodyTooLargeException) {
+                throw java.io.IOException("file too large to open (limit ${MAX_FILE_BYTES / (1024 * 1024)} MB)")
+            }
         return FileContent(content = text, path = path)
     }
 
@@ -424,7 +445,9 @@ class OpenCodeApiAdapter(
             .agents(directory)
             .data
             .orEmpty()
-            .map { ProjectAgent(name = it.id, description = it.description, mode = it.mode) }
+            // `id` and `name` used to be collapsed into one field, so the wire's
+            // display name was discarded and the UI showed the raw id.
+            .map { ProjectAgent(id = it.id, name = it.name, description = it.description, mode = it.mode) }
 
     override suspend fun getModels(): DataListResponse<Model> =
         DataListResponse(
@@ -553,7 +576,9 @@ class OpenCodeApiAdapter(
                 ),
             )
         val response = v2.runCommand(sessionId, body, directory)
-        response.body()?.close()
+        // The error body must be closed too: every rejected command leaked a pooled
+        // connection per attempt (the shared helper already does this).
+        response.body()?.close() ?: response.errorBody()?.close()
         return response.isSuccessful
     }
 
@@ -605,7 +630,13 @@ class OpenCodeApiAdapter(
         return try {
             val credentials = v2.credentials().data.orEmpty()
             val matching = credentials.filter { it.integrationId == providerId }
-            matching.forEach { credential -> credential.id?.let { v2.deleteCredential(it) } }
+            matching.forEach { credential ->
+                credential.id?.let { id ->
+                    // The Response was discarded without closing its body.
+                    val deleted = v2.deleteCredential(id)
+                    deleted.body()?.close() ?: deleted.errorBody()?.close()
+                }
+            }
             Response.success(emptyBody())
         } catch (e: retrofit2.HttpException) {
             Response.error(e.code(), emptyBody())
@@ -783,8 +814,13 @@ class OpenCodeApiAdapter(
         // session id.
         for (permission in permissions) {
             val id = permission.id ?: continue
-            permission.sessionId?.let { formSessionIds[id] = it }
+            permission.sessionId?.let {
+                if (formSessionIds.put(id, it) == null) formOrder.add(id)
+            }
         }
+        // Permissions used to bypass the cap entirely, so the map grew for the whole
+        // process lifetime.
+        trimFormMaps()
         return permissions.map { it.toDomain() }
     }
 
@@ -820,7 +856,8 @@ class OpenCodeApiAdapter(
         body: QuestionReplyRequest,
     ): ResponseBody {
         val sessionId = formSessionIds[requestId] ?: throw IOException("unknown question $requestId")
-        return requireBody(v2.replyForm(sessionId, requestId, FormReplyBody(answerMap(requestId, body))))
+        val answers = requireAnswerMap(requestId, body)
+        return requireBody(v2.replyForm(sessionId, requestId, FormReplyBody(answers)))
             .also { forgetForm(requestId) }
     }
 
@@ -833,7 +870,10 @@ class OpenCodeApiAdapter(
         sessionId: String,
         requestId: String,
         body: QuestionReplyRequest,
-    ): ResponseBody = requireBody(v2.replyForm(sessionId, requestId, FormReplyBody(answerMap(requestId, body))))
+    ): ResponseBody =
+        requireBody(
+            v2.replyForm(sessionId, requestId, FormReplyBody(requireAnswerMap(requestId, body))),
+        )
 
     override suspend fun rejectSessionQuestion(
         sessionId: String,
@@ -915,7 +955,9 @@ class OpenCodeApiAdapter(
     private fun rememberForms(forms: List<WireForm>) {
         for (form in forms) {
             val id = form.id ?: continue
-            form.sessionId?.let { formSessionIds[id] = it }
+            form.sessionId?.let {
+                if (formSessionIds.put(id, it) == null) formOrder.add(id)
+            }
             formFields[id] = form.fields
         }
         // Pending forms/permissions are short-lived; cap the maps so a long-lived
@@ -930,12 +972,34 @@ class OpenCodeApiAdapter(
     }
 
     private fun trimFormMaps() {
-        if (formSessionIds.size <= MAX_REMEMBERED_FORMS) return
-        // Oldest-insertion order is not tracked separately; drop an arbitrary
-        // slice so the map shrinks and re-listing refills the live entries.
-        val excess = formSessionIds.size - MAX_REMEMBERED_FORMS
-        val stale = formSessionIds.keys.take(excess)
-        stale.forEach { forgetForm(it) }
+        // Evict in INSERTION order (tracked in [formOrder]): a `keys.take(n)` slice of
+        // a ConcurrentHashMap is arbitrary and could drop a still-pending permission
+        // mapping, which made its notification reply fail with "unknown request".
+        while (formSessionIds.size > MAX_REMEMBERED_FORMS) {
+            val oldest = formOrder.poll() ?: break
+            forgetForm(oldest)
+        }
+        formOrder.clear()
+        formOrder.addAll(formSessionIds.keys)
+    }
+
+    /**
+     * The answers keyed by the form's field keys.
+     *
+     * The keys come from the FORM, which is only cached by a list fetch — a question
+     * that arrived as an SSE event can therefore have no cached fields. The old code
+     * then silently sent `{answer:{}}`, i.e. an EMPTY reply for a valid question, and
+     * the agent stayed blocked. Failing loudly is strictly better than that.
+     */
+    private fun requireAnswerMap(
+        requestId: String,
+        body: QuestionReplyRequest,
+    ): Map<String, List<String>> {
+        val answers = answerMap(requestId, body)
+        if (answers.isEmpty() && body.answers.any { it.isNotEmpty() }) {
+            throw IOException("question $requestId is not cached yet — reopen the question to answer it")
+        }
+        return answers
     }
 
     private fun answerMap(
@@ -1096,5 +1160,8 @@ class OpenCodeApiAdapter(
 
         /** Upper bound for the form/permission lookup maps (see `trimFormMaps`). */
         private const val MAX_REMEMBERED_FORMS = 64
+
+        /** Largest file body read for the file viewer (the message path has its own). */
+        private const val MAX_FILE_BYTES = 8L * 1024 * 1024
     }
 }

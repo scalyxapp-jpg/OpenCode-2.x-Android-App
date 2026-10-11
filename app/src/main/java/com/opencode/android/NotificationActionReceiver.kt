@@ -55,13 +55,17 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val app = context.applicationContext
         BackendStore.init(app)
         AppSettingsStore.init(app)
-        BackendStore.mostRecent()?.let { saved ->
-            if (saved.password != null) {
-                // Atomic triple update (url + credentials + api instance).
-                backendSession.setBackend(saved.url, saved.username, saved.password)
-            } else {
-                backendSession.setBaseUrl(saved.url)
+        runCatching {
+            BackendStore.mostRecent()?.let { saved ->
+                if (saved.password != null) {
+                    // Atomic triple update (url + credentials + api instance).
+                    backendSession.setBackend(saved.url, saved.username, saved.password)
+                } else {
+                    backendSession.setBaseUrl(saved.url)
+                }
             }
+        }.onFailure { error ->
+            AppLog.e(APP_LOG_TAG, "notification reply: could not apply saved backend: ${error.message}")
         }
 
         val pending = goAsync()

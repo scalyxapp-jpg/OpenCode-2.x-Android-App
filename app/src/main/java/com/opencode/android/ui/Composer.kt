@@ -540,7 +540,9 @@ internal fun Composer(
                 ) {
                     IconButton(
                         onClick = onAddFiles,
-                        modifier = Modifier.size(40.dp),
+                        // 48 dp = platform minimum touch target; 40 dp missed it on
+                        // the two most-tapped controls of the composer.
+                        modifier = Modifier.size(48.dp),
                     ) {
                         Icon(
                             Icons.Default.Add,
@@ -660,7 +662,7 @@ internal fun Composer(
                             ),
                         modifier =
                             Modifier
-                                .size(40.dp)
+                                .size(48.dp)
                                 .graphicsLayer {
                                     scaleX = actionScale
                                     scaleY = actionScale

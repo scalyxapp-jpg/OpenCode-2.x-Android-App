@@ -46,6 +46,11 @@ class MainActivity : ComponentActivity() {
     // onNewIntent (app already running) updates the UI without a recreate.
     private val deepLinkSessionId = mutableStateOf<String?>(null)
 
+    // Monotonic counter for deep links, like newSessionSignal/shareSignal: keying the
+    // navigation effect on the session ID meant a SECOND tap on the same session
+    // (e.g. a new permission) produced no state change and did nothing.
+    private val deepLinkSignal = mutableStateOf(0L)
+
     // Monotonic signals for the other intent-driven entry points. The widget/tile
     // "new session" action and the Android share sheet bump these; Compose reacts
     // to the value change (a plain boolean would be missed on repeat taps).
@@ -129,6 +134,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     OpenCodeApp(
                         deepLinkSessionId = deepLinkSessionId.value,
+                        deepLinkSignal = deepLinkSignal.value,
                         newSessionSignal = newSessionSignal.value,
                         shareSignal = shareSignal.value,
                     )
@@ -155,6 +161,7 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(Notifier.EXTRA_SESSION_ID)?.let { sessionId ->
             intent.removeExtra(Notifier.EXTRA_SESSION_ID)
             deepLinkSessionId.value = sessionId
+            deepLinkSignal.value = deepLinkSignal.value + 1
         }
         when (intent.action) {
             ACTION_NEW_SESSION -> {

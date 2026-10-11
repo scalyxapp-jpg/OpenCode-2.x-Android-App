@@ -1,6 +1,7 @@
 package com.opencode.android
 import android.content.Context
 import com.opencode.android.data.AppSettingsStore
+import com.opencode.android.data.ArchivedSessionsStore
 import com.opencode.android.data.BackendStore
 import com.opencode.android.data.HomeCache
 import com.opencode.android.data.HomePrefs
@@ -41,6 +42,25 @@ object AppStartup {
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError
 
+    /**
+     * Clears both offline caches for a backend switch.
+     *
+     * Runs in [scope] (process lifetime) instead of the caller's composition scope:
+     * the previous `switchScope.launch { ... }` right before a `navigate()` was
+     * cancelled when the screen was disposed, so the caches of the OLD server could
+     * survive the switch and be shown on the new one.
+     */
+    fun clearCachesForBackendSwitch() {
+        scope.launch {
+            try {
+                MessageCache.clearAll()
+                HomeCache.clearAll()
+            } catch (e: Exception) {
+                AppLog.e(APP_LOG_TAG, "cache clear after backend switch failed: ${e.message}")
+            }
+        }
+    }
+
     fun initialize(context: Context) {
         val app = context.applicationContext
         scope.launch {
@@ -51,6 +71,7 @@ object AppStartup {
                 ModelVisibilityStore.init(app)
                 HomePrefs.init(app)
                 HomeCache.init(app)
+                ArchivedSessionsStore.init(app)
                 RecentModelsStore.init(app)
                 WidgetStateStore.init(app)
             } catch (e: Exception) {

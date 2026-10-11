@@ -6,6 +6,7 @@ import com.opencode.android.util.AppLog
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromStream
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -113,12 +114,31 @@ class BackendSession(
         username: String?,
         password: String?,
     ) = synchronized(configLock) {
+        if (!isUsableUrl(url)) {
+            AppLog.e(APP_LOG_TAG, "setBackend: ignoring unusable url")
+            return@synchronized
+        }
         config = BackendConfig(url, basicAuth(username, password), hostOf(url))
         _api = buildApi(url)
     }
 
+    /**
+     * True when [url] is a syntactically usable HTTP(S) base URL.
+     *
+     * Retrofit's `baseUrl()` throws `IllegalArgumentException` on a malformed
+     * address, and this is reached from `Application`/receiver code with whatever
+     * is in the store — a single corrupt entry used to crash the app before the
+     * first frame (and on every start, because the entry stayed).
+     */
+    private fun isUsableUrl(url: String): Boolean =
+        url.isNotBlank() && (url.trimEnd('/') + "/").toHttpUrlOrNull() != null
+
     fun setBaseUrl(url: String) =
         synchronized(configLock) {
+            if (!isUsableUrl(url)) {
+                AppLog.e(APP_LOG_TAG, "setBaseUrl: ignoring unusable url")
+                return@synchronized
+            }
             // Clear the credentials of the previous backend: otherwise they would be
             // sent to the new host until setAuth() runs (or forever, if the new
             // backend needs no auth).
@@ -157,8 +177,12 @@ class BackendSession(
         // Retrofit requires a syntactically valid base URL even before the user
         // has configured one. The stand-in is never dialed: on first launch the
         // backend picker is the start destination, and no request runs until a
-        // real address is set.
-        val safe = baseUrl.ifBlank { UNCONFIGURED_BASE_URL }
+        // real address is set. Anything still malformed falls back here instead of
+        // throwing through Application.onCreate.
+        val safe =
+            baseUrl
+                .takeIf { isUsableUrl(it) }
+                ?: UNCONFIGURED_BASE_URL.takeIf { isUsableUrl(baseUrl) } ?: UNCONFIGURED_BASE_URL
         val retrofit =
             Retrofit
                 .Builder()

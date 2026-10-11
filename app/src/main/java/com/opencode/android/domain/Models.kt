@@ -148,10 +148,13 @@ data class Cursor(
     val next: String? = null,
 )
 
-// Two message schemas exist side by side:
-// - GET /session/{id}/message → { info: { role, agent, model, time }, parts[] }
-// - GET /api/session/{id}/message → { type, agent, model, text?, content[], cost?, tokens? }
-// The app fetches both and merges them by id.
+// Two message SHAPES exist side by side in this model:
+// - { info: { role, agent, model, time }, parts[] }
+// - { type, agent, model, text?, content[], cost?, tokens? }
+// On V1 they came from different routes; V2 serves both through
+// `/api/session/{id}/message`, so the double fetch in ChatRepository exists to
+// reconcile/retry, not to switch schemas. Both shapes are still parsed so an
+// older server keeps working.
 @Serializable
 @Immutable
 data class Message(
@@ -289,7 +292,9 @@ data class QuestionReplyRequest(
 data class PermissionRequest(
     val id: String? = null,
     @SerialName("sessionID") val sessionId: String? = null,
-    // Tool/permission id, e.g. "bash" | "edit" | "webfetch".
+    // The server's `action` value for the pending request (V1 called the field
+// "permission", e.g. "bash"; V2 sends a free-form `action`, e.g. "Read file").
+// It is shown to the user and must not be interpreted as a fixed tool id.
     val permission: String? = null,
     val title: String? = null,
     val description: String? = null,
@@ -366,7 +371,10 @@ data class Agent(
 @Serializable
 @Immutable
 data class ProjectAgent(
-    val name: String,
+    /** Wire `id`: the value a prompt must reference. */
+    val id: String,
+    /** Wire `name`: the human-readable label (falls back to the id). */
+    val name: String? = null,
     val description: String? = null,
     val mode: String? = null,
 )
@@ -594,8 +602,10 @@ data class ModelRef(
     val variant: String? = null,
 )
 
-// SSE wire format (verified against the live server via browser trace):
-//   data: {"payload":{"id":"evt_...","type":"...","properties":{...}}}
+// LEGACY / proxy alias. The feed the app dials today (`/api/event`) sends
+//   data: {"id":"evt_...","created":...,"type":"...","data":{...},"durable":...}
+// and is decoded by V2EventNormalizer (which also accepts this older
+// payload-wrapped shape). Do not read this as the current wire contract.
 // The app previously parsed a top-level { type, data } shape, which never
 // matched — every event decoded to type=null and the live stream was dead.
 @Serializable

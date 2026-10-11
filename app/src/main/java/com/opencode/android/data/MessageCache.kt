@@ -36,6 +36,11 @@ object MessageCache : MessageStore {
     // re-parse JSON. Bounded (see MessageMemoryCache) so it cannot grow.
     private val memory = MessageMemoryCache()
 
+    // Bumped by clearAll(). A write that started before a backend switch must not
+    // publish afterwards: the cache of the PREVIOUS server would then be shown on the
+    // new one (its conversation, on someone else's server).
+    private val generation = java.util.concurrent.atomic.AtomicLong(0L)
+
     // Hoisted: fileFor() runs on every read and write.
     private val UNSAFE_FILENAME_CHARS = Regex("[^A-Za-z0-9_-]")
 
@@ -126,10 +131,14 @@ object MessageCache : MessageStore {
             } else {
                 messages
             }
+        val startedAtGeneration = generation.get()
+        if (generation.get() != startedAtGeneration) return
         // Warm the memory cache immediately, so the next open is instant even
         // when the disk write below is slow or fails.
         memory.put(sessionId, tail)
         withContext(Dispatchers.IO) {
+            // A clearAll() (backend switch) that landed meanwhile wins.
+            if (generation.get() != startedAtGeneration) return@withContext
             val file = fileFor(sessionId) ?: return@withContext
             try {
                 // Created on demand, on the IO dispatcher (see init()).
@@ -185,9 +194,12 @@ object MessageCache : MessageStore {
     }
 
     /** Drops every cached conversation (e.g. when switching backend). */
-    override suspend fun clearAll(): Unit =
+    override suspend fun clearAll(): Unit {
+        // Invalidate FIRST: any write still in flight for the previous backend is
+        // dropped instead of repopulating the cache after the clear.
+        generation.incrementAndGet()
+        memory.clear()
         withContext(Dispatchers.IO) {
-            memory.clear()
             try {
                 (dir ?: appContext?.let { File(it.filesDir, DIR) })
                     ?.listFiles()
@@ -198,6 +210,7 @@ object MessageCache : MessageStore {
                 AppLog.w(APP_LOG_TAG) { "MessageCache clearAll failed: ${e.message}" }
             }
         }
+    }
 
     suspend fun clear(sessionId: String) =
         withContext(Dispatchers.IO) {

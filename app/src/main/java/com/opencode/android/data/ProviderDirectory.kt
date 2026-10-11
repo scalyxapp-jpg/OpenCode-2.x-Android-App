@@ -89,6 +89,20 @@ class ProviderDirectory(
     }
 
     /**
+     * True only when the catalog is LOADED and the pair is genuinely absent.
+     *
+     * Callers that BLOCK an action on the result must use this, not [isAvailable]:
+     * while the catalog was still Loading (or after a failed fetch) [isAvailable]
+     * also answers false, so a perfectly valid model looked "not available on the
+     * server" and the send was cancelled. An unknown catalog must let the request
+     * through — the server is the authority.
+     */
+    fun isKnownMissing(
+        providerId: String,
+        modelId: String,
+    ): Boolean = _state.value is State.Ready && !isAvailable(providerId, modelId)
+
+    /**
      * Loads the catalog once. Concurrent callers share the same in-flight load
      * and a Ready catalog is not refetched; call [invalidate] to force a
      * refresh (e.g. after connecting/disconnecting a provider).

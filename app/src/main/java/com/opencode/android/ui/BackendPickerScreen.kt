@@ -134,6 +134,14 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                 // Verify the connection (health must be reachable).
                 val health = backendSession.api.health()
                 if (!health.healthy) {
+                    // Roll back like the exception path: leaving the session pointed at
+                    // an unverified server sent every later request (and the auto-resume)
+                    // to the wrong host. The saved entry is removed as well, otherwise a
+                    // dead backend stayed in the list and could be auto-selected on the
+                    // next start.
+                    backendSession.setBaseUrl(previousUrl)
+                    if (previousUrl.isBlank()) BackendStore.remove(backend.url)
+                    backends = BackendStore.backends()
                     errorText = serverUnhealthyMsg
                     connectingUrl = null
                     return@launch
@@ -161,6 +169,12 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                 // Roll back to the previously configured backend so a failed
                 // attempt cannot leave the app pointed at an unverified server.
                 backendSession.setBaseUrl(previousUrl)
+                // A backend that was just added and never verified is not kept: it
+                // would be auto-selected on the next start and fail there.
+                if (previousUrl.isBlank()) {
+                    BackendStore.remove(backend.url)
+                    backends = BackendStore.backends()
+                }
                 errorText = connectionFailedPrefix + (e.message ?: "")
                 connectingUrl = null
             }

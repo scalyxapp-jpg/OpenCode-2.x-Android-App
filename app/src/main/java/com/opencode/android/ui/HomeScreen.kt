@@ -22,7 +22,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.foundation.layout.Spacer
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Dns
@@ -117,19 +123,41 @@ internal fun HomeScreen(
     // Live global status feed: a turn started by another client / the web flips
     // the badge the instant it starts or ends. The periodic snapshot below is
     // the fallback that reconciles anything a dropped connection missed.
-    DisposableEffect(Unit) {
-        viewModel.startStatusTracking()
-        onDispose { viewModel.stopStatusTracking() }
+    // Lifecycle-bound: a plain DisposableEffect/LaunchedEffect is tied to the
+    // composition, not the lifecycle, so the status stream and the 5 s HTTP poll
+    // kept running with the screen off (the keep-alive service prevents the process
+    // from being frozen, so it really did poll all night).
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer =
+            androidx.lifecycle.LifecycleEventObserver { _, event ->
+                when (event) {
+                    androidx.lifecycle.Lifecycle.Event.ON_START -> viewModel.startStatusTracking()
+                    androidx.lifecycle.Lifecycle.Event.ON_STOP -> viewModel.stopStatusTracking()
+                    else -> Unit
+                }
+            }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.stopStatusTracking()
+        }
     }
-    // Keep the per-session running indicators fresh while the list is on screen.
-    LaunchedEffect(Unit) {
-        while (true) {
-            viewModel.refreshStatuses()
-            kotlinx.coroutines.delay(5000)
+    // Keep the per-session running indicators fresh while the list is VISIBLE.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            while (true) {
+                viewModel.refreshStatuses()
+                kotlinx.coroutines.delay(5000)
+            }
         }
     }
 
     val scopeName = uiState.selectedProject?.name ?: "…"
+    // Locally archived ids, kept as one set so the rows and the menu labels agree.
+    val archivedIds = remember(uiState.archivedRevision, uiState.sessions) {
+        com.opencode.android.data.ArchivedSessionsStore.ids()
+    }
     val filteredSessions =
         remember(
             uiState.sessions,
@@ -137,6 +165,11 @@ internal fun HomeScreen(
             uiState.showOnlyGuarded,
             uiState.showOnlyRunning,
             uiState.runningSessionIds,
+            // Also read by the block below; without it a change between
+            // running<->retrying did not recompute the list.
+            uiState.retryingSessionIds,
+            uiState.showArchived,
+            uiState.archivedRevision,
             // The body-search hits are filled asynchronously (MessageCache.search);
             // without this key the list was computed once with an empty set and
             // never recomputed, so content matches never showed up.
@@ -149,9 +182,22 @@ internal fun HomeScreen(
                 uiState.messageMatchIds,
             ).filter { !uiState.showOnlyRunning || it.id in uiState.runningSessionIds || it.id in uiState.retryingSessionIds }
         }
+    // Resolved OUTSIDE the remember block: its lambda is not composable, so
+    // stringResource cannot be called there.
+    val pinnedLabel = stringResource(R.string.group_sessions_pinned)
+    val todayLabel = stringResource(R.string.group_sessions_today)
+    val yesterdayLabel = stringResource(R.string.group_sessions_yesterday)
+    val olderLabel = stringResource(R.string.group_sessions_older)
     val grouped =
-        remember(filteredSessions, uiState.pinnedIds) {
-            groupSessions(filteredSessions, uiState.pinnedIds)
+        remember(filteredSessions, uiState.pinnedIds, pinnedLabel, todayLabel, yesterdayLabel, olderLabel) {
+            groupSessions(
+                filteredSessions,
+                uiState.pinnedIds,
+                pinnedLabel = pinnedLabel,
+                todayLabel = todayLabel,
+                yesterdayLabel = yesterdayLabel,
+                olderLabel = olderLabel,
+            )
         }
 
     Scaffold(
@@ -168,6 +214,34 @@ internal fun HomeScreen(
                         IconButton(onClick = { showPalette = true }) {
                             Icon(Icons.Default.Search, contentDescription = stringResource(R.string.settings_command_palette))
                         }
+                    }
+                    // Quick appearance cycle (system → light → dark): the setting
+                    // lived only in Settings, three taps away for a very common action.
+                    IconButton(onClick = {
+                        val next =
+                            when (appSettings.colorScheme) {
+                                "system" -> "light"
+                                "light" -> "dark"
+                                else -> "system"
+                            }
+                        AppSettingsStore.setColorScheme(next)
+                        toast(
+                            context,
+                            when (next) {
+                                "light" -> context.getString(R.string.appearance_light)
+                                "dark" -> context.getString(R.string.appearance_dark)
+                                else -> context.getString(R.string.appearance_system)
+                            },
+                        )
+                    }) {
+                        Icon(
+                            when (appSettings.colorScheme) {
+                                "light" -> Icons.Default.LightMode
+                                "dark" -> Icons.Default.DarkMode
+                                else -> Icons.Default.BrightnessAuto
+                            },
+                            contentDescription = stringResource(R.string.toggle_appearance),
+                        )
                     }
                     if (appSettings.showServerStatus) {
                         IconButton(onClick = {
@@ -248,9 +322,11 @@ internal fun HomeScreen(
     ) { padding ->
         // Pull-to-refresh: keeps the existing list on screen and shows the
         // indicator instead of blanking it (the skeleton is for first load).
-        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = { viewModel.loadSessions() },
+        // No PullToRefreshBox here: the inner one below already provides the
+        // gesture, and two nested boxes sharing `isRefreshing` showed the indicator
+        // twice and swallowed the project refresh depending on which consumed the
+        // drag.
+        Column(
             modifier =
                 Modifier
                     .fillMaxSize()
@@ -277,7 +353,10 @@ internal fun HomeScreen(
                         }
                     }
 
-                    uiState.error != null && uiState.sessions.isEmpty() && uiState.projects.isEmpty() -> {
+                    // No `projects.isEmpty()` requirement: the project list is usually
+                    // populated from the cache, and then a FAILED session load fell
+                    // through to "Nothing here yet" — an error looked like an empty list.
+                    uiState.error != null && uiState.sessions.isEmpty() -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             ErrorState(
                                 message = uiState.error ?: "",
@@ -334,6 +413,10 @@ internal fun HomeScreen(
                                         onToggleGuarded = viewModel::setShowOnlyGuarded,
                                         onlyRunning = uiState.showOnlyRunning,
                                         onToggleRunning = viewModel::setShowOnlyRunning,
+                                        showArchived = uiState.showArchived,
+                                        onToggleArchived = viewModel::setShowArchived,
+                                        archivedCount =
+                                            com.opencode.android.data.ArchivedSessionsStore.ids().size,
                                     )
                                 }
 
@@ -348,7 +431,13 @@ internal fun HomeScreen(
                                     item(key = "empty") {
                                         EmptyState(
                                             title =
-                                                if (uiState.searchQuery.isBlank()) {
+                                                if (uiState.showOnlyRunning) {
+                                                    // Filter-aware: "nothing here yet"
+                                                    // was misleading, the list IS the filter.
+                                                    stringResource(R.string.empty_running_title)
+                                                } else if (uiState.showArchived) {
+                                                    stringResource(R.string.empty_archived_title)
+                                                } else if (uiState.searchQuery.isBlank()) {
                                                     stringResource(R.string.empty_home_title)
                                                 } else {
                                                     stringResource(
@@ -357,17 +446,22 @@ internal fun HomeScreen(
                                                     )
                                                 },
                                             subtitle =
-                                                if (uiState.searchQuery.isBlank()) {
-                                                    stringResource(R.string.empty_home_hint)
-                                                } else {
-                                                    null
+                                                when {
+                                                    uiState.showOnlyRunning ||
+                                                        uiState.showArchived -> null
+                                                    uiState.searchQuery.isBlank() ->
+                                                        stringResource(R.string.empty_home_hint)
+                                                    else -> null
                                                 },
                                             icon = Icons.AutoMirrored.Filled.Chat,
                                             // A CTA inside the empty state: the only
                                             // other way in was the small "+" in the
                                             // search row above.
                                             action =
-                                                if (uiState.searchQuery.isBlank()) {
+                                                if (uiState.searchQuery.isBlank() &&
+                                                    !uiState.showOnlyRunning &&
+                                                    !uiState.showArchived
+                                                ) {
                                                     {
                                                         Button(onClick = {
                                                             viewModel.createSession { onSessionClick(it.id) }
@@ -420,6 +514,8 @@ internal fun HomeScreen(
                                                 onClick = { onSessionClick(session.id) },
                                                 onRename = { title -> viewModel.renameSession(session, title) },
                                                 onArchive = { viewModel.archiveSession(session) },
+                                                onUnarchive = { viewModel.unarchiveSession(session) },
+                                                isArchived = session.id in archivedIds,
                                                 onDelete = { viewModel.deleteSession(session) },
                                                 sharedScope = sharedScope,
                                                 animatedVisibilityScope = animatedVisibilityScope,
@@ -479,7 +575,7 @@ internal fun HomeScreen(
                     Text(
                         text =
                             when {
-                                !serverStatusChecked -> stringResource(R.string.loading_providers)
+                                !serverStatusChecked -> stringResource(R.string.server_status_checking)
                                 healthy == true -> stringResource(R.string.healthy)
                                 else -> stringResource(R.string.unreachable)
                             },
@@ -753,6 +849,9 @@ private fun SearchRow(
     onToggleGuarded: (Boolean) -> Unit,
     onlyRunning: Boolean,
     onToggleRunning: (Boolean) -> Unit,
+    showArchived: Boolean,
+    onToggleArchived: (Boolean) -> Unit,
+    archivedCount: Int = 0,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // Search field + "new session" share ONE row: the field gets all the
@@ -794,6 +893,19 @@ private fun SearchRow(
                         modifier = Modifier.size(18.dp),
                     )
                 },
+                // One-tap reset: the list filters live, so clearing the query is a
+                // very common action.
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { onQueryChange("") }) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = stringResource(R.string.clear_search),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                },
                 singleLine = true,
                 shape = CircleShape,
                 textStyle = MaterialTheme.typography.bodyMedium,
@@ -831,17 +943,38 @@ private fun SearchRow(
                 onClick = { onToggleRunning(!onlyRunning) },
                 label = { Text(stringResource(R.string.running_only)) },
             )
+            // Locally archived sessions are hidden by default; this chip brings
+            // them back (there is no server-side archive in V2).
+            FilterChip(
+                selected = showArchived,
+                onClick = { onToggleArchived(!showArchived) },
+                label = {
+                    // Count included: archiving hides sessions, so the user must be
+                    // able to see that something is hidden (and how much).
+                    Text(
+                        if (archivedCount > 0) {
+                            stringResource(R.string.archived) + " ($archivedCount)"
+                        } else {
+                            stringResource(R.string.archived)
+                        },
+                    )
+                },
+            )
             FilterChip(
                 selected = onlyGuarded,
                 onClick = { onToggleGuarded(!onlyGuarded) },
+                // Visible label (the icon alone gave sighted users no clue what the
+                // chip filters, unlike its "Running" neighbour).
                 label = {
-                    Icon(
-                        Icons.Default.Security,
-                        // An unlabelled 14 dp icon gave no clue what was filtered;
-                        // the description is the only affordance for screen readers.
-                        contentDescription = stringResource(R.string.guarded_only),
-                        modifier = Modifier.size(14.dp),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Security,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(stringResource(R.string.guard_title))
+                    }
                 },
             )
         }
@@ -868,6 +1001,10 @@ internal fun filterSessions(
 internal fun groupSessions(
     sessions: List<Session>,
     pinnedIds: Set<String>,
+    pinnedLabel: String = "Pinned",
+    todayLabel: String = "Today",
+    yesterdayLabel: String = "Yesterday",
+    olderLabel: String = "Older",
 ): List<Pair<String, List<Session>>> {
     val cal = Calendar.getInstance()
     cal.set(Calendar.HOUR_OF_DAY, 0)
@@ -893,10 +1030,10 @@ internal fun groupSessions(
         // Pinned first and removed from the date buckets so a session never
         // appears twice.
         val pinned = sessions.filter { it.id in pinnedIds }
-        if (pinned.isNotEmpty()) add("Pinned" to pinned)
-        if (today.isNotEmpty()) add("Today" to today)
-        if (yesterday.isNotEmpty()) add("Yesterday" to yesterday)
-        if (older.isNotEmpty()) add("Older" to older)
+        if (pinned.isNotEmpty()) add(pinnedLabel to pinned)
+        if (today.isNotEmpty()) add(todayLabel to today)
+        if (yesterday.isNotEmpty()) add(yesterdayLabel to yesterday)
+        if (older.isNotEmpty()) add(olderLabel to older)
     }
 }
 
@@ -1193,6 +1330,9 @@ private fun SessionRow(
     onClick: () -> Unit,
     onRename: (String) -> Unit,
     onArchive: () -> Unit,
+    onUnarchive: () -> Unit = {},
+    /** True when this session is in the local archived set. */
+    isArchived: Boolean = false,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
     sharedScope: androidx.compose.animation.SharedTransitionScope? = null,
@@ -1264,7 +1404,7 @@ private fun SessionRow(
                         com.opencode.android.util
                             .sessionDisplayTitle(it)
                     }
-                        ?: "New session",
+                        ?: stringResource(R.string.new_session),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -1303,7 +1443,12 @@ private fun SessionRow(
                             color = badgeColor,
                         )
                         Text(
-                            text = if (isRetrying) "retrying" else "running",
+                            text =
+                                if (isRetrying) {
+                                    stringResource(R.string.session_retrying)
+                                } else {
+                                    stringResource(R.string.running)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = badgeColor,
@@ -1414,10 +1559,18 @@ private fun SessionRow(
                     },
                 )
                 DropdownMenuItem(
-                    text = { Text(stringResource(R.string.archive)) },
+                    text = {
+                        // Per ROW, not per view: labelling every row "Unarchive" in the
+                        // archived view made it a silent no-op for the others.
+                        Text(
+                            stringResource(
+                                if (isArchived) R.string.unarchive else R.string.archive,
+                            ),
+                        )
+                    },
                     onClick = {
                         showMore = false
-                        onArchive()
+                        if (isArchived) onUnarchive() else onArchive()
                     },
                 )
                 HorizontalDivider()

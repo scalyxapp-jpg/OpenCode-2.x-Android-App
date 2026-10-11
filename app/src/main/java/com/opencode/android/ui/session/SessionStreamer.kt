@@ -149,6 +149,26 @@ class SessionStreamer(
      * steps and the composer must keep showing "stop" between them.
      */
     fun finalize() {
+        // Fold still-unflushed deltas into `live` FIRST: the 16–50 ms flush window
+        // means `session.idle` can arrive before `flushNow` ran. Without this the
+        // blank branch below cleared `pendingPersist`, and the late flush then wrote
+        // the text into `live` with nothing left to clear it — the final answer
+        // stayed on screen twice (live block + persisted bubble).
+        if (state.pendingText.isNotEmpty() || state.pendingReasoning.isNotEmpty()) {
+            state =
+                state.copy(
+                    live =
+                        state.live.copy(
+                            response = capLive(state.live.response + state.pendingText),
+                            reasoning = capLive(state.live.reasoning + state.pendingReasoning),
+                        ),
+                    pendingText = "",
+                    pendingReasoning = "",
+                )
+        }
+        // Always stop the delta flush: it must not fire after the step is finalized.
+        flushJob?.cancel()
+        flushJob = null
         val live = state.live
         if (live.response.isBlank() && live.reasoning.isBlank() && live.parts.isEmpty()) {
             // Nothing to persist; make sure a timer from a previous turn cannot

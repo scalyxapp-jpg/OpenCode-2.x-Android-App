@@ -21,6 +21,9 @@ object ModelVisibilityStore {
     private const val KEY_MODEL = "model"
     private const val KEY_SELECTION = "model-selection"
 
+    /** Upper bound on remembered per-session selections (see saveSelection). */
+    private const val MAX_REMEMBERED_SESSIONS = 100
+
     @Volatile
     private var prefs: SharedPreferences? = null
 
@@ -190,6 +193,13 @@ object ModelVisibilityStore {
             val effectiveVariant = variant ?: existing?.optStringOrNull("variant")
             if (!effectiveVariant.isNullOrBlank()) entry.put("variant", effectiveVariant)
             sessions.put(sessionId, entry)
+            // Bounded: one entry per session ever opened grew the prefs blob (and the
+            // main-thread write) without limit. Keep the newest N keys.
+            while (sessions.length() > MAX_REMEMBERED_SESSIONS) {
+                val oldest = sessions.keys().asSequence().firstOrNull() ?: break
+                if (oldest == sessionId) break
+                sessions.remove(oldest)
+            }
             obj.put("session", sessions)
             p()?.edit { putString(KEY_SELECTION, obj.toString()) }
         }

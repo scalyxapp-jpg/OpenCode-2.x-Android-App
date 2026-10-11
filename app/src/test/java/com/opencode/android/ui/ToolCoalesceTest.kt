@@ -18,9 +18,9 @@ class ToolCoalesceTest {
         val parts = listOf(tool("read", "1"), tool("read", "2"), tool("read", "3"))
         val out = coalesceConsecutiveTools(parts)
         assertEquals(1, out.size)
-        assertEquals(3, out[0].second)
+        assertEquals(3, out[0].count)
         // The newest part is kept: it carries the current status.
-        assertEquals("3", out[0].first.id)
+        assertEquals("3", out[0].part.id)
     }
 
     @Test
@@ -28,7 +28,7 @@ class ToolCoalesceTest {
         val parts = listOf(tool("read", "1"), tool("bash", "2"), tool("read", "3"))
         val out = coalesceConsecutiveTools(parts)
         assertEquals(3, out.size)
-        assertEquals(listOf(1, 1, 1), out.map { it.second })
+        assertEquals(listOf(1, 1, 1), out.map { it.count })
     }
 
     @Test
@@ -36,7 +36,7 @@ class ToolCoalesceTest {
         val parts = listOf(tool("read", "1"), tool("read", "2"), tool("bash", "3"), tool("read", "4"))
         val out = coalesceConsecutiveTools(parts)
         assertEquals(3, out.size)
-        assertEquals(listOf(2, 1, 1), out.map { it.second })
+        assertEquals(listOf(2, 1, 1), out.map { it.count })
     }
 
     @Test
@@ -48,5 +48,15 @@ class ToolCoalesceTest {
     @Test
     fun `empty input yields empty output`() {
         assertEquals(0, coalesceConsecutiveTools(emptyList()).size)
+    }
+
+    @Test
+    fun `the group id stays the FIRST call while the run grows`() {
+        // The row is keyed on this id; using the replacing representative made an
+        // expanded tool row collapse on every additional call.
+        val parts = listOf(tool("read", "1"), tool("read", "2"), tool("read", "3"))
+        val out = coalesceConsecutiveTools(parts)
+        assertEquals("1", out[0].id)
+        assertEquals("3", out[0].part.id)
     }
 }

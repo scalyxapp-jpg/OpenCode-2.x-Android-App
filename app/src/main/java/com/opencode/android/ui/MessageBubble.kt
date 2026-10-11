@@ -244,6 +244,9 @@ internal fun MessageBubble(
                     ),
                 )
             }
+            // Also reachable on OWN messages: "Revert message" only exists for user
+            // messages, and that is exactly where the visible button was missing.
+            MessageActionsButton(onClick = { showContextMenu = true })
         } else {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -382,14 +385,7 @@ Row(
                         // Discoverable entry point for Copy / Regenerate / Fork /
                         // Revert: without it the only way in was an invisible
                         // long-press.
-                        IconButton(onClick = { showContextMenu = true }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = stringResource(R.string.more_options),
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            )
-                        }
+                        MessageActionsButton(onClick = { showContextMenu = true })
                     }
                 }
             }
@@ -471,4 +467,21 @@ Row(
             )
         }
     } // end Box
+}
+
+/**
+ * The visible entry point for the per-message menu. Rendered for BOTH roles:
+ * "Revert message" only exists on user messages, and that is exactly where the
+ * button used to be missing — the action was reachable only by long-press.
+ */
+@Composable
+private fun MessageActionsButton(onClick: () -> Unit) {
+    IconButton(onClick = onClick) {
+        Icon(
+            Icons.Default.MoreVert,
+            contentDescription = stringResource(R.string.more_options),
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        )
+    }
 }

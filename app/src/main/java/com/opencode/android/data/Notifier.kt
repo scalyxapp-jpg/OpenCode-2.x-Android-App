@@ -30,6 +30,14 @@ import com.opencode.android.util.AppLog
 object Notifier {
     private const val CH_AGENT = "agent"
     private const val CH_PERMISSIONS = "permissions"
+
+    /**
+     * HIGH-importance twin of [CH_PERMISSIONS], used for the ACTIONABLE prompts
+     * (tool permission / agent question). From API 26 the channel importance decides
+     * whether a notification may appear as a heads-up, so these could never surface
+     * while they lived on the DEFAULT-importance channel.
+     */
+    private const val CH_ACTIONABLE = "permissions-urgent"
     private const val CH_ERRORS = "errors"
     private const val CH_CONNECTION = "connection"
 
@@ -109,6 +117,16 @@ object Notifier {
         createChannel(manager, CH_AGENT, context.getString(R.string.settings_agent))
         createChannel(manager, CH_PERMISSIONS, context.getString(R.string.settings_permissions))
         createChannel(manager, CH_ERRORS, context.getString(R.string.settings_errors))
+        // A blocked agent must be answerable from the shade, so the ACTIONABLE
+        // prompts get their own HIGH-importance channel: from API 26 the channel
+        // decides visibility and setPriority(PRIORITY_HIGH) is ignored, so the
+        // allow/deny actions never appeared as a heads-up notification.
+        createChannel(
+            manager,
+            CH_ACTIONABLE,
+            context.getString(R.string.settings_permissions),
+            NotificationManager.IMPORTANCE_HIGH,
+        )
     }
 
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.O)
@@ -191,7 +209,7 @@ object Notifier {
             val open = openAppIntent(context, sessionId, requestId.hashCode())
             val notification =
                 NotificationCompat
-                    .Builder(context, CH_PERMISSIONS)
+                    .Builder(context, CH_ACTIONABLE)
                     .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle(title)
                     .setContentText(text)
@@ -211,6 +229,10 @@ object Notifier {
                     .from(context)
                     .notify(permissionNotificationId(requestId), notification)
             } catch (e: SecurityException) {
+                // Undo the dedupe mark: the id was already recorded, so after the
+                // user granted POST_NOTIFICATIONS this still-pending request was
+                // never announced again — the agent stayed blocked silently.
+                forgetNotified(notifiedPermissions, requestId)
                 AppLog.e(APP_LOG_TAG, "Notifier: permission notify denied: ${e.message}")
             }
         }
@@ -259,7 +281,7 @@ object Notifier {
         val open = openAppIntent(context, sessionId ?: question.sessionId, question.id.hashCode())
         val notification =
             NotificationCompat
-                .Builder(context, CH_PERMISSIONS)
+                .Builder(context, CH_ACTIONABLE)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(text)
@@ -275,6 +297,8 @@ object Notifier {
                 .from(context)
                 .notify(questionNotificationId(question.id), notification)
         } catch (e: SecurityException) {
+            // Same as the permission path: keep it retryable after a grant.
+            forgetNotified(notifiedQuestions, question.id)
             AppLog.e(APP_LOG_TAG, "Notifier: question notify denied: ${e.message}")
         }
     }

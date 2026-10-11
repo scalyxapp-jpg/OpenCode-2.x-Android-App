@@ -1,6 +1,7 @@
 package com.opencode.android.data
 
 import android.content.Context
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import android.content.SharedPreferences
 import androidx.core.content.edit
 import org.json.JSONArray
@@ -116,7 +117,11 @@ object BackendStore {
                         .put("name", b.name ?: "")
                         .put("username", b.username)
                         // Never persist the Basic-auth password as plaintext.
-                        .put("password", encrypted ?: previous[b.url] ?: "")
+                        // Only fall back to the stored ciphertext when encryption
+                        // FAILED (fail-closed null). An intentionally cleared password
+                        // (b.password == null) must stay cleared, otherwise the old
+                        // secret came back and was sent as a stale Authorization header.
+                        .put("password", if (b.password == null) "" else encrypted ?: previous[b.url] ?: "")
                         .put("lastUsed", b.lastUsed),
                 )
             }
@@ -148,6 +153,15 @@ object BackendStore {
     ): Backend =
         synchronized(lock) {
             val normalized = normalize(url)
+            // Never persist an unusable address: it would be re-applied on every
+            // start (and on every notification reply) and crash the process.
+            if ((normalized.trimEnd('/') + "/").toHttpUrlOrNull() == null) {
+                com.opencode.android.util.AppLog.e(
+                    com.opencode.android.util.APP_LOG_TAG,
+                    "BackendStore.add: refusing malformed url",
+                )
+                return@synchronized Backend(url = normalized)
+            }
             val existing = backends().firstOrNull { it.url == normalized }
             val backend =
                 existing?.copy(

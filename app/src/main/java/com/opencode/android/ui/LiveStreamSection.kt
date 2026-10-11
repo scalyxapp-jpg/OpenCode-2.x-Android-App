@@ -106,10 +106,14 @@ internal fun LiveToolsItem(
             androidx.compose.runtime
                 .remember(live.parts) {
                     coalesceConsecutiveTools(live.parts)
-                }.forEachIndexed { index, (part, count) ->
+                }.forEachIndexed { index, group ->
+                    val part = group.part
+                    val count = group.count
                     // Stable per-row identity so a new tool row does not recompose
-                    // (and re-animate) every existing row.
-                    androidx.compose.runtime.key(part.id ?: "tool-$index") {
+                    // (and re-animate) every existing row. `group.id` is the FIRST
+                    // call of the run (the representative part changes on every
+                    // additional call).
+                    androidx.compose.runtime.key(group.id.ifBlank { "tool-$index" }) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = Modifier.weight(1f)) {
                                 ToolCallRow(
@@ -165,11 +169,14 @@ internal fun LiveStatusIndicator(
         InlineSpinner()
         // One Crossfade across the status phases: the label used to
         // hard-swap on every phase change (waiting → thinking → tools).
+        // `!connected` FIRST: with the stream dead, `thinking`/`compacting` keep
+        // their last value (no further events arrive), so the row said "thinking…"
+        // forever instead of showing that the connection is gone.
         val phase =
             when {
+                !connected -> 2
                 compacting -> 0
                 thinking -> 1
-                !connected -> 2
                 waiting -> 3
                 else -> 4
             }

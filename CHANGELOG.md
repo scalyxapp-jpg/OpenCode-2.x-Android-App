@@ -20,6 +20,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.3.0] - 2026-10-11
+
+Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and workflows.
+
+### Fixed (Auswahl)
+- **Session-Zustand**: `renameSession`/`compactSession`/Frage-Antworten schreiben nicht mehr in eine
+  inzwischen gewechselte Session (Session-Guard).
+- **Live-Buffer**: `finalize()` faltet noch nicht geflushte Deltas, sodass der letzte Text nicht
+  doppelt (Live-Block + persistierte Bubble) stehen bleibt.
+- **Abbruch**: Ein durch Session-Wechsel abgebrochener Send bereinigt den Echo-Id-Satz und stellt
+  den Entwurf wieder her.
+- **Cancellation**: `loadProjects`/`loadContext`/`loadFiles` schlucken `CancellationException`
+  nicht mehr (Single-Flight blieb sonst wirkungslos, falsche Fehlermeldungen).
+- **Backend**: Ungültige gespeicherte URLs können den Prozess nicht mehr beim Start/Receiver
+  crashen (`isUsableUrl` + `runCatching` + Validierung beim Speichern); der „unhealthy"-Pfad rollt
+  sauber zurück.
+- **Cache-Wechsel**: Offline-Caches werden prozessweit und generationsgesichert geleert, sodass
+  Daten des alten Servers nicht beim neuen erscheinen.
+- **BackendStore**: Ein absichtlich gelöschtes Passwort wird nicht mehr „wiederbelebt".
+- **Datei-Viewer**: Lesen mit Obergrenze statt unbegrenztem `string()` (OOM vermieden).
+- **Benachrichtigungen**: Actionable Prompts nutzen einen HIGH-Importance-Kanal (waren als
+  Heads-up wirkungslos); Dedupe-Markierung wird bei Zustellfehler zurückgenommen.
+- **Deep-Link**: monotoner Zähler, zweiter Tap auf dieselbe Session funktioniert wieder.
+- **Share**: Ziel wird live gelesen (geteilter Inhalt landet nicht mehr im falschen Chat).
+- **Polling**: Home-Statusstream und 5-s-Poll sind lifecycle-gebunden, der Chat-Poll pausiert im
+  Hintergrund (Akku/Daten).
+- **Provider-Katalog**: „nicht geladen" ≠ „nicht verfügbar" (`isKnownMissing`) — ein Send wird nicht
+  mehr fälschlich abgebrochen.
+- **Agenten**: Wire-`name` (Anzeigename) wird nicht mehr verworfen.
+- **Semantik**: „Review"-Tab heißt jetzt „Session info"; ein fehlgeschlagener Session-Load sieht
+  nicht mehr wie eine leere Liste aus; „Reconnecting" hat Vorrang vor „Thinking"; Server-Status
+  sagt „Checking the server…"; Running/Retrying-Badges und Gruppen-Titel lokalisiert.
+
+### Changed / Added
+- **Archivieren wirkt jetzt**: V2 hat keinen Server-Archiv-Schreibpfad, daher wird lokal
+  archiviert (mit Undo-Aktion und „Archived"-Filter inkl. Anzahl); der alte Aufruf tat nichts.
+- **UX**: sichtbarer Aktions-Button (⋮) auch bei eigenen Nachrichten, Löschbestätigung für
+  Backends auch in den Settings, sichtbares Label für den Guard-Filter, Suchfeld mit Ein-Tap-
+  Leeren, 48-dp-Touchziele im Composer, filter-bewusster Leerzustand.
+- **Verbesserungen**: „Close all tabs", Schnellumschaltung des Erscheinungsbilds, persistente
+  Home-Filterchips, „Copy conversation" (Transkript), Anzahl im Archived-Chip.
+
 ## [1.2.1] - 2026-10-11
 
 ### Fixed
@@ -181,7 +223,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.1.0...v1.1.1

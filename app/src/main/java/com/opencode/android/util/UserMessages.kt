@@ -18,13 +18,21 @@ import kotlinx.coroutines.flow.asSharedFlow
  */
 object UserMessages {
     sealed interface Event {
+        /** Optional action rendered as a Snackbar button (e.g. "Undo"). */
+        val actionLabel: String?
+        val onAction: (() -> Unit)?
+
         data class Res(
             @StringRes val id: Int,
             val args: List<Any> = emptyList(),
+            override val actionLabel: String? = null,
+            override val onAction: (() -> Unit)? = null,
         ) : Event
 
         data class Raw(
             val text: String,
+            override val actionLabel: String? = null,
+            override val onAction: (() -> Unit)? = null,
         ) : Event
     }
 
@@ -58,6 +66,20 @@ object UserMessages {
     ) {
         if (args.any { it is String && isCancellationNoise(it) }) return
         emit(Event.Res(id, args.toList()), "$id:${args.joinToString("|")}")
+    }
+
+    /**
+     * Posts a message with an action button (e.g. "Undo" after a destructive
+     * action). Destructive actions must be reversible; the Snackbar host in
+     * [com.opencode.android.ui.OpenCodeApp] invokes [onAction].
+     */
+    fun postWithAction(
+        @StringRes id: Int,
+        actionLabel: String,
+        onAction: () -> Unit,
+        vararg args: Any,
+    ) {
+        emit(Event.Res(id, args.toList(), actionLabel, onAction), "$id:${args.joinToString("|")}")
     }
 
     fun post(text: String) {

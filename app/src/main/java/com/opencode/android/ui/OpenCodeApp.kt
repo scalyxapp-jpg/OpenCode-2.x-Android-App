@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -114,6 +115,7 @@ internal fun OpenCodeApp(
     deepLinkSessionId: String? = null,
     newSessionSignal: Long = 0L,
     shareSignal: Long = 0L,
+    deepLinkSignal: Long = 0L,
 ) {
     val backendSession = LocalBackendSession.current
     val providerDirectory = LocalProviderDirectory.current
@@ -237,13 +239,18 @@ internal fun OpenCodeApp(
                             event.text
                         }
                     }
-                snackbarHostState.showSnackbar(
-                    message = text,
-                    duration = androidx.compose.material3.SnackbarDuration.Long,
-                    // Long-lived error toasts need an explicit exit; otherwise
-                    // they sit for the full duration with no recourse.
-                    withDismissAction = true,
-                )
+                val result =
+                    snackbarHostState.showSnackbar(
+                        message = text,
+                        actionLabel = event.actionLabel,
+                        duration = androidx.compose.material3.SnackbarDuration.Long,
+                        // Long-lived error toasts need an explicit exit; otherwise
+                        // they sit for the full duration with no recourse.
+                        withDismissAction = true,
+                    )
+                if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                    event.onAction?.invoke()
+                }
             }
         }
         val showNav =
@@ -349,6 +356,23 @@ internal fun OpenCodeApp(
                                                     modifier = Modifier.padding(0.dp),
                                                 )
                                             }
+                                            if (tab.sessionId == activeTabId) {
+                                                // Closing every tab one by one was the only
+                                                // way back to a clean slate.
+                                                IconButton(
+                                                    onClick = {
+                                                        openTabs = emptyList()
+                                                        activeTabId = null
+                                                    },
+                                                    modifier = Modifier.padding(0.dp),
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.ClearAll,
+                                                        contentDescription = stringResource(R.string.close_all_tabs),
+                                                        modifier = Modifier.padding(0.dp),
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -448,14 +472,20 @@ internal fun OpenCodeApp(
                         val backendConfigured =
                             remember(savedBackend) {
                                 savedBackend?.let { backend ->
-                                    backendSession.setBaseUrl(backend.url)
-                                    if (!backend.password.isNullOrBlank()) {
-                                        backendSession.setAuth(
-                                            backend.username.ifBlank {
-                                                BackendStore.DEFAULT_USERNAME
-                                            },
-                                            backend.password,
-                                        )
+                                    // Belt and braces: a stored address can be
+                                    // malformed, and this runs during composition.
+                                    runCatching {
+                                        backendSession.setBaseUrl(backend.url)
+                                        if (!backend.password.isNullOrBlank()) {
+                                            backendSession.setAuth(
+                                                backend.username.ifBlank {
+                                                    BackendStore.DEFAULT_USERNAME
+                                                },
+                                                backend.password,
+                                            )
+                                        }
+                                    }.onFailure { error ->
+                                        AppLog.e(APP_LOG_TAG, "auto-connect failed: ${error.message}")
                                     }
                                     true
                                 } ?: false
@@ -468,7 +498,9 @@ internal fun OpenCodeApp(
                             androidx.compose.runtime.saveable.rememberSaveable {
                                 androidx.compose.runtime.mutableStateOf(false)
                             }
-                        LaunchedEffect(deepLinkSessionId) {
+                        // Keyed on the monotonic signal, not the id: a repeated deep
+                        // link to the same session must re-run (see MainActivity).
+                        LaunchedEffect(deepLinkSignal) {
                             val backend = savedBackend ?: return@LaunchedEffect
                             val deepLinked = deepLinkSessionId != null
                             if (!deepLinked && resumeDone.value) return@LaunchedEffect
@@ -522,9 +554,14 @@ internal fun OpenCodeApp(
                         // first chat that opens.
                         LaunchedEffect(shareSignal) {
                             if (shareSignal <= 0L) return@LaunchedEffect
-                            val target = savedSessionId
+                            // Read the CURRENT last session, not the value remembered
+                            // at Activity start: `savedSessionId` is frozen for the
+                            // lifetime of the composition, so a share made while
+                            // another chat was open landed in the wrong conversation.
+                            val target = LastSessionStore.sessionId() ?: savedSessionId
+                            val title = LastSessionStore.title() ?: savedSessionTitle
                             if (target != null) {
-                                openSession(target, savedSessionTitle ?: "Session")
+                                openSession(target, title ?: "Session")
                             } else {
                                 navController.navigate(Routes.HOME) { launchSingleTop = true }
                             }
@@ -586,7 +623,6 @@ internal fun OpenCodeApp(
                                 )
                             }
                             composable(Routes.HOME) {
-                                val switchScope = rememberCoroutineScope()
                                 HomeScreen(
                                     sharedScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this,
@@ -607,10 +643,9 @@ internal fun OpenCodeApp(
                                         // the new server and would leave another server's
                                         // conversation text on disk.
                                         LastSessionStore.clear()
-                                        switchScope.launch {
-                                            MessageCache.clearAll()
-                                            HomeCache.clearAll()
-                                        }
+                                        // Process-scoped: a composition scope would be
+                                        // cancelled by the navigation below.
+                                        com.opencode.android.AppStartup.clearCachesForBackendSwitch()
                                         navController.navigate(Routes.BACKENDS) {
                                             popUpTo(0) { inclusive = true }
                                         }
@@ -641,7 +676,6 @@ internal fun OpenCodeApp(
                                 )
                             }
                             composable(Routes.SETTINGS) {
-                                val settingsSwitchScope = rememberCoroutineScope()
                                 SettingsScreen(
                                     onBack = { navController.popBackStack() },
                                     // Same cleanup as the Home path: without it the
@@ -652,10 +686,7 @@ internal fun OpenCodeApp(
                                         openTabs = emptyList()
                                         activeTabId = null
                                         LastSessionStore.clear()
-                                        settingsSwitchScope.launch {
-                                            MessageCache.clearAll()
-                                            HomeCache.clearAll()
-                                        }
+                                        com.opencode.android.AppStartup.clearCachesForBackendSwitch()
                                         navController.navigate(Routes.BACKENDS) {
                                             popUpTo(0) { inclusive = true }
                                         }

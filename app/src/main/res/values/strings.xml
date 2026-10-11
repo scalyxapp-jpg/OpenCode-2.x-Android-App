@@ -346,4 +346,24 @@
     <string name="copy_session_id" formatted="false">Copy session ID</string>
     <string name="session_id_copied" formatted="false">Session ID copied</string>
     <string name="startup_partial_failure" formatted="false">Some saved data could not be loaded (%1$s). Settings or servers may be missing until the app is restarted.</string>
+    <string name="server_status_checking" formatted="false">Checking the server…</string>
+    <string name="session_retrying" formatted="false">retrying…</string>
+    <string name="group_sessions_pinned" formatted="false">Pinned</string>
+    <string name="group_sessions_today" formatted="false">Today</string>
+    <string name="group_sessions_yesterday" formatted="false">Yesterday</string>
+    <string name="group_sessions_older" formatted="false">Older</string>
+    <string name="clear_search" formatted="false">Clear search</string>
+    <string name="session_archived" formatted="false">Session archived (hidden on this device)</string>
+    <string name="unarchive" formatted="false">Unarchive</string>
+    <string name="archived" formatted="false">Archived</string>
+    <string name="close_all_tabs" formatted="false">Close all tabs</string>
+    <string name="toggle_appearance" formatted="false">Change appearance</string>
+    <string name="appearance_system" formatted="false">Appearance: system</string>
+    <string name="appearance_light" formatted="false">Appearance: light</string>
+    <string name="appearance_dark" formatted="false">Appearance: dark</string>
+    <string name="copy_transcript" formatted="false">Copy conversation</string>
+    <string name="transcript_copied" formatted="false">Conversation copied</string>
+    <string name="nothing_to_copy" formatted="false">Nothing to copy yet</string>
+    <string name="empty_running_title" formatted="false">No session is running</string>
+    <string name="empty_archived_title" formatted="false">Nothing archived on this device</string>
 </resources>

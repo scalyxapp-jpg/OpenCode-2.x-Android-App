@@ -58,6 +58,9 @@ internal fun SplashOverlay(onDone: () -> Unit) {
     LaunchedEffect(Unit) {
         delay(2_000) // Total splash duration: 2 seconds.
         splashVisible = false
+        // The callback is documented as "after the exit animation" but was never
+        // invoked, so a caller that reactivated the overlay would wait forever.
+        onDone()
     }
 
     // Infinite breathe & sweep animations (run while visible).

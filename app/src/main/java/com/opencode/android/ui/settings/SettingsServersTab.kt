@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,12 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
     // Connecting/sign-in still happens on the start screen, which owns the
     // password prompt, so this tab only manages the saved list.
     var backends by remember { mutableStateOf(BackendStore.backends()) }
+    // Hoisted out of the LazyColumn item: a `remember` inside a lazy item is
+    // disposed when it scrolls out of view, which silently discarded a half-typed
+    // guard token.
+    var guardTokenDraft by rememberSaveable { mutableStateOf<String?>(null) }
+    // Confirmation for the destructive remove (deletes the saved credentials too).
+    var deleteFor by remember { mutableStateOf<BackendStore.Backend?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     var newUrl by remember { mutableStateOf("") }
@@ -115,10 +122,9 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
                         renameText = backend.name ?: ""
                     }) { Text(stringResource(R.string.rename)) }
                     OutlinedButton(
-                        onClick = {
-                            BackendStore.remove(backend.url)
-                            backends = BackendStore.backends()
-                        },
+                        // Confirmation, like the start screen: this also deletes the
+                        // saved credentials.
+                        onClick = { deleteFor = backend },
                         // Destructive: tinted like every other "remove".
                         colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error,
@@ -129,7 +135,7 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
             }
         }
         item {
-            var guardToken by remember { mutableStateOf(AppSettingsStore.state.value.guardToken) }
+            val guardToken = guardTokenDraft ?: AppSettingsStore.state.value.guardToken
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -141,12 +147,16 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
                 )
                 OutlinedTextField(
                     value = guardToken,
-                    onValueChange = { guardToken = it },
+                    onValueChange = { guardTokenDraft = it },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Button(
-                    onClick = { AppSettingsStore.setGuardToken(guardToken) },
+                    onClick = {
+                        AppSettingsStore.setGuardToken(guardToken)
+                        // Clear the draft so the field reflects the stored value again.
+                        guardTokenDraft = null
+                    },
                     modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
                 ) { Text(stringResource(R.string.save)) }
             }
@@ -164,6 +174,33 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
             ) { Text(stringResource(R.string.switch_server)) }
         }
         item { Spacer(Modifier.height(MaterialTheme.spacing.large)) }
+    }
+
+    deleteFor?.let { backend ->
+        AlertDialog(
+            onDismissRequest = { deleteFor = null },
+            title = { Text(stringResource(R.string.remove_backend)) },
+            text = { Text(stringResource(R.string.remove_backend_confirm, backend.url)) },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = {
+                        BackendStore.remove(backend.url)
+                        backends = BackendStore.backends()
+                        deleteFor = null
+                    },
+                    colors =
+                        androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                ) { Text(stringResource(R.string.remove)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.OutlinedButton(onClick = { deleteFor = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 
     if (showAdd) {
