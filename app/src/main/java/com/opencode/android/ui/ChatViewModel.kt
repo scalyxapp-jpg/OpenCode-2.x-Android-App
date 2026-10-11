@@ -13,6 +13,7 @@ import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.SseClient
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.BUILTIN_COMMANDS
+import com.opencode.android.domain.IMPLEMENTED_BUILTIN_COMMANDS
 import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.ContextUsage
 import com.opencode.android.domain.FileEntry
@@ -943,7 +944,11 @@ class ChatViewModel
                     // with the same name wins (dedupe by name, builtin kept only
                     // when the server does not define it).
                     val names = server.map { it.name }.toSet()
-                    val commands = BUILTIN_COMMANDS.filterNot { it.name in names } + server
+                    // Only built-ins this app implements are listed; the rest of
+                    // the picker is exactly what the server offers.
+                    val commands =
+                        BUILTIN_COMMANDS.filterNot { it.name in names }
+                            .filter { canRunBuiltin(it.name) } + server
                     _uiState.update { it.copy(commands = commands) }
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "loadCommands failed: ${e.message}")
@@ -957,6 +962,24 @@ class ChatViewModel
         }
 
         // "/mcp" (web: "Toggle MCPs"): open the MCP dialog and refresh the list.
+        /**
+         * Built-ins this app actually IMPLEMENTS. Anything not in here must come
+         * from the server, so a client command can never be listed that would do
+         * nothing when tapped — listing an unimplemented "/name" (the TUI's own
+         * commands like /sessions or /themes have no server endpoint at all) is
+         * exactly the "command does nothing" trap.
+         */
+        private fun canRunBuiltin(name: String): Boolean = name in IMPLEMENTED_BUILTIN_COMMANDS
+
+        /** Runs an app-local built-in. Single dispatch for the picker and typing. */
+        fun runBuiltinCommand(name: String) {
+            when (name) {
+                "compact" -> compactSession()
+                "mcp" -> openMcpDialog()
+                else -> AppLog.w(APP_LOG_TAG) { "builtin /$name is not implemented; ignoring" }
+            }
+        }
+
         fun openMcpDialog() {
             _uiState.update { it.copy(mcpDialogVisible = true) }
             loadMcp()
@@ -2496,13 +2519,10 @@ class ChatViewModel
             // them from the "/" list; posting "/compact" as a prompt would do
             // nothing.
             com.opencode.android.ui.session
-                .parseBuiltinCommand(rawText, _uiState.value.commands)
+                .parseBuiltinCommand(rawText, _uiState.value.commands)?.takeIf { canRunBuiltin(it) }
                 ?.let { name ->
                     _uiState.update { it.copy(inputText = "", attachments = emptyList()) }
-                    when (name) {
-                        "compact" -> compactSession()
-                        "mcp" -> openMcpDialog()
-                    }
+                    runBuiltinCommand(name)
                     return
                 }
             com.opencode.android.ui.session

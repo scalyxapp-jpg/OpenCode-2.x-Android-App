@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   endpoint — the same path the TUI uses, where the command template is expanded —
   instead of being posted as literal text.
 
+- **The picker only offers commands that actually run.** Client built-ins are now
+  filtered against the set the app implements (`IMPLEMENTED_BUILTIN_COMMANDS`) and
+  run through one dispatch, so a command can no longer be listed and then silently
+  do nothing — the failure mode the TUI's own client-side commands (/sessions,
+  /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
+  test keeps the advertised list and the handlers in lockstep.
+
 ## [1.1.0] - 2026-10-11
 
 ### Changed

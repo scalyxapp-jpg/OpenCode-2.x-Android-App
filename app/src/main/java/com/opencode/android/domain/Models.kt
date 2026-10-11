@@ -783,6 +783,17 @@ fun commandTemplate(command: CommandEntry): String? =
 // web slash picker, which prepends these to the server commands.
 const val BUILTIN_SOURCE = "builtin"
 
+/**
+ * Built-ins this app actually IMPLEMENTS. The "/" picker may only list a command
+ * from here (or from the server), so a command is never offered that would do
+ * nothing when tapped — the TUI's own client commands (/sessions, /themes, /undo,
+ * /quit, …) have no server endpoint and therefore make no sense in this app.
+ *
+ * Every name here MUST have a branch in `ChatViewModel.runBuiltinCommand`;
+ * `BuiltinCommandsTest` guards that the list and the handlers cannot drift apart.
+ */
+val IMPLEMENTED_BUILTIN_COMMANDS: Set<String> = setOf("compact", "mcp")
+
 val BUILTIN_COMMANDS: List<CommandEntry> =
     listOf(
         CommandEntry(

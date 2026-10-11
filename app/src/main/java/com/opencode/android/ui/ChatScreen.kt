@@ -790,10 +790,7 @@ internal fun ChatScreen(
                                                 // Built-ins execute immediately; drop the "/name" text
                                                 // so the picker closes and the field is ready again.
                                                 viewModel.updateInput("")
-                                                when (name) {
-                                                    "compact" -> viewModel.compactSession()
-                                                    "mcp" -> viewModel.openMcpDialog()
-                                                }
+                                                viewModel.runBuiltinCommand(name)
                                             },
                                             onAgentSelect = viewModel::selectAgent,
                                             onModelSelect = viewModel::selectModel,
