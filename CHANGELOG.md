@@ -5,7 +5,40 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.17] - 2026-10-14
+## [1.5.18] - 2026-10-14
+
+### Fixed
+
+Zweiter Debug-Durchgang — vier echte Fehler, alle mit Beleg:
+
+- **„Auto-accept permissions" war ein toter Schalter.** Er stand in den Einstellungen (mit
+  dem Versprechen „Permission requests will be automatically approved"), wurde aber
+  **nirgends** angewandt — Grep über den ganzen Quellbaum: 0 Verwendungen außerhalb des
+  Settings-Screens. Jetzt antwortet er offene Freigaben mit `once` (keine dauerhafte Regel
+  als Nebenwirkung), **sowohl im Vordergrund** (Session-Liste) **als auch im Hintergrund**
+  (Event-Watcher — genau der Fall, für den die Einstellung gedacht ist: ein laufender Turn
+  soll nicht unbeaufsichtigt an einer Freigabe hängen bleiben). Antworten werden quittiert
+  („Auto-accepted N permission request(s)") bzw. protokolliert.
+- **`permission.asked`-Events trugen keine Request-Id.** Der Normalisierer behielt nur die
+  Session-Id — dadurch konnte das **ambient „Waiting for you · 1"** auf Widget/Notification/
+  Kachel **nie erscheinen** (der Zähler blieb zwangsläufig bei 0) und die Hintergrund-
+  Auto-Freigabe hatte keine Id zum Antworten. Beide Event-Varianten (`asked`/`replied`)
+  liefern jetzt `requestId` (auch `permission.replied` hat jetzt eine Zuordnung).
+- **Die laufende Notification konnte ohne Dienst zurückbleiben.** `refreshConnectionNotification`
+  postete die permanente Notification auch bei ausgeschaltetem „Keep connection alive" — das
+  Ergebnis war ein nicht wegwischbarer Eintrag ohne Besitzer. Jetzt nur, wenn
+  `ConnectionService.isRunning`.
+- **Die Quick-Settings-Kachel zeigte ihre Unterzeile nie.** Sie wurde ausschließlich in
+  `onClick` geschrieben — also genau in dem Moment, in dem die Kachel ins App-Overlay
+  zusammenklappt. Neu: Aktualisierung in `onStartListening`, wenn das Panel geöffnet wird.
+- **Explain-Karte beim Session-Wechsel:** eine laufende Seitenfrage blieb in der _neuen_
+  Chat-Ansicht stehen (sie gehörte zur alten). Sie wird jetzt mit der Konversation verworfen.
+
+### Added (tests)
+
+- `SseEventDecoderTest`: pinnt `requestId` auf `permission.asked` **und** `permission.replied`
+  — genau die Zusicherung, an der der Ambient-Zähler und die Auto-Freigabe hängen.
+  Gesamt im betroffenen Satz: **486 Tests, 0 Fehler**.
 
 ### Fixed
 

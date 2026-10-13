@@ -382,12 +382,28 @@ object V2EventNormalizer {
             }
 
             // --- requests -------------------------------------------------
+            // The pending count on the glance surfaces (and auto-approve) need the REQUEST
+            // id: without it the ambient "Waiting for you · N" could never increment.
             "permission.asked", "permission.v2.asked" -> {
-                Event(type = "permission.asked", properties = EventProperties(sessionId = d.str("sessionID")))
+                Event(
+                    type = "permission.asked",
+                    properties =
+                        EventProperties(
+                            sessionId = d.str("sessionID"),
+                            requestId = d.str("id") ?: d.str("requestID") ?: d.str("permissionID"),
+                        ),
+                )
             }
 
-            "permission.replied" -> {
-                Event(type = "permission.replied", properties = EventProperties(sessionId = d.str("sessionID")))
+            "permission.replied", "permission.v2.replied" -> {
+                Event(
+                    type = "permission.replied",
+                    properties =
+                        EventProperties(
+                            sessionId = d.str("sessionID"),
+                            requestId = d.str("id") ?: d.str("requestID") ?: d.str("permissionID"),
+                        ),
+                )
             }
 
             "question.asked", "question.v2.asked" -> {

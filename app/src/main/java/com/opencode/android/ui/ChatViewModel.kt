@@ -616,6 +616,9 @@ class ChatViewModel
                                 contextUsage = null,
                                 contextInfo = null,
                                 queuedMessages = emptyList(),
+                                // The explain card belongs to the chat it was asked in; the
+                                // running side question is dropped with the conversation.
+                                explain = null,
                             )
                         }
                         // The outbox is per session; show only this session's items.
@@ -2007,6 +2010,19 @@ class ChatViewModel
                     if (_uiState.value.session?.id != sessionId) return@launch
                     val pending = all.filter { it.sessionId == null || it.sessionId == sessionId }
                     _uiState.update { it.copy(pendingPermissions = pending) }
+                    // "Auto-accept permissions": answer what is pending instead of letting
+                    // an unattended turn stall on a prompt (the switch was inert before).
+                    if (com.opencode.android.data.AppSettingsStore.state.value.autoApprove &&
+                        pending.isNotEmpty()
+                    ) {
+                        val answered = autoApprovePending(pending, sessionId)
+                        if (answered > 0) {
+                            UserMessages.post(R.string.auto_approved, answered)
+                            if (_uiState.value.session?.id == sessionId) {
+                                _uiState.update { it.copy(pendingPermissions = emptyList()) }
+                            }
+                        }
+                    }
                     com.opencode.android.data.GlanceStore.update(
                         pendingDecisions =
                             pending.size + _uiState.value.pendingQuestions.size,
@@ -2023,6 +2039,37 @@ class ChatViewModel
         }
 
         /** [reply] is "once" | "always" | "reject" (protocol values). */
+
+        /**
+         * "Auto-accept permissions" — the setting existed and promised exactly this, but
+         * nothing ever acted on it (a dead switch). It now answers the pending requests of
+         * the OPEN session with `once`: the request is unblocked without leaving a durable
+         * rule behind (a saved "always" rule would be a side effect the user did not ask
+         * for here).
+         *
+         * @return how many requests were answered
+         */
+        private suspend fun autoApprovePending(
+            pending: List<PermissionRequest>,
+            sessionId: String,
+        ): Int {
+            var answered = 0
+            pending.forEach { request ->
+                val id = request.id ?: return@forEach
+                val ok =
+                    runCatching {
+                        com.opencode.android.data
+                            .replyPermission(api, sessionId, id, com.opencode.android.data.Notifier.REPLY_ONCE)
+                    }.getOrDefault(false)
+                if (ok) {
+                    answered++
+                    com.opencode.android.data.Notifier
+                        .clearPermission(id)
+                }
+            }
+            return answered
+        }
+
         fun replyPermission(
             requestId: String,
             reply: String,

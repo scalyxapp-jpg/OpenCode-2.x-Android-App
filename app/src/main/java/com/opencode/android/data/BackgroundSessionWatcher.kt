@@ -107,12 +107,14 @@ object BackgroundSessionWatcher {
         scope.launch {
             runCatching {
                 val start =
-                    java.util.Calendar.getInstance().apply {
-                        set(java.util.Calendar.HOUR_OF_DAY, 0)
-                        set(java.util.Calendar.MINUTE, 0)
-                        set(java.util.Calendar.SECOND, 0)
-                        set(java.util.Calendar.MILLISECOND, 0)
-                    }.timeInMillis
+                    java.util.Calendar
+                        .getInstance()
+                        .apply {
+                            set(java.util.Calendar.HOUR_OF_DAY, 0)
+                            set(java.util.Calendar.MINUTE, 0)
+                            set(java.util.Calendar.SECOND, 0)
+                            set(java.util.Calendar.MILLISECOND, 0)
+                        }.timeInMillis
                 api?.getStats(fromMs = start)?.cost?.let { GlanceStore.update(costTodayUsd = it) }
             }
         }
@@ -206,6 +208,32 @@ object BackgroundSessionWatcher {
                 (event.properties?.requestId ?: event.properties?.part?.id)?.let { id ->
                     pendingDecisionIds += id
                     GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                    // "Auto-accept permissions" — the switch must also work unattended,
+                    // which is exactly when the foreground loader never runs. Answer once
+                    // (no durable rule) so a running turn cannot stall on a prompt.
+                    if (event.type.startsWith("permission") &&
+                        AppSettingsStore.state.value.autoApprove &&
+                        eventSession != null
+                    ) {
+                        val client = api
+                        if (client != null) {
+                            runCatching {
+                                com.opencode.android.data.replyPermission(
+                                    api = client,
+                                    sessionId = eventSession,
+                                    requestId = id,
+                                    reply = Notifier.REPLY_ONCE,
+                                )
+                            }.onSuccess { ok ->
+                                if (ok) {
+                                    AppLog.d(APP_LOG_TAG) { "auto-approved permission $id" }
+                                    Notifier.clearPermission(id)
+                                    pendingDecisionIds -= id
+                                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

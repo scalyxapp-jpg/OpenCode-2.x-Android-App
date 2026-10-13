@@ -54,9 +54,25 @@ class NewSessionTileService : TileService() {
      * Shows the open decisions in the tile's subtitle (API 29+); a no-op below that.
      * Counters only — the tile never carries prompt text.
      */
+
+    /**
+     * Refreshes the subtitle whenever the Quick Settings panel opens.
+     *
+     * The subtitle used to be written only in [onClick] — i.e. at the moment the tile
+     * collapses into the app, so nobody ever saw it. Reading the ambient count here is
+     * what makes the tile a glance surface.
+     */
+    override fun onStartListening() {
+        super.onStartListening()
+        runCatching { updateSubtitle() }
+    }
+
     private fun updateSubtitle() {
         if (android.os.Build.VERSION.SDK_INT < 29) return
-        val pending = com.opencode.android.data.GlanceStore.facts().pendingDecisions
+        val pending =
+            com.opencode.android.data.GlanceStore
+                .facts()
+                .pendingDecisions
         val text =
             if (pending > 0) {
                 getString(com.opencode.android.R.string.glance_tile_pending, pending)

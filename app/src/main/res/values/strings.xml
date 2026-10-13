@@ -514,6 +514,7 @@
     <string name="outbox_discard" formatted="false">Discard all</string>
     <string name="outbox_hint" formatted="false">%1$d waiting — sent automatically once the server is reachable</string>
     <string name="outbox_gave_up" formatted="false">Giving up after %1$d attempts: %2$s</string>
+    <string name="auto_approved" formatted="false">Auto-accepted %1$d permission request(s)</string>
     <!-- Prompt history (TUI parity: recall what was sent before) -->
     <string name="history_title" formatted="false">Prompt history</string>
     <string name="history_empty" formatted="false">No prompts sent yet</string>

@@ -215,6 +215,10 @@ object Notifier {
      */
     fun refreshConnectionNotification() {
         val context = appContext ?: return
+        // Only refresh when the keep-alive service actually owns this notification:
+        // posting it without the service left an ongoing, undismissable notice behind
+        // after "Keep connection alive" was switched off.
+        if (!com.opencode.android.ConnectionService.isRunning) return
         try {
             NotificationManagerCompat.from(context).notify(ID_CONNECTION, connectionNotification())
         } catch (e: SecurityException) {
@@ -227,23 +231,33 @@ object Notifier {
         context: Context,
         facts: com.opencode.android.data.GlanceFacts,
     ): String {
-        val kind = com.opencode.android.data.GlanceStatus.kind(facts)
-        val progress = com.opencode.android.data.GlanceStatus.progress(facts)
+        val kind =
+            com.opencode.android.data.GlanceStatus
+                .kind(facts)
+        val progress =
+            com.opencode.android.data.GlanceStatus
+                .progress(facts)
         val base =
             when (kind) {
-                com.opencode.android.data.GlanceKind.WAITING ->
+                com.opencode.android.data.GlanceKind.WAITING -> {
                     context.getString(R.string.glance_waiting, facts.pendingDecisions)
+                }
 
-                com.opencode.android.data.GlanceKind.STUCK ->
+                com.opencode.android.data.GlanceKind.STUCK -> {
                     context.getString(R.string.glance_stuck, facts.failures)
+                }
 
-                com.opencode.android.data.GlanceKind.RUNNING ->
+                com.opencode.android.data.GlanceKind.RUNNING -> {
                     progress ?: context.getString(R.string.glance_running)
+                }
 
-                com.opencode.android.data.GlanceKind.IDLE ->
+                com.opencode.android.data.GlanceKind.IDLE -> {
                     context.getString(R.string.connection_active_sub)
+                }
             }
-        val cost = com.opencode.android.data.GlanceStatus.cost(facts.costTodayUsd)
+        val cost =
+            com.opencode.android.data.GlanceStatus
+                .cost(facts.costTodayUsd)
         return if (cost == null) base else "$base · " + context.getString(R.string.glance_cost_today, cost)
     }
 
@@ -307,8 +321,7 @@ object Notifier {
      * (the fixed [ID_AGENT] slot would let one overwrite the other), and a later
      * update for the same session replaces its own line.
      */
-    private fun sessionNotificationId(sessionId: String?): Int =
-        400_000 + ((sessionId ?: "agent").hashCode() and 0x0FFFFFFF)
+    private fun sessionNotificationId(sessionId: String?): Int = 400_000 + ((sessionId ?: "agent").hashCode() and 0x0FFFFFFF)
 
     /**
      * Posts one actionable notification per newly seen pending tool permission.
@@ -356,20 +369,17 @@ object Notifier {
                         0,
                         context.getString(R.string.permission_allow_once),
                         permissionAction(context, sessionId, requestId, REPLY_ONCE),
-                    )
-                    .addAction(
+                    ).addAction(
                         0,
                         // Matches the in-app dialog wording ("Allow always"), instead of
                         // the shorter "Always".
                         context.getString(R.string.permission_allow_always),
                         permissionAction(context, sessionId, requestId, REPLY_ALWAYS),
-                    )
-                    .addAction(
+                    ).addAction(
                         0,
                         context.getString(R.string.permission_deny),
                         permissionAction(context, sessionId, requestId, REPLY_REJECT),
-                    )
-                    .build()
+                    ).build()
             try {
                 NotificationManagerCompat
                     .from(context)
