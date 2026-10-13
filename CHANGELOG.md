@@ -5,7 +5,38 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.19] - 2026-10-14
+## [1.5.20] - 2026-10-14
+
+### Fixed
+
+- **Entscheidungen wurden nicht persistent gespeichert (gemeldet).** Drei Ursachen, alle
+  behoben — zwei davon hätten den Eintrag verloren, eine ihn nur _versteckt_:
+    1. **Stiller Abbruch ohne Projekt-Verzeichnis:** `addJournalEntry` stieg bei
+       `session.directory == null` mit `return` aus — **ohne Speichern und ohne Hinweis**.
+       Genau das passiert bei Sessions aus dem Offline-Cache (oder ganz neuen), und der Nutzer
+       sieht nur „nichts gespeichert". Jetzt greift ein Fallback-Schlüssel
+       (`directory` → `path` → global), die Entscheidung wird **immer** gespeichert und mit
+       „Decision captured (N in the journal)" **quittiert**.
+    2. **Schreiben konnte lautlos ins Leere gehen:** `persist()` tat nichts, solange
+       `appContext` noch nicht gesetzt war (Store-Init läuft asynchron). Jetzt gibt es
+       `ensureContext(context)` (der ViewModel hat ihn), ein **lauter Fehler-Log** statt
+       Stille, und geschrieben wird per `commit()` auf einem IO-Scope — ein schneller
+       Force-Stop direkt nach dem Speichern kann den Eintrag damit nicht mehr verlieren.
+       Dieselbe Absicherung bekamen `PromptHistoryStore` und `OutboxStore` (identische
+       Fehlerklasse).
+    3. **Der Filter konnte Einträge verstecken:** `visible()` verglich exakt auf das
+       Projekt-Verzeichnis. Ohne Verzeichnis (offline) war die Liste scheinbar leer, obwohl
+       Einträge auf der Platte lagen — für den Nutzer nicht unterscheidbar von „nicht
+       gespeichert". Jetzt gilt: kein Projektkontext → **alles** anzeigen; mit Projekt →
+       eigene **plus** globale Einträge. Nichts, was der Nutzer erfasst hat, kann fehlen.
+    - Zusätzlich: der Store lädt nur **einmal** von der Platte (`loadedFromDisk`), damit ein
+      spät laufendes `AppStartup` eine bereits erfasste Liste nicht überschreibt.
+
+### Added (tests)
+
+- `JournalPolicyTest`: Projekt-Schlüssel-Fallback (`directory` → `path` → global) und die
+  neue Sichtbarkeitsregel (Projekt zeigt eigene + globale; ohne Kontext alles).
+  Gesamt im betroffenen Satz: **484 Tests, 0 Fehler**.
 
 ### Fixed
 

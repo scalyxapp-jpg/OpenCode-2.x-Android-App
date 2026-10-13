@@ -1389,7 +1389,7 @@ class ChatViewModel
 
         /** Opens the project's decisions (a dialog, like skills/history/race). */
         fun openJournal() {
-            val dir = _uiState.value.session?.directory
+            val dir = journalProjectKey()
             _uiState.update {
                 it.copy(
                     journalDialogVisible = true,
@@ -1407,22 +1407,40 @@ class ChatViewModel
         }
 
         /** Captures a decision locally (`decisions are kept on the device`). */
+
+        /**
+         * Project key of the journal.
+         *
+         * Falls back to the session's path and finally to [DecisionJournalStore.GLOBAL_PROJECT]
+         * instead of bailing out: a session opened from the offline cache (or a brand-new one)
+         * has no `directory`, and silently dropping the decision there was the "decisions are
+         * not stored" bug. Entries without a project are shown for every project.
+         */
+        private fun journalProjectKey(): String {
+            val session = _uiState.value.session
+            return JournalPolicy.projectKey(session?.directory, session?.path)
+        }
+
         fun addJournalEntry(
             text: String,
             description: String?,
         ) {
-            val dir = _uiState.value.session?.directory ?: return
             if (text.isBlank()) return
+            // Guarantees the write can land even if AppStartup has not finished (it runs on
+            // IO, the UI can already be interactive).
+            DecisionJournalStore.ensureContext(appContext)
             DecisionJournalStore.add(
                 JournalEntry(
                     id = generateOpenCodeId("dec"),
-                    projectDir = dir,
+                    projectDir = journalProjectKey(),
                     text = text.trim(),
                     description = description?.trim()?.takeIf { it.isNotBlank() },
                     createdAt = System.currentTimeMillis(),
                 ),
             )
             refreshJournal()
+            // Visible confirmation: a silent save is indistinguishable from a lost one.
+            UserMessages.post(R.string.journal_saved, DecisionJournalStore.state.value.size)
         }
 
         fun deleteJournalEntry(id: String) {
@@ -1464,8 +1482,11 @@ class ChatViewModel
 
         /** Markdown export of the project's decisions ("decisions this week"). */
         fun exportJournal(): String {
-            val dir = _uiState.value.session?.directory
-            val project = _uiState.value.session?.path ?: dir ?: "project"
+            val dir = journalProjectKey()
+            val project =
+                _uiState.value.session?.path
+                    ?: _uiState.value.session?.directory
+                    ?: appContext.getString(R.string.journal_title)
             val entries = JournalPolicy.visible(DecisionJournalStore.state.value, dir)
             if (entries.isEmpty()) {
                 UserMessages.post(R.string.journal_export_empty)
@@ -1475,8 +1496,12 @@ class ChatViewModel
         }
 
         private fun refreshJournal() {
-            val dir = _uiState.value.session?.directory
-            _uiState.update { it.copy(journal = JournalPolicy.visible(DecisionJournalStore.state.value, dir)) }
+            // Same key as `addJournalEntry` (incl. the global fallback), otherwise an entry
+            // saved without a resolved directory was invisible right after saving.
+            val dir = journalProjectKey()
+            _uiState.update {
+                it.copy(journal = JournalPolicy.visible(DecisionJournalStore.state.value, dir))
+            }
         }
 
         /** True when this session already received the decision (row badge). */
@@ -1589,6 +1614,7 @@ class ChatViewModel
             text: String,
         ) {
             if (text.isBlank()) return
+            PromptHistoryStore.ensureContext(appContext)
             PromptHistoryStore.record(text = text, sessionId = sessionId)
             if (_uiState.value.historyDialogVisible) {
                 _uiState.update { it.copy(history = PromptHistoryStore.state.value) }
@@ -1605,6 +1631,7 @@ class ChatViewModel
             modelId: String?,
             variant: String?,
         ) {
+            OutboxStore.ensureContext(appContext)
             OutboxStore.add(
                 OutboxItem(
                     id = generateOpenCodeId("msg"),

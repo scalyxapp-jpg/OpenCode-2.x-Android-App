@@ -108,6 +108,14 @@ object PromptHistoryStore {
         _state.value = PromptHistoryCodec.decode(prefs()?.getString(KEY, null))
     }
 
+    /**
+     * Makes sure a write can land even if the process used the store before [init] finished
+     * (the same silent-drop class that lost journal entries).
+     */
+    fun ensureContext(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
+    }
+
     fun record(
         text: String,
         sessionId: String,

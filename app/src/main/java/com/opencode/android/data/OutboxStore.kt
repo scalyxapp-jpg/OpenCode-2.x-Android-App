@@ -75,6 +75,11 @@ object OutboxStore {
         _state.value = OutboxCodec.decode(prefs()?.getString(KEY, null))
     }
 
+    /** Same silent-drop protection as the journal/history stores. */
+    fun ensureContext(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
+    }
+
     /** Items of one session, oldest first (the order they were typed in). */
     fun forSession(sessionId: String): List<OutboxItem> = _state.value.filter { it.sessionId == sessionId }
 

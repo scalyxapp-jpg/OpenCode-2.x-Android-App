@@ -3,6 +3,7 @@ package com.opencode.android.data
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * A decision captured outside the chat (meeting, issue, walking) that should be binding
@@ -29,16 +30,41 @@ data class JournalEntry(
 object JournalPolicy {
     const val MAX_ENTRIES_PER_PROJECT = 200
 
-    /** Newest first, one project at a time (decisions are project-bound on purpose). */
+    /**
+     * Project key of the journal.
+     *
+     * `directory` wins, then `path`, else the GLOBAL key (""). The fallback matters: a
+     * session opened from the offline cache has no directory, and returning null there was
+     * the silent "decisions are not stored" bug. Global entries are visible everywhere.
+     */
+    fun projectKey(
+        directory: String?,
+        path: String?,
+    ): String =
+        directory?.takeIf { it.isNotBlank() }
+            ?: path?.takeIf { it.isNotBlank() }
+            ?: ""
+
+    /**
+     * Newest first, one project at a time (decisions are project-bound on purpose).
+     *
+     * `projectDir` semantics:
+     *  - `null` or blank → **everything** (no project context: an offline session has neither
+     *    directory nor path; hiding entries there looked like "not persisted").
+     *  - a project → its own entries **plus** the global ones (captured without a resolvable
+     *    project), so nothing the user captured can be missing from the list.
+     */
     fun visible(
         entries: List<JournalEntry>,
         projectDir: String?,
         query: String = "",
-    ): List<JournalEntry> =
-        entries
-            .filter { projectDir == null || it.projectDir == projectDir }
+    ): List<JournalEntry> {
+        val scope = projectDir?.takeIf { it.isNotBlank() }
+        return entries
+            .filter { scope == null || it.projectDir == scope || it.projectDir.isBlank() }
             .filter { query.isBlank() || it.text.contains(query, ignoreCase = true) }
             .sortedByDescending { it.createdAt }
+    }
 
     fun add(
         existing: List<JournalEntry>,
@@ -46,8 +72,9 @@ object JournalPolicy {
     ): List<JournalEntry> {
         val forProject = existing.filter { it.projectDir == entry.projectDir }
         val others = existing.filterNot { it.projectDir == entry.projectDir }
-        val trimmed = (listOf(entry) + forProject.sortedByDescending { it.createdAt })
-            .take(MAX_ENTRIES_PER_PROJECT)
+        val trimmed =
+            (listOf(entry) + forProject.sortedByDescending { it.createdAt })
+                .take(MAX_ENTRIES_PER_PROJECT)
         return others + trimmed
     }
 
@@ -74,9 +101,15 @@ object JournalPolicy {
             entries
                 .sortedBy { it.createdAt }
                 .joinToString("\n\n") { entry ->
-                    val when_ = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH)
-                        .format(java.util.Date(entry.createdAt))
-                    val where = entry.description?.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty()
+                    val when_ =
+                        java.text
+                            .SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ENGLISH)
+                            .format(java.util.Date(entry.createdAt))
+                    val where =
+                        entry.description
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { " — $it" }
+                            .orEmpty()
                     "- **$when_**$where: ${entry.text}"
                 }
         return "## Decisions — $projectLabel\n\n$body\n"
@@ -86,15 +119,36 @@ object JournalPolicy {
 object DecisionJournalStore {
     private const val KEY = "journal.entries"
 
+    /** Entries of a session/project that could not be resolved (offline, cached). */
+    const val GLOBAL_PROJECT = ""
+
     private val _state = MutableStateFlow<List<JournalEntry>>(emptyList())
     val state: StateFlow<List<JournalEntry>> = _state
 
     @Volatile
     private var appContext: Context? = null
 
+    @Volatile
+    private var loadedFromDisk = false
+
     fun init(context: Context) {
-        appContext = context.applicationContext
+        ensureContext(context)
+        // Load ONCE. A late init (AppStartup runs on IO) used to overwrite whatever the
+        // user had already captured in this process — with an older or empty list.
+        if (loadedFromDisk) return
+        loadedFromDisk = true
         _state.value = decode(prefs()?.getString(KEY, null))
+    }
+
+    /**
+     * Makes sure the store can WRITE, even when it is used before [init] finished.
+     *
+     * `persist()` silently did nothing while [appContext] was still null, which is why a
+     * decision could show up in the list and be gone after an app restart. Callers that
+     * have an application context (the ViewModel does) pass it here first.
+     */
+    fun ensureContext(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
     }
 
     fun add(entry: JournalEntry) = persist(JournalPolicy.add(_state.value, entry))
@@ -108,12 +162,34 @@ object DecisionJournalStore {
 
     private fun persist(entries: List<JournalEntry>) {
         _state.value = entries
-        val raw = kotlinx.serialization.json.Json.encodeToString(
-            kotlinx.serialization.builtins.ListSerializer(JournalEntry.serializer()),
-            entries,
-        )
-        prefs()?.edit()?.putString(KEY, raw)?.apply()
+        val raw =
+            kotlinx.serialization.json.Json.encodeToString(
+                kotlinx.serialization.builtins.ListSerializer(JournalEntry.serializer()),
+                entries,
+            )
+        val editor = prefs()?.edit()
+        if (editor == null) {
+            // Never swallow this: a decision the user captured must not vanish silently —
+            // that was exactly the "decisions are not persisted" report.
+            com.opencode.android.util.AppLog.e(
+                com.opencode.android.util.APP_LOG_TAG,
+                "journal: no context, entry NOT persisted (${entries.size} kept in memory)",
+            )
+            return
+        }
+        // commit() (not apply()) on IO: the journal is tiny and written only on user action,
+        // and this way the entry is on disk before the call returns — a fast force-stop right
+        // after saving could otherwise lose an apply()-based write.
+        writeScope.launch {
+            runCatching { editor.putString(KEY, raw).commit() }
+        }
     }
+
+    /** Own IO scope: persistence must not block the caller (the writer runs on the main thread). */
+    private val writeScope =
+        kotlinx.coroutines.CoroutineScope(
+            kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+        )
 
     private fun decode(raw: String?): List<JournalEntry> {
         if (raw.isNullOrBlank()) return emptyList()

@@ -9,8 +9,12 @@ import org.junit.Test
  * reads like a log — while the hand-over is recorded so a row can show it.
  */
 class JournalPolicyTest {
-    private fun entry(id: String, dir: String = "/p/one", at: Long = 1L, text: String = "text $id") =
-        JournalEntry(id = id, projectDir = dir, text = text, createdAt = at)
+    private fun entry(
+        id: String,
+        dir: String = "/p/one",
+        at: Long = 1L,
+        text: String = "text $id",
+    ) = JournalEntry(id = id, projectDir = dir, text = text, createdAt = at)
 
     @Test
     fun `the journal is scoped to one project and newest first`() {
@@ -49,6 +53,40 @@ class JournalPolicyTest {
         assertEquals(
             listOf("a"),
             JournalPolicy.visible(entries, "/p/one", "storage").map { it.id },
+        )
+    }
+
+    @Test
+    fun `the project key falls back instead of returning nothing`() {
+        // A session from the offline cache has no directory; a null key dropped the decision
+        // silently (the reported "decisions are not persisted").
+        assertEquals("/p/one", JournalPolicy.projectKey("/p/one", "/p/one/sub"))
+        assertEquals("/p/one", JournalPolicy.projectKey(null, "/p/one"))
+        assertEquals("", JournalPolicy.projectKey(null, null))
+        assertEquals("", JournalPolicy.projectKey("   ", "  "))
+    }
+
+    @Test
+    fun `global decisions never disappear from a project view`() {
+        val entries =
+            listOf(
+                JournalEntry(id = "g", projectDir = "", text = "global", createdAt = 5L),
+                JournalEntry(id = "p", projectDir = "/p/one", text = "project", createdAt = 6L),
+                JournalEntry(id = "o", projectDir = "/p/two", text = "other", createdAt = 7L),
+            )
+        // A project shows its own decisions plus the global ones (nothing captured is hidden).
+        assertEquals(
+            listOf("p", "g"),
+            JournalPolicy.visible(entries, "/p/one", "").map { it.id },
+        )
+        // Without a project context (offline session) everything is shown.
+        assertEquals(
+            listOf("o", "p", "g"),
+            JournalPolicy.visible(entries, null, "").map { it.id },
+        )
+        assertEquals(
+            listOf("o", "p", "g"),
+            JournalPolicy.visible(entries, "", "").map { it.id },
         )
     }
 
