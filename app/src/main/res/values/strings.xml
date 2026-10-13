@@ -183,7 +183,7 @@
     <string name="copy_message" formatted="false">Copy message</string>
     <string name="copy_response" formatted="false">Copy response</string>
     <string name="regenerate" formatted="false">Regenerate</string>
-    <string name="settings_notify_agent_sub" formatted="false">Show system notification when the agent is complete or needs attention</string>
+    <string name="settings_notify_agent_sub" formatted="false">Notify while the app is in the background: step progress and the finished answer (tap opens that session at that message)</string>
     <string name="settings_notify_permissions_sub" formatted="false">Show system notification when a permission is required</string>
     <string name="settings_notify_errors_sub" formatted="false">Show system notification when an error occurs</string>
     <string name="settings_file_tree" formatted="false">File tree</string>
@@ -424,4 +424,11 @@
     <string name="compaction_cancelled" formatted="false">Session compaction cancelled</string>
     <string name="compaction_interrupted" formatted="false">Session compaction interrupted</string>
     <string name="compaction_queued" formatted="false">Session compaction queued</string>
+    <string name="settings_agent_progress" formatted="false">Agent step progress</string>
+    <string name="notif_progress_text" formatted="false">Step %1$d · %2$s</string>
+    <string name="notif_progress_step_only" formatted="false">Step %1$d finished</string>
+    <string name="notif_finished_title" formatted="false">Answer ready — %1$s</string>
+    <string name="notif_finished_text" formatted="false">The agent finished this turn</string>
+    <string name="notif_failed_title" formatted="false">Turn failed — %1$s</string>
+    <string name="notif_failed_text" formatted="false">The turn ended with an error</string>
 </resources>

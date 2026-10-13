@@ -115,6 +115,8 @@ private fun compactTabTitle(title: String): String {
 @Composable
 internal fun OpenCodeApp(
     deepLinkSessionId: String? = null,
+    // Message a notification tap points at; the chat scrolls to it once.
+    deepLinkMessageId: String? = null,
     newSessionSignal: Long = 0L,
     shareSignal: Long = 0L,
     deepLinkSignal: Long = 0L,
@@ -673,6 +675,11 @@ internal fun OpenCodeApp(
                                 ChatScreen(
                                     sessionId = sessionId,
                                     shareSignal = shareSignal,
+                                    // Only the deep-linked session scrolls: the id
+                                    // belongs to the session the notification named.
+                                    deepLinkMessageId =
+                                        deepLinkMessageId
+                                            ?.takeIf { it.isNotBlank() && sessionId == deepLinkSessionId },
                                     sharedScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this,
                                     onBack = { navController.popBackStack() },

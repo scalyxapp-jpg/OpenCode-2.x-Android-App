@@ -39,15 +39,28 @@ object Notifier {
      */
     private const val CH_ACTIONABLE = "permissions-urgent"
     private const val CH_ERRORS = "errors"
+
+    /**
+     * Step-progress channel. Separate from [CH_AGENT] on purpose: the user can
+     * mute the "occasionally, a step is done" line without losing the finished
+     * summary, which is the notification that actually matters.
+     */
+    private const val CH_PROGRESS = "agent-progress"
     private const val CH_CONNECTION = "connection"
 
-    private const val ID_AGENT = 1001
     private const val ID_PERMISSIONS = 1002
     private const val ID_ERRORS = 1003
     const val ID_CONNECTION = 1004
 
     /** Extras on the tap intent so the app opens the session the event belongs to. */
     const val EXTRA_SESSION_ID = "com.opencode.android.extra.SESSION_ID"
+
+    /**
+     * Message a notification tap should land on. The chat scrolls to it once, so
+     * a "step done" alert opens the session at the work it describes instead of
+     * at some arbitrary position.
+     */
+    const val EXTRA_MESSAGE_ID = "com.opencode.android.extra.MESSAGE_ID"
     const val EXTRA_REQUEST_ID = "com.opencode.android.extra.REQUEST_ID"
     const val EXTRA_REPLY = "com.opencode.android.extra.REPLY"
 
@@ -115,6 +128,7 @@ object Notifier {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         createChannel(manager, CH_AGENT, context.getString(R.string.settings_agent))
+        createChannel(manager, CH_PROGRESS, context.getString(R.string.settings_agent_progress))
         createChannel(manager, CH_PERMISSIONS, context.getString(R.string.settings_permissions))
         createChannel(manager, CH_ERRORS, context.getString(R.string.settings_errors))
         // A blocked agent must be answerable from the shade, so the ACTIONABLE
@@ -183,16 +197,68 @@ object Notifier {
             .build()
     }
 
-    /** The agent finished a turn or needs attention. */
-    fun agent(
+    /**
+     * The agent finished a turn (the "end summary" notification).
+     *
+     * Silent while the app is in focus — the answer is on screen then — and
+     * deduplicated per [turnKey], because the same turn end can reach the app
+     * from several producers (the chat's own stream and the background watcher).
+     */
+    fun agentFinished(
         title: String,
         text: String,
         sessionId: String? = null,
+        messageId: String? = null,
+        turnKey: String? = null,
     ) {
+        if (AppVisibility.isForeground) return
         val settings = AppSettingsStore.state.value
-        if (settings.notifyAgent) post(CH_AGENT, ID_AGENT, title, text, sessionId)
+        if (!settings.notifyAgent) return
+        if (turnKey != null && !claimTurn(turnKey)) return
+        // Reuses the session's notification slot, so the finished summary replaces
+        // the last step alert of that session instead of stacking next to it.
+        post(CH_AGENT, sessionNotificationId(sessionId), title, text, sessionId, messageId)
         if (settings.soundAgentEnabled) playSound(settings.soundAgent)
     }
+
+    /**
+     * An intermediate step finished while the session keeps running.
+     *
+     * No sound: the progress line is informational, the finished summary is the
+     * one that may ring. The caller throttles (see SessionAlertPolicy).
+     */
+    fun agentProgress(
+        title: String,
+        text: String,
+        sessionId: String? = null,
+        messageId: String? = null,
+    ) {
+        if (AppVisibility.isForeground) return
+        if (!AppSettingsStore.state.value.notifyAgent) return
+        post(CH_PROGRESS, sessionNotificationId(sessionId), title, text, sessionId, messageId)
+    }
+
+    /** One notification per turn: the same turn end must not alert twice. */
+    private val finishedTurns: MutableSet<String> = LinkedHashSet()
+
+    private fun claimTurn(turnKey: String): Boolean =
+        synchronized(notifiedLock) {
+            if (!finishedTurns.add(turnKey)) return false
+            val iterator = finishedTurns.iterator()
+            while (finishedTurns.size > MAX_NOTIFIED_IDS && iterator.hasNext()) {
+                iterator.next()
+                iterator.remove()
+            }
+            true
+        }
+
+    /**
+     * Per-session notification id: two running sessions get two notifications
+     * (the fixed [ID_AGENT] slot would let one overwrite the other), and a later
+     * update for the same session replaces its own line.
+     */
+    private fun sessionNotificationId(sessionId: String?): Int =
+        400_000 + ((sessionId ?: "agent").hashCode() and 0x0FFFFFFF)
 
     /**
      * Posts one actionable notification per newly seen pending tool permission.
@@ -362,9 +428,10 @@ object Notifier {
         title: String,
         text: String,
         sessionId: String?,
+        messageId: String? = null,
     ) {
         val context = appContext ?: return
-        val openApp = openAppIntent(context, sessionId, stableRequestCode(sessionId ?: "agent"))
+        val openApp = openAppIntent(context, sessionId, stableRequestCode(sessionId ?: "agent"), messageId)
         val notification =
             NotificationCompat
                 .Builder(context, channel)
@@ -395,6 +462,7 @@ object Notifier {
         context: Context,
         sessionId: String?,
         requestCode: Int,
+        messageId: String? = null,
     ): PendingIntent =
         PendingIntent.getActivity(
             context,
@@ -403,9 +471,18 @@ object Notifier {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 if (!sessionId.isNullOrBlank()) {
                     putExtra(EXTRA_SESSION_ID, sessionId)
+                    if (!messageId.isNullOrBlank()) putExtra(EXTRA_MESSAGE_ID, messageId)
                     // `data` participates in PendingIntent.filterEquals, so two
-                    // different sessions can never collapse into one intent.
-                    data = android.net.Uri.parse("opencode://session/$sessionId")
+                    // different sessions (or messages) can never collapse into one
+                    // intent.
+                    data =
+                        android.net.Uri.parse(
+                            if (messageId.isNullOrBlank()) {
+                                "opencode://session/$sessionId"
+                            } else {
+                                "opencode://session/$sessionId/message/$messageId"
+                            },
+                        )
                 }
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,

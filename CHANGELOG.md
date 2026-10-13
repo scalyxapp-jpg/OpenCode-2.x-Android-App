@@ -20,6 +20,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.7] - 2026-10-13
+
+### Added
+- **Hintergrund-Benachrichtigungen mit Deep-Link in die Session.** Läuft eine Session, während die App
+  nicht im Fokus ist, kommt jetzt *ab und zu* eine Zwischenschritt-Meldung und am Ende die
+  Zusammenfassung — ein Tipp darauf öffnet **genau diese Session an genau dieser Stelle**:
+  - **Zwischenschritte (gedrosselt):** nach einem abgeschlossenen Schritt, höchstens alle 45 s und
+    höchstens 4× pro Turn, mit der Arbeit dieses Schritts in der Zeile („Step 2 · Shell · ls -la,
+    Read · ChatViewModel.kt“). Schritte ohne Werkzeug werden übersprungen, wenn schon etwas gemeldet
+    wurde — sonst gäbe es nichts Neues zu sagen.
+  - **End-Summary:** wenn der Turn endet, mit der Antwort selbst (erste Zeile, gekürzt) und dem
+    Fehlertext, falls der Turn mit einem Fehler endete. Die Summary ersetzt die letzte
+    Zwischenmeldung derselben Session, statt sich daneben zu stapeln; pro Turn genau eine Meldung
+    (mehrere Producer melden dasselbe Turn-Ende).
+  - **Nur im Hintergrund:** die Erkennung „App im Fokus?“ läuft über den Activity-Lebenszyklus
+    (Zähler der gestarteten Activities). Im Vordergrund ist alles still — dort sieht man die Antwort
+    ohnehin. Sobald die App in den Hintergrund geht, läuft der Sammler an, im Vordergrund wieder aus
+    (kein Dauer-Stream ohne Nutzen).
+  - **Tap → Session + Nachricht:** die Notification trägt Session- **und** Message-Id; der Chat
+    scrollt einmal zu genau dieser Nachricht (Indexberechnung für das reverse-Layout, rein und
+    getestet; ist die Nachricht nicht geladen, landet man trotzdem in der richtigen Session).
+  - **Eigener Kanal „Agent step progress“**, damit Zwischenmeldungen stumm geschaltet werden können,
+    ohne die fertige Antwort zu verlieren. Die End-Summary nutzt weiter den Agent-Kanal (mit Ton
+    nach Einstellung), Zwischenschritte sind absichtlich still.
+  - Der Tool-Name kommt jetzt aus einer einzigen Quelle (`ToolText`): Chat-Zeilen und
+    Benachrichtigungen zeigen dieselbe Schreibweise („Shell“, „Read“, „Edit“, …).
+
+### Notes
+- Ohne Weckdienst (kein Push) können Benachrichtigungen nur zugestellt werden, solange der Prozess
+  lebt; dafür sorgt der bestehende `ConnectionService` (Foreground-Service, während die App offen
+  ist). Wird die App vom System beendet, endet auch der Strom — beim nächsten Öffnen wird
+  aufgeschlossen, nicht rückwirkend benachrichtigt.
+
+### Added (tests)
+- `SessionAlertPolicyTest` (Drosselung, Deckel pro Turn, Werkzeugliste, Turn-Reset),
+  `AppVisibilityTest` (Foreground-Übergänge inkl. Mehrfach-Activity), `DeepLinkScrollTest`
+  (Scroll-Index im reverse-Layout), `ToolTextTest` (Titel-Schreibweise, Kürzung), plus
+  `SseFilterTest`: der globale Verbraucher bekommt Schritt-/Tool-Frames, aber **nicht** den
+  Token-Strom.
+
 ## [1.5.6] - 2026-10-13
 
 ### Fixed
@@ -480,7 +520,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...HEAD
+[1.5.7]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...v1.5.4

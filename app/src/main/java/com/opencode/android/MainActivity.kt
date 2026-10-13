@@ -46,6 +46,10 @@ class MainActivity : ComponentActivity() {
     // onNewIntent (app already running) updates the UI without a recreate.
     private val deepLinkSessionId = mutableStateOf<String?>(null)
 
+    // The exact message the notification points at ("open the session where the
+    // work happened"). Null for plain session links.
+    private val deepLinkMessageId = mutableStateOf<String?>(null)
+
     // Monotonic counter for deep links, like newSessionSignal/shareSignal: keying the
     // navigation effect on the session ID meant a SECOND tap on the same session
     // (e.g. a new permission) produced no state change and did nothing.
@@ -145,6 +149,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     OpenCodeApp(
                         deepLinkSessionId = deepLinkSessionId.value,
+                        deepLinkMessageId = deepLinkMessageId.value,
                         deepLinkSignal = deepLinkSignal.value,
                         newSessionSignal = newSessionSignal.value,
                         shareSignal = shareSignal.value,
@@ -172,6 +177,8 @@ class MainActivity : ComponentActivity() {
         intent.getStringExtra(Notifier.EXTRA_SESSION_ID)?.let { sessionId ->
             intent.removeExtra(Notifier.EXTRA_SESSION_ID)
             deepLinkSessionId.value = sessionId
+            deepLinkMessageId.value = intent.getStringExtra(Notifier.EXTRA_MESSAGE_ID)
+            intent.removeExtra(Notifier.EXTRA_MESSAGE_ID)
             deepLinkSignal.value = deepLinkSignal.value + 1
         }
         when (intent.action) {

@@ -49,4 +49,16 @@ class SseFilterTest {
         assertFalse(SseFilter.shouldDeliver(event("message.part.delta", "s2"), ""))
         assertFalse(SseFilter.shouldDeliver(event("message.updated", "s2"), ""))
     }
+
+    @Test
+    fun `a global consumer receives what the background notifications describe`() {
+        // The background watcher subscribes with an empty session id: it needs the
+        // finished steps and the tool parts to name the work in a heads-up line.
+        assertTrue(SseFilter.shouldDeliver(event("session.next.step.ended", "s2"), ""))
+        assertTrue(SseFilter.shouldDeliver(event("message.part.updated", "s2"), ""))
+        assertTrue(SseFilter.shouldDeliver(event("session.next.step.failed", "s2"), ""))
+        // ... but NOT the token stream: it is high-frequency and a notification
+        // never shows a partial sentence.
+        assertFalse(SseFilter.shouldDeliver(event("message.part.delta", "s2"), ""))
+    }
 }

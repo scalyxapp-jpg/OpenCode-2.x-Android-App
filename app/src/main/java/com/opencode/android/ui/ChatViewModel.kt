@@ -1837,9 +1837,30 @@ class ChatViewModel
          * to the Settings toggles that previously had no effect.
          */
         private fun notifyAgentDone() {
-            val title = _uiState.value.session?.title ?: "OpenCode"
-            com.opencode.android.data.Notifier
-                .agent(title, "The agent finished", _uiState.value.session?.id)
+            val state = _uiState.value
+            val sessionId = state.session?.id
+            val title = state.session?.title ?: "OpenCode"
+            // The "end summary" deserves the answer itself, not just "finished":
+            // the notification then already tells the user what happened, and a
+            // tap lands on that answer.
+            val last =
+                state.messages.lastOrNull {
+                    (it.role ?: it.info?.role) == "assistant"
+                }
+            val snippet =
+                (last?.let { com.opencode.android.util.MessageEcho.firstText(it) } ?: "")
+                    .lineSequence()
+                    .firstOrNull { it.isNotBlank() }
+                    .orEmpty()
+                    .take(180)
+            com.opencode.android.data.Notifier.agentFinished(
+                title = title,
+                text = snippet.ifBlank { "The agent finished this turn" },
+                sessionId = sessionId,
+                messageId = last?.id ?: last?.info?.id,
+                // The background watcher may report the same turn end.
+                turnKey = "$sessionId:${last?.id ?: last?.info?.id ?: "turn"}",
+            )
         }
 
         // Both message schemas exist side by side (verified via API):

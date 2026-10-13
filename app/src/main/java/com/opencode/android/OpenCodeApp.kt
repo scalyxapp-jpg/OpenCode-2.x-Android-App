@@ -23,6 +23,14 @@ class OpenCodeApp : Application() {
         MessageCache.init(this)
         NetworkMonitor.init(this)
         Notifier.init(this)
+        // Background step/summary notifications: know whether the app is in focus,
+        // and watch the sessions that keep running while it is not.
+        com.opencode.android.data.AppVisibility.install(this)
+        com.opencode.android.data.BackgroundSessionWatcher.init(
+            context = this,
+            api = backendSession.api,
+            baseUrl = { backendSession.currentBaseUrl() },
+        )
         // Route client errors to the server log (POST /log). Best-effort.
         com.opencode.android.data.ClientLog
             .install { backendSession.api }

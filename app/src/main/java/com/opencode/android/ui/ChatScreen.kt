@@ -121,6 +121,9 @@ internal fun ChatScreen(
     // Bumped by MainActivity when the app is opened from the Android share
     // sheet; the pending text/image is folded into this chat's composer.
     shareSignal: Long = 0L,
+    // Set when a background notification was tapped: the chat scrolls to that
+    // message once the list contains it (see deepLinkScrollIndex).
+    deepLinkMessageId: String? = null,
     onBack: () -> Unit,
     onTitleChange: (String) -> Unit = {},
     // Opens a subagent's session (web: clicking the subagent link in a task row).
@@ -854,6 +857,7 @@ internal fun ChatScreen(
                                 liveState = viewModel.liveState,
                                 listState = listState,
                                 appSettings = appSettings,
+                                deepLinkMessageId = deepLinkMessageId,
                                 actions =
                                     // remember: ChatActions has identity equals,
                                     // so a fresh instance every recomposition made
@@ -1021,6 +1025,8 @@ internal fun SessionTab(
     listState: androidx.compose.foundation.lazy.LazyListState,
     actions: ChatActions,
     appSettings: AppSettingsStore.AppSettings,
+    // Message a tapped notification points at; the list scrolls to it once.
+    deepLinkMessageId: String? = null,
 ) {
     val onOpenSession = actions.onOpenSession
     val onLoadOlder = actions.onLoadOlder
@@ -1457,6 +1463,41 @@ internal fun SessionTab(
                                     if (n == 1) base else "$base#$n"
                                 }
                             }
+                        // Exactly the items the list declares ABOVE the messages, so
+                        // a deep link can compute a message's index. reverseLayout
+                        // puts the first declared item at the bottom.
+                        val liveItemsBeforeMessages =
+                            if (uiState.isGenerating || uiState.pendingPersist || uiState.isCompacting) {
+                                (if (uiState.isGenerating || uiState.isCompacting) 1 else 0) + 3
+                            } else {
+                                0
+                            }
+                        // A tapped background notification names the message it
+                        // describes. Scroll there once the list contains it; a
+                        // message outside the loaded page simply stays put (the
+                        // user still lands in the right session).
+                        val scrollTarget = deepLinkMessageId
+                        val scrolledToDeepLink =
+                            remember(scrollTarget) {
+                                androidx.compose.runtime.mutableStateOf(false)
+                            }
+                        LaunchedEffect(
+                            scrollTarget,
+                            reversedMessages.size,
+                            liveItemsBeforeMessages,
+                        ) {
+                            if (scrolledToDeepLink.value) return@LaunchedEffect
+                            val index =
+                                deepLinkScrollIndex(
+                                    messageIds = reversedMessages.map { it.id ?: it.info?.id ?: "" },
+                                    target = scrollTarget,
+                                    liveItemCount = liveItemsBeforeMessages,
+                                ) ?: return@LaunchedEffect
+                            scrolledToDeepLink.value = true
+                            // Land ABOVE the target so it is visible with context
+                            // rather than glued to the bottom edge.
+                            listState.animateScrollToItem(index.coerceAtLeast(0))
+                        }
                         Box(modifier = Modifier.fillMaxSize()) {
                             // reverseLayout=true: newest messages at the bottom (index 0)
                             LazyColumn(
@@ -2133,4 +2174,23 @@ internal fun buildTranscript(messages: List<com.opencode.android.domain.Message>
         out.append(text).append("\n\n")
     }
     return out.toString().trim()
+}
+
+/**
+ * LazyColumn index of the message a deep link points at, or null when the list
+ * does not contain it (an older message outside the loaded page).
+ *
+ * `reverseLayout = true` puts the first declared item at the bottom, so the index
+ * is simply the number of items declared before the messages plus the message's
+ * position in `messageIds` (newest first). Pure, so it is unit-tested.
+ */
+internal fun deepLinkScrollIndex(
+    messageIds: List<String>,
+    target: String?,
+    liveItemCount: Int,
+): Int? {
+    if (target.isNullOrBlank()) return null
+    val index = messageIds.indexOfFirst { it == target }
+    if (index < 0) return null
+    return (liveItemCount + index).coerceAtLeast(0)
 }

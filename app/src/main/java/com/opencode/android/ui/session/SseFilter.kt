@@ -54,6 +54,16 @@ object SseFilter {
      */
     val STATUS_TYPES = setOf("session.status", "session.idle", "session.error", "session.aborted")
 
+    /**
+     * Frames the GLOBAL (background) consumer needs in addition to [STATUS_TYPES]:
+     * enough to describe what a running turn is doing ("Shell · ls -la") for the
+     * background notifications, without opening one stream per session. Text
+     * deltas are NOT in here — they are high-frequency and carry nothing a
+     * heads-up line would show.
+     */
+    val GLOBAL_PROGRESS_TYPES =
+        setOf("message.part.updated", "session.next.step.ended", "session.next.step.failed")
+
     /** True when [event] should be delivered to the [sessionId] collector. */
     fun shouldDeliver(
         event: Event,
@@ -65,7 +75,8 @@ object SseFilter {
         // running badges). It wants every session's status, not the message
         // traffic of sessions it is not showing.
         if (sessionId.isEmpty()) {
-            return (evtSession != null && event.type in STATUS_TYPES) ||
+            return (evtSession != null &&
+                (event.type in STATUS_TYPES || event.type in GLOBAL_PROGRESS_TYPES)) ||
                 event.type in GLOBAL_BROADCAST_TYPES
         }
         return if (evtSession != null) {
