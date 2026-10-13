@@ -5,6 +5,29 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.10] - 2026-10-13
+
+### Fixed
+
+- **Der Schalter für Thinking fehlte in den Einstellungen.** Er war in 1.5.9 durch
+  einen Fehler im Bearbeitungsschritt nie in `SettingsScreen.kt` geschrieben worden
+  (zwei Änderungen an derselben Datei, die zweite überschrieb die erste) — der Chat
+  las die Einstellung, sie war aber nirgends einstellbar. Jetzt steht „Expand
+  thinking blocks" in **Settings → General** direkt unter den Tool-Schaltern; der
+  Untertext nennt auch die Abhängigkeit („Needs 'Show reasoning summaries' for
+  thinking to appear at all").
+- **„Hide Session Guard in chat" ließ sich nicht einschalten.** Der Schalter las
+  `AppSettingsStore.state.value` direkt statt den gesammelten Flow: getippt wurde
+  zwar geschrieben, aber nichts neu zusammengesetzt — der Schalter blieb optisch aus.
+  Er bekommt jetzt den gesammelten Zustand (wie alle anderen Schalter) und ist
+  **immer bedienbar**. Die Guard-Beschränkung bleibt inhaltlich: Guard-Chrome gibt es
+  im Chat nur, wenn wirklich ein Guard läuft — ohne Guard blendet der Schalter also
+  nichts aus (der Untertext sagt das dann).
+- **Dieselbe Fehlerklasse daneben behoben:** der Live-Reasoning-Block las
+  `showReasoningSummaries` als `.value`, sodass ein Umschalten in den Einstellungen
+  einen bereits aufgebauten Chat nicht erreichte — es sah aus, als tue die
+  Einstellung nichts. Er sammelt den Zustand jetzt reaktiv.
+
 ## [1.5.9] - 2026-10-13
 
 ### Added
@@ -618,7 +641,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...HEAD
+[1.5.10]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...v1.5.7
