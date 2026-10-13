@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Session-Namen im Home bleiben einzeilig und sliden durch.** Die zweizeilige
+  Umbrechung aus 1.5.7 machte die Liste unruhig (Titelwechsel verschoben die Zeilen);
+  jetzt ist der Titel strikt einzeilig (`maxLines = 1`, kein Umbruch) und läuft bei
+  Überlänge **animiert durch** (`basicMarquee`, unendlich mit kurzer Start- und
+  Wiederholungspause, 24 dp Abstand zwischen den Durchläufen). Kurze Titel bleiben
+  stehen — animiert wird nur, was wirklich überläuft.
+
 ### Documentation
 
 - **Detailed feature documentation (`docs/FEATURES.md`).** 22 sections covering every

@@ -1,7 +1,9 @@
 package com.opencode.android.ui
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -1481,11 +1483,17 @@ private fun SessionRow(
                         ?: stringResource(R.string.new_session),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
-                // Two lines: real session titles ("Metal-Theme passend zum
-                // App-Icon") were cut after one line while the row had room.
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                // SINGLE line — a wrapped second line made the rows jump — but the
+                // full title SLIDES through when it is longer than the row, so a
+                // long name ("Metal-Theme passend zum App-Icon") is still readable
+                // instead of being cut off.
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.slidingTitle(),
             )
+
+            // The row is a clickable parent; the marquee only consumes horizontal
+            // DRAGS for scrubbing, taps still open the session.
             val now = System.currentTimeMillis()
             val meta =
                 listOfNotNull(
@@ -1783,3 +1791,26 @@ private fun SessionRowSkeleton() {
         }
     }
 }
+
+/**
+ * Single-line text that slides through its content when it is too long for the row.
+ *
+ * Session rows used to allow two lines, which made the list jump while titles
+ * changed; truncating instead hides which session a row is. The marquee animates
+ * ONLY text that actually overflows (a short title stays still), waits briefly so
+ * the beginning is readable, then repeats forever.
+ *
+ * Parameters follow the Compose Foundation in use (1.12): iterations,
+ * repeatDelayMillis, initialDelayMillis, animationMode, spacing, velocity. The
+ * single-line requirement comes from the `Text(maxLines = 1)` it is applied to.
+ */
+private fun Modifier.slidingTitle(): Modifier =
+    this.basicMarquee(
+        iterations = Int.MAX_VALUE,
+        repeatDelayMillis = 1_400,
+        initialDelayMillis = 900,
+        // Sliding, not "only while focused": the row is not a focusable control.
+        animationMode = androidx.compose.foundation.MarqueeAnimationMode.Immediately,
+        spacing = MarqueeSpacing(24.dp),
+        velocity = 28.dp,
+    )
