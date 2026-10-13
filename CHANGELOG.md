@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.1] - 2026-10-13
+
+### Fixed
+- **Settings → Servers: die Server-Adresse ist wieder sichtbar.** Name, URL und Passwort-Status
+  teilten sich EINE Zeile mit drei Aktions-Buttons. Mit dem zusätzlich hinzugekommenen „Copy URL"
+  blieb dem Text kein Platz mehr, sodass die **URL verschwand** und „Remove" **vertikal umbrach**.
+  Jetzt stehen die Identität (Name · Adresse · Passwort-Status) und „Active" in der ersten Zeile,
+  die Buttons (Rename… · Copy URL · Remove) in einer eigenen Zeile darunter (`FlowRow`, damit sie
+  auf schmalen Displays umbrechen statt gequetscht zu werden).
+- **Die Adresse wird immer angezeigt.** Vorher erschien sie *nur*, wenn ein Anzeigename gesetzt war;
+  bei einem Server ohne Namen stand dort stattdessen der Passwort-Status — die Adresse war also
+  grundsätzlich nicht ablesbar, wenn man keinen Namen vergeben hatte.
+
 ## [1.5.0] - 2026-10-13
 
 Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Semantik, GUI, Workflows.
@@ -342,7 +355,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...v1.4.1

@@ -80,70 +80,87 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
             }
         } else {
             items(backends, key = { it.url }) { backend ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = MaterialTheme.spacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                    // Space between the "Active" badge and the Rename/Remove
-                    // buttons (they were touching).
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = MaterialTheme.spacing.small),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = backend.name ?: backend.url,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = if (backend.name != null) {
-                                backend.url
-                            } else if (backend.password != null) {
-                                stringResource(R.string.password_saved)
-                            } else {
-                                stringResource(R.string.no_password)
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                    // Identity first, on its OWN line: the URL is what identifies the
+                    // server. Sharing one row with three action buttons squeezed the
+                    // text to nothing and wrapped "Remove" vertically (the URL became
+                    // invisible), so the buttons moved to their own row below.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = backend.name ?: backend.url,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // ALWAYS the address: previously it was only shown when a
+                            // display name existed, so an unnamed server lost its URL
+                            // entirely (a named one showed it, an unnamed one did not).
+                            Text(
+                                text = backend.url,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text =
+                                    if (backend.password != null) {
+                                        stringResource(R.string.password_saved)
+                                    } else {
+                                        stringResource(R.string.no_password)
+                                    },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (backend.url == activeUrl) {
+                            Text(
+                                text = stringResource(R.string.active),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                     }
-                    if (backend.url == activeUrl) {
-                        Text(
-                            text = stringResource(R.string.active),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                    // FlowRow: the buttons wrap onto the next line instead of being
+                    // squashed to a vertical letter column on a narrow screen.
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                    ) {
+                        OutlinedButton(onClick = {
+                            renameFor = backend
+                            renameText = backend.name ?: ""
+                        }) { Text(stringResource(R.string.rename)) }
+                        OutlinedButton(onClick = {
+                            // The URL is what you paste into a browser or a bug report.
+                            val clipboard =
+                                context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as android.content.ClipboardManager
+                            clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("backend", backend.url),
+                            )
+                            android.widget.Toast
+                                .makeText(context, R.string.copied, android.widget.Toast.LENGTH_SHORT)
+                                .show()
+                        }) { Text(stringResource(R.string.copy_server_url)) }
+                        OutlinedButton(
+                            // Confirmation, like the start screen: this also deletes the
+                            // saved credentials.
+                            onClick = { deleteFor = backend },
+                            // Destructive: tinted like every other "remove".
+                            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                        ) { Text(stringResource(R.string.remove)) }
                     }
-                    OutlinedButton(onClick = {
-                        renameFor = backend
-                        renameText = backend.name ?: ""
-                    }) { Text(stringResource(R.string.rename)) }
-                    OutlinedButton(onClick = {
-                        // The URL is what you paste into a browser or a bug report; the
-                        // server list showed it but offered no way to copy it.
-                        val clipboard =
-                            context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                as android.content.ClipboardManager
-                        clipboard.setPrimaryClip(
-                            android.content.ClipData.newPlainText("backend", backend.url),
-                        )
-                        android.widget.Toast
-                            .makeText(context, R.string.copied, android.widget.Toast.LENGTH_SHORT)
-                            .show()
-                    }) { Text(stringResource(R.string.copy_server_url)) }
-                    OutlinedButton(
-                        // Confirmation, like the start screen: this also deletes the
-                        // saved credentials.
-                        onClick = { deleteFor = backend },
-                        // Destructive: tinted like every other "remove".
-                        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error,
-                        ),
-                    ) { Text(stringResource(R.string.remove)) }
                 }
                 HorizontalDivider()
             }
