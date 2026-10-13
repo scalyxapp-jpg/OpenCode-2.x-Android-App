@@ -49,6 +49,7 @@ import com.opencode.android.domain.QuestionToolRef
 import com.opencode.android.domain.RevertRequest
 import com.opencode.android.domain.RevertStageBody
 import com.opencode.android.domain.Session
+import com.opencode.android.domain.SessionStats
 import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SessionCreateRequest
 import com.opencode.android.domain.SessionGuard
@@ -832,6 +833,39 @@ class OpenCodeApiAdapter(
         response.errorBody()?.close()
         return response.isSuccessful
     }
+
+    override suspend fun injectSynthetic(
+        sessionId: String,
+        text: String,
+        description: String?,
+        directory: String?,
+    ): Boolean {
+        val response =
+            v2.synthetic(
+                sessionId = sessionId,
+                body =
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("text", kotlinx.serialization.json.JsonPrimitive(text))
+                        description?.takeIf { it.isNotBlank() }?.let {
+                            put("description", kotlinx.serialization.json.JsonPrimitive(it))
+                        }
+                    },
+                directory = directory,
+            )
+        response.body()?.close()
+        response.errorBody()?.close()
+        return response.isSuccessful
+    }
+
+    override suspend fun getStats(
+        fromMs: Long,
+        tools: String,
+    ): SessionStats? =
+        runCatching {
+            v2
+                .stats(from = fromMs.toString(), tools = tools)
+                .data
+        }.getOrNull()
 
     override suspend fun getPlugins(directory: String?): List<PluginEntry> =
         v2

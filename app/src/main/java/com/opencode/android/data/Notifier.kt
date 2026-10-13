@@ -173,28 +173,78 @@ object Notifier {
         )
     }
 
-    /** The ongoing notification that keeps the foreground service alive. */
+    /**
+     * The ongoing notification: the keep-alive of the foreground service AND the live
+     * glance surface (step/progress, waiting decisions, cost of the day).
+     *
+     * It is the one notification that is always there while the app runs, so it carries
+     * the ambient state instead of adding another permanent notification. Content is
+     * counters only — never prompt text — which is why it may be visible on the lock
+     * screen (VISIBILITY_PUBLIC); the agent/error notifications stay SECRET.
+     */
     fun connectionNotification(): android.app.Notification {
         val context = appContext ?: error("Notifier.init was not called")
-        val openApp =
-            PendingIntent.getActivity(
-                context,
-                0,
-                Intent(context, MainActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                },
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
+        val facts = GlanceStore.facts()
+        // Live surfaces are a setting: off = the keep-alive notice stays generic.
+        val status =
+            if (AppSettingsStore.state.value.glanceEnabled) {
+                glanceText(context, facts)
+            } else {
+                context.getString(R.string.connection_active_sub)
+            }
+        val openApp = openAppIntent(context, facts.sessionId, stableRequestCode(facts.sessionId ?: "conn"))
         return NotificationCompat
             .Builder(context, CH_CONNECTION)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(context.getString(R.string.connection_active))
-            .setContentText(context.getString(R.string.connection_active_sub))
+            .setContentText(status)
             .setOngoing(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(openApp)
             .build()
+    }
+
+    /**
+     * Re-posts the ongoing notification after a glance change.
+     *
+     * Called from the store's surface hook; posting the same id updates the existing
+     * notification (no new entry, no sound — the channel is importance MIN and the
+     * builder is silent).
+     */
+    fun refreshConnectionNotification() {
+        val context = appContext ?: return
+        try {
+            NotificationManagerCompat.from(context).notify(ID_CONNECTION, connectionNotification())
+        } catch (e: SecurityException) {
+            // POST_NOTIFICATIONS not granted: the foreground service handles its own case.
+        }
+    }
+
+    /** One line that says what the app is doing, from the shared glance facts. */
+    private fun glanceText(
+        context: Context,
+        facts: com.opencode.android.data.GlanceFacts,
+    ): String {
+        val kind = com.opencode.android.data.GlanceStatus.kind(facts)
+        val progress = com.opencode.android.data.GlanceStatus.progress(facts)
+        val base =
+            when (kind) {
+                com.opencode.android.data.GlanceKind.WAITING ->
+                    context.getString(R.string.glance_waiting, facts.pendingDecisions)
+
+                com.opencode.android.data.GlanceKind.STUCK ->
+                    context.getString(R.string.glance_stuck, facts.failures)
+
+                com.opencode.android.data.GlanceKind.RUNNING ->
+                    progress ?: context.getString(R.string.glance_running)
+
+                com.opencode.android.data.GlanceKind.IDLE ->
+                    context.getString(R.string.connection_active_sub)
+            }
+        val cost = com.opencode.android.data.GlanceStatus.cost(facts.costTodayUsd)
+        return if (cost == null) base else "$base · " + context.getString(R.string.glance_cost_today, cost)
     }
 
     /**

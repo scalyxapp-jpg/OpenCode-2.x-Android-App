@@ -525,4 +525,53 @@
     <string name="history_import_all" formatted="false">Import from all sessions</string>
     <string name="history_imported" formatted="false">%1$d prompts imported from the server</string>
     <string name="history_import_none" formatted="false">Nothing to import — the server has no older prompts here</string>
+    <!-- Always-on glance: widget, ongoing notification, tile -->
+    <string name="glance_waiting" formatted="false">Waiting for you · %1$d</string>
+    <string name="glance_stuck" formatted="false">Stuck · %1$d failures</string>
+    <string name="glance_running" formatted="false">Working…</string>
+    <string name="glance_cost_today" formatted="false">Today · %1$s</string>
+    <string name="glance_tile_pending" formatted="false">%1$d waiting</string>
+    <string name="glance_tile_idle" formatted="false">No decisions open</string>
+    <!-- Erklär-Modus: Seitenfrage in eigener Session -->
+    <string name="explain_title" formatted="false">Explanation</string>
+    <string name="explain_running" formatted="false">Asking the docs agent…</string>
+    <string name="explain_failed" formatted="false">Could not explain this</string>
+    <string name="explain_use" formatted="false">Use in prompt</string>
+    <string name="explain_open" formatted="false">Open session</string>
+    <string name="explain_message_action" formatted="false">Explain this message</string>
+    <string name="explain_tool_action" formatted="false">Explain this output</string>
+    <!-- Entscheidungs-Journal -->
+    <string name="journal_title" formatted="false">Decisions</string>
+    <string name="journal_menu" formatted="false">Decisions (%1$d)</string>
+    <string name="journal_empty" formatted="false">No decisions captured yet</string>
+    <string name="journal_add" formatted="false">Capture a decision</string>
+    <string name="journal_add_hint" formatted="false">A decision to remember for this project — kept locally and, on demand, handed to the agent.</string>
+    <string name="journal_text_hint" formatted="false">Decision</string>
+    <string name="journal_description_hint" formatted="false">Where/when (optional)</string>
+    <string name="journal_save" formatted="false">Save</string>
+    <string name="journal_inject" formatted="false">Hand to agent</string>
+    <string name="journal_inject_warning" formatted="false">Handing a decision over starts a turn with your current model (it costs tokens and the agent may act on it).</string>
+    <string name="journal_injected" formatted="false">Decision handed over (%1$d)</string>
+    <string name="journal_inject_failed" formatted="false">Could not hand the decision over</string>
+    <string name="journal_delete" formatted="false">Delete</string>
+    <string name="journal_export" formatted="false">Share as Markdown</string>
+    <string name="journal_export_empty" formatted="false">Nothing to export yet</string>
+    <string name="journal_block_label" formatted="false">Decision</string>
+    <!-- Live & background: everything that runs continuously or injects into a chat -->
+    <string name="settings_live_background" formatted="false">Live &amp; background</string>
+    <string name="settings_glance" formatted="false">Live status surfaces</string>
+    <string name="settings_glance_sub" formatted="false">Widget, ongoing notification and tile show live step/progress, waiting decisions and today\'s cost</string>
+    <string name="settings_background_monitoring" formatted="false">Background monitoring</string>
+    <string name="settings_background_monitoring_sub" formatted="false">Watch sessions and notify while the app is not in focus. Off = nothing runs in the background</string>
+    <string name="settings_keep_alive" formatted="false">Keep connection alive</string>
+    <string name="settings_keep_alive_sub" formatted="false">Foreground service keeps the stream up while the app is open (Android caps this at ~6 h/day)</string>
+    <string name="settings_explain" formatted="false">Explain mode</string>
+    <string name="settings_explain_sub" formatted="false">Side questions about a message, diff or output run in their own session (spends tokens)</string>
+    <string name="settings_journal_inject" formatted="false">Hand decisions to the agent</string>
+    <string name="settings_journal_inject_sub" formatted="false">Allows injecting a captured decision into a session (starts a turn on your model)</string>
+    <string name="settings_race" formatted="false">Model race</string>
+    <string name="settings_race_sub" formatted="false">Run one prompt against 2–3 models in parallel sessions (each is a full turn)</string>
+    <string name="settings_outbox_auto_flush" formatted="false">Send outbox automatically</string>
+    <string name="settings_outbox_auto_flush_sub" formatted="false">Waiting prompts are delivered as soon as the server is reachable; off = only via "Send now"</string>
+    <string name="setting_disabled_hint" formatted="false">Disabled in settings: %1$s</string>
 </resources>

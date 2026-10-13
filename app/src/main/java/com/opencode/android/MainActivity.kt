@@ -81,10 +81,15 @@ class MainActivity : ComponentActivity() {
         // (the flag is only reset in onDestroy, which the OS may skip), and then the
         // keeper stayed dead without the app noticing. Starting an already-running
         // service is a no-op beyond another onStartCommand.
-        ContextCompat.startForegroundService(
-            this,
-            Intent(this, ConnectionService::class.java),
-        )
+        // Setting "Keep connection alive": the foreground service keeps the stream up
+        // across backgrounding, but it is also the one permanent notification and a
+        // battery cost — so it is switchable.
+        if (com.opencode.android.data.AppSettingsStore.state.value.keepAliveService) {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, ConnectionService::class.java),
+            )
+        }
         enableEdgeToEdge()
         setContent {
             // Apply the persisted appearance settings (color scheme, theme,

@@ -277,6 +277,31 @@ interface OpenCodeApi {
         directory: String? = null,
     ): Boolean
 
+    /**
+     * Server statistics for a period (`GET /api/experimental/session/stats`).
+     *
+     * Only the aggregate cost/tokens are used — for "today so far" on the glance
+     * surfaces. Returns null when the endpoint is unavailable on that server.
+     */
+    suspend fun getStats(
+        fromMs: Long,
+        tools: String = "none",
+    ): com.opencode.android.domain.SessionStats?
+
+    /**
+     * Injects a `synthetic` message into a session (`POST /api/session/{id}/synthetic`).
+     *
+     * Verified live: the message becomes part of the transcript and the agent treats it
+     * as binding context — and it is DELIVERED (steer), so it starts a turn and may cost
+     * tokens; the caller must say so.
+     */
+    suspend fun injectSynthetic(
+        sessionId: String,
+        text: String,
+        description: String? = null,
+        directory: String? = null,
+    ): Boolean
+
     /** Installed plugins (`GET /api/plugin`) — Extensions → Plugins. */
     suspend fun getPlugins(directory: String? = null): List<PluginEntry>
 

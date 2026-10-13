@@ -189,6 +189,66 @@ internal fun GeneralTab() {
             )
         }
 
+        item { SectionHeader(stringResource(R.string.settings_live_background)) }
+        // Everything that runs continuously, watches in the background or injects into a
+        // chat is switchable here — one clear place, so nothing about-turns the user.
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_glance),
+                subtitle = stringResource(R.string.settings_glance_sub),
+                checked = settings.glanceEnabled,
+                onCheckedChange = { AppSettingsStore.setGlanceEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_background_monitoring),
+                subtitle = stringResource(R.string.settings_background_monitoring_sub),
+                checked = settings.backgroundMonitoring,
+                onCheckedChange = { AppSettingsStore.setBackgroundMonitoring(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_keep_alive),
+                subtitle = stringResource(R.string.settings_keep_alive_sub),
+                checked = settings.keepAliveService,
+                onCheckedChange = { AppSettingsStore.setKeepAliveService(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_explain),
+                subtitle = stringResource(R.string.settings_explain_sub),
+                checked = settings.explainEnabled,
+                onCheckedChange = { AppSettingsStore.setExplainEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_journal_inject),
+                subtitle = stringResource(R.string.settings_journal_inject_sub),
+                checked = settings.journalInjectEnabled,
+                onCheckedChange = { AppSettingsStore.setJournalInjectEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_race),
+                subtitle = stringResource(R.string.settings_race_sub),
+                checked = settings.raceEnabled,
+                onCheckedChange = { AppSettingsStore.setRaceEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_outbox_auto_flush),
+                subtitle = stringResource(R.string.settings_outbox_auto_flush_sub),
+                checked = settings.outboxAutoFlush,
+                onCheckedChange = { AppSettingsStore.setOutboxAutoFlush(it) },
+            )
+        }
+
         item {
             // Master switch first: it gates every notification AND its sound, so it
             // belongs above the per-event switches.

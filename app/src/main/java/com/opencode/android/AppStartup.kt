@@ -3,6 +3,7 @@ import android.content.Context
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.ArchivedSessionsStore
 import com.opencode.android.data.BackendStore
+import com.opencode.android.data.DecisionJournalStore
 import com.opencode.android.data.HomeCache
 import com.opencode.android.data.HomePrefs
 import com.opencode.android.data.LastSessionStore
@@ -81,6 +82,7 @@ object AppStartup {
                 // Offline outbox: prompts typed while the server was unreachable.
                 OutboxStore.init(app)
                 PromptHistoryStore.init(app)
+                DecisionJournalStore.init(app)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "AppStartup init failed: ${e.message}")
                 _lastError.value = e.message ?: e::class.java.simpleName

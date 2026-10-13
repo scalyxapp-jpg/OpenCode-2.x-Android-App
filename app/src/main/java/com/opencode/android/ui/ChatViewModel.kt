@@ -37,6 +37,9 @@ import com.opencode.android.domain.InboxPayload
 import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SkillEntry
+import com.opencode.android.data.DecisionJournalStore
+import com.opencode.android.data.JournalEntry
+import com.opencode.android.data.JournalPolicy
 import com.opencode.android.data.OutboxItem
 import com.opencode.android.data.PromptHistoryEntry
 import com.opencode.android.data.PromptHistoryImport
@@ -182,6 +185,12 @@ data class ChatUiState(
     // "/mcp": configured MCP servers (name + status), alphabetical.
     val mcpServers: List<McpEntry> = emptyList(),
     val mcpDialogVisible: Boolean = false,
+    /** Explain mode: the running side question and its answer. */
+    val explain: com.opencode.android.ui.explain.ExplainState? = null,
+    /** Decision journal (per project) — captured anywhere, handed over on demand. */
+    val journalDialogVisible: Boolean = false,
+    val journal: List<JournalEntry> = emptyList(),
+    val journalNewEntryVisible: Boolean = false,
     /** Prompt history (TUI parity): the composer can recall what was sent before. */
     val historyDialogVisible: Boolean = false,
     val history: List<PromptHistoryEntry> = emptyList(),
@@ -290,6 +299,52 @@ class ChatViewModel
             // manual "Send now" and the flush on session open cover the rest.
             viewModelScope.launch {
                 com.opencode.android.data.NetworkMonitor.available.collect { flushOutbox() }
+            }
+            // Always-on glance: the open session's live state feeds the widget,
+            // notification and tile (step, elapsed, tool, run state).
+            viewModelScope.launch {
+                // When the current turn started; the glance line shows the wall-clock of
+                // THAT turn ("Step 7 · 42s"), not of the app session.
+                var runningSince: Long? = null
+                conversation.liveState.collect { live ->
+                    val state = _uiState.value
+                    if (state.isGenerating) {
+                        if (runningSince == null) runningSince = System.currentTimeMillis()
+                    } else {
+                        runningSince = null
+                    }
+                    com.opencode.android.data.GlanceStore.update(
+                        sessionId = state.session?.id,
+                        title = state.session?.title,
+                        running = state.isGenerating,
+                        step = live.stepIndex,
+                        elapsedMs = runningSince?.let { System.currentTimeMillis() - it } ?: 0L,
+                        toolName =
+                            live.parts.lastOrNull()?.let { part ->
+                                com.opencode.android.ui.toolRowTitle(part.tool ?: part.name)
+                            },
+                        failures = live.parts.count { com.opencode.android.ui.toolStatus(it) == "error" },
+                        clearRunning = !state.isGenerating,
+                    )
+                }
+            }
+            // Today's cost for the glance line (server aggregate, once per session open).
+            viewModelScope.launch {
+                runCatching { refreshGlanceCost() }
+            }
+        }
+
+        /** Reads "today so far" from the stats hub; silent when unavailable. */
+        suspend fun refreshGlanceCost() {
+            val start =
+                java.util.Calendar.getInstance().apply {
+                    set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }.timeInMillis
+            api.getStats(fromMs = start)?.cost?.let {
+                com.opencode.android.data.GlanceStore.update(costTodayUsd = it)
             }
         }
 
@@ -588,6 +643,7 @@ class ChatViewModel
                     // is expected to be reachable).
                     refreshOutbox()
                     flushOutbox()
+
                     try {
                         // The session header, its full payload (for `directory`), the
                         // message page and the agent list are independent requests.
@@ -1196,6 +1252,10 @@ class ChatViewModel
 
         /** Starts the race with the composer's text as the prompt for every member. */
         fun startRace() {
+            if (!com.opencode.android.data.AppSettingsStore.state.value.raceEnabled) {
+                UserMessages.post(R.string.setting_disabled_hint, appContext.getString(R.string.settings_race))
+                return
+            }
             val prompt = _uiState.value.inputText.trim()
             when (val plan = RacePlan.build(prompt, _uiState.value.racePick.toList(), ::resolveRaceModel)) {
                 is RacePlan.Result.Rejected -> {
@@ -1243,6 +1303,146 @@ class ChatViewModel
         fun dismissRace() = raceController.dismiss()
 
         fun refreshRace() = raceController.refresh()
+
+        // --- explain mode ---------------------------------------------------
+
+        /**
+         * Side question about one artifact, answered in its own session by the `ask`/
+         * `docs` agent so the working conversation stays clean.
+         *
+         * Gated by the setting: it creates a session and spends tokens, so "off" must be
+         * respected instead of silently working.
+         */
+        private val explainController =
+            com.opencode.android.ui.explain.ExplainController(
+                api = api,
+                scope = viewModelScope,
+                onState = { state ->
+                    _uiState.update { it.copy(explain = state) }
+                },
+            )
+
+        fun explain(
+            kind: com.opencode.android.ui.explain.ExplainPolicy.Kind,
+            snippet: String,
+            label: String? = null,
+        ) {
+            if (!AppSettingsStore.state.value.explainEnabled) {
+                UserMessages.post(R.string.setting_disabled_hint, appContext.getString(R.string.settings_explain))
+                return
+            }
+            if (snippet.isBlank()) return
+            val session = _uiState.value.session ?: return
+            val (providerId, modelId) = parseModelRef(_uiState.value.selectedModel)
+            explainController.start(
+                kind = kind,
+                snippet = snippet,
+                label = label,
+                directory = session.directory,
+                providerId = providerId.takeIf { it.isNotBlank() },
+                modelId = modelId.takeIf { it.isNotBlank() },
+            )
+        }
+
+        fun dismissExplain() = explainController.dismiss()
+
+        // --- decision journal -----------------------------------------------
+
+        /** Opens the project's decisions (a dialog, like skills/history/race). */
+        fun openJournal() {
+            val dir = _uiState.value.session?.directory
+            _uiState.update {
+                it.copy(
+                    journalDialogVisible = true,
+                    journal = JournalPolicy.visible(DecisionJournalStore.state.value, dir),
+                )
+            }
+        }
+
+        fun closeJournal() {
+            _uiState.update { it.copy(journalDialogVisible = false, journalNewEntryVisible = false) }
+        }
+
+        fun showNewJournalEntry(show: Boolean) {
+            _uiState.update { it.copy(journalNewEntryVisible = show) }
+        }
+
+        /** Captures a decision locally (`decisions are kept on the device`). */
+        fun addJournalEntry(
+            text: String,
+            description: String?,
+        ) {
+            val dir = _uiState.value.session?.directory ?: return
+            if (text.isBlank()) return
+            DecisionJournalStore.add(
+                JournalEntry(
+                    id = generateOpenCodeId("dec"),
+                    projectDir = dir,
+                    text = text.trim(),
+                    description = description?.trim()?.takeIf { it.isNotBlank() },
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+            refreshJournal()
+        }
+
+        fun deleteJournalEntry(id: String) {
+            DecisionJournalStore.remove(id)
+            refreshJournal()
+        }
+
+        /**
+         * Hands a decision to the agent: `POST /api/session/{id}/synthetic`.
+         *
+         * Verified live: the message becomes part of the transcript and is BINDING for
+         * later prompts — and it is delivered immediately, so it starts a turn (tokens!).
+         * That is why it is an explicit, confirmed action behind a setting.
+         */
+        fun injectJournalEntry(id: String) {
+            val setting = AppSettingsStore.state.value
+            if (!setting.journalInjectEnabled) {
+                UserMessages.post(R.string.setting_disabled_hint, appContext.getString(R.string.settings_journal_inject))
+                return
+            }
+            val session = _uiState.value.session ?: return
+            val entry = DecisionJournalStore.state.value.firstOrNull { it.id == id } ?: return
+            viewModelScope.launch {
+                try {
+                    if (api.injectSynthetic(session.id, entry.text, entry.description, session.directory)) {
+                        DecisionJournalStore.markInjected(id, session.id)
+                        refreshJournal()
+                        UserMessages.post(R.string.journal_injected, entry.injectedInto.size + 1)
+                        refreshMessages(session.id)
+                    } else {
+                        UserMessages.post(R.string.journal_inject_failed)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "injectJournalEntry failed: ${e.message}")
+                    UserMessages.post(R.string.journal_inject_failed)
+                }
+            }
+        }
+
+        /** Markdown export of the project's decisions ("decisions this week"). */
+        fun exportJournal(): String {
+            val dir = _uiState.value.session?.directory
+            val project = _uiState.value.session?.path ?: dir ?: "project"
+            val entries = JournalPolicy.visible(DecisionJournalStore.state.value, dir)
+            if (entries.isEmpty()) {
+                UserMessages.post(R.string.journal_export_empty)
+                return ""
+            }
+            return JournalPolicy.export(entries, project.substringAfterLast('/').ifBlank { project })
+        }
+
+        private fun refreshJournal() {
+            val dir = _uiState.value.session?.directory
+            _uiState.update { it.copy(journal = JournalPolicy.visible(DecisionJournalStore.state.value, dir)) }
+        }
+
+        /** True when this session already received the decision (row badge). */
+        fun journalInjectedHere(entry: JournalEntry): Boolean =
+            entry.sessionIdHint().isNotEmpty()
 
         // --- prompt history -------------------------------------------------
 
@@ -1393,7 +1593,9 @@ class ChatViewModel
          * the original order — a prompt that depends on the previous one must not jump
          * the queue.
          */
-        fun flushOutbox() {
+        fun flushOutbox(manual: Boolean = false) {
+            // Automatic flushing is a setting; the explicit "Send now" always works.
+            if (!manual && !com.opencode.android.data.AppSettingsStore.state.value.outboxAutoFlush) return
             val session = _uiState.value.session ?: return
             if (_uiState.value.outboxFlushing) return
             val items = OutboxStore.forSession(session.id)
@@ -1782,6 +1984,10 @@ class ChatViewModel
                     if (_uiState.value.session?.id != sessionId) return@launch
                     val pending = all.filter { it.sessionId == null || it.sessionId == sessionId }
                     _uiState.update { it.copy(pendingPermissions = pending) }
+                    com.opencode.android.data.GlanceStore.update(
+                        pendingDecisions =
+                            pending.size + _uiState.value.pendingQuestions.size,
+                    )
                     // Actionable notifications for newly seen requests. Notifier
                     // dedupes by request id, so repeated loads do not re-alert.
                     com.opencode.android.data.Notifier

@@ -1,5 +1,6 @@
 package com.opencode.android
 import android.app.Application
+import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.MessageCache
 import com.opencode.android.data.NetworkMonitor
 import com.opencode.android.data.Notifier
@@ -26,6 +27,18 @@ class OpenCodeApp : Application() {
         // Background step/summary notifications: know whether the app is in focus,
         // and watch the sessions that keep running while it is not.
         com.opencode.android.data.AppVisibility.install(this)
+        // Always-on glance: ONE hook turns fact changes into surface refreshes (widget,
+        // ongoing notification). No timer — only a change of the displayed line
+        // reaches this point (see GlanceStore.update).
+        com.opencode.android.data.GlanceStore.onSurfaceChanged = { facts ->
+            // Setting: with live surfaces off, the widget/notification stay static and
+            // no refresh is spent (no wake-ups, no battery).
+            if (AppSettingsStore.state.value.glanceEnabled) {
+                com.opencode.android.data.WidgetStateStore.saveGlance(facts)
+                com.opencode.android.ui.widget.refreshSessionWidget(this)
+                Notifier.refreshConnectionNotification()
+            }
+        }
         com.opencode.android.data.BackgroundSessionWatcher.init(
             context = this,
             api = backendSession.api,

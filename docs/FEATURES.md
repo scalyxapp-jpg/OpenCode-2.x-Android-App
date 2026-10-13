@@ -390,6 +390,41 @@ error — the user had to notice and send again later. The app now keeps the pro
 - Attachments are not queued (their URIs may be gone later); such a send fails the
   normal way instead of silently losing the files.
 
+## 13c. Live surfaces, explain mode and the decision journal
+
+**Always-on glance** — the ambient state lives on the surfaces you already have, no new
+app screen: the **home-screen widget**, the **ongoing notification** of the keep-alive
+service (lockscreen-visible, counters only) and the **Quick Settings tile** (subtitle =
+open decisions). All three derive from ONE fact set (`GlanceStore`), so they can never
+disagree, and the line is:
+
+| State | Line |
+| --- | --- |
+| waiting for the human | `Waiting for you · 1` |
+| running with failures | `Stuck · 2 failures` |
+| running | `Step 7 · Shell · 42s` |
+| idle | previous idle/working wording |
+
+…plus `Today · $3.06` from the server's stats hub (`GET /api/experimental/session/stats?from=<today>`).
+Refreshes are **event-driven and bucketed**: a change of the *displayed* line triggers the
+update, and elapsed seconds are compared in 10-second steps — the line stays live without
+a per-second wake-up (Android throttles background updates).
+
+**Explain mode** — a side question about ONE artifact (a message, a diff, a tool output)
+runs in its **own session** with the dedicated agent (`docs` for code, `ask` otherwise), so
+the working conversation stays untouched. The prompt carries only the snippet (capped at
+6 000 chars) and explicitly forbids tools/edits. The answer appears as an ephemeral card in
+the transcript with *Use in prompt* / *Open session* / close. Entry point: the per-message
+menu (**Explain this message**) — one clear place, no extra buttons.
+
+**Decision journal** — decisions happen outside the chat. Capture them per project (local,
+free, no server call) and **hand them to the agent on demand**: that injects a `synthetic`
+message (`POST /api/session/{id}/synthetic`), which is visibly its own block in the
+transcript. Verified live: the agent treats it as **binding context** for later prompts —
+and the message is *delivered*, so it **starts a turn** (tokens). The UI says so, and the
+hand-over is a switchable action (§17). Journal lives behind one menu entry
+(**Decisions (N)**) with capture, hand-over, delete and a Markdown export.
+
 ## 14. Notifications
 
 Six channels, each with a purpose, so you can mute one thing without losing
@@ -454,6 +489,15 @@ focused app stays quiet):
 ## 17. Settings reference
 
 Four tabs:
+
+**General → Live & background** — one section for everything that runs continuously,
+watches in the background or injects into a chat, so nothing can surprise the user:
+**live status surfaces** (widget/notification/tile), **background monitoring** (off = the
+event stream is not watched while the app is not in focus), **keep connection alive**
+(foreground service), **explain mode**, **hand decisions to the agent**, **model race**,
+**send outbox automatically** (off = only via *Send now*). All default to on except nothing
+— each can be switched off and the feature then reports "Disabled in settings" instead of
+acting.
 
 **General** — **enable notifications** (master switch for every notification and
 sound the app posts), **follow-up behavior** (queue / steer), **timeline detail**

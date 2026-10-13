@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.16] - 2026-10-14
+
+### Added
+
+- **Always-on-Glance — Statuslicht statt App.** Widget, die laufende Notification des
+  Keep-alive-Dienstes (lockscreen-tauglich, nur Zähler) und die Quick-Settings-Kachel
+  zeigen jetzt den **Live-Zustand**: „Waiting for you · 1", „Stuck · 2 failures",
+  „Step 7 · Shell · 42s", dazu „Today · $3.06" aus dem bisher ungenutzten
+  `GET /api/experimental/session/stats?from=<heute>`. Alle drei leiten aus **einer**
+  Faktensammlung (`GlanceStore`) ab, damit sie sich nie widersprechen; Aktualisierungen
+  sind **ereignisgetrieben und gebucket** (Sekunden werden in 10-s-Schritten verglichen) —
+  lebendige Zeile ohne Sekunden-Wake-ups.
+- **Erklär-Modus — Seitenfrage in eigener Session.** Über das Nachrichtenmenü
+  („Explain this message") läuft die Frage mit dem passenden Agenten (`docs` für Code,
+  `ask` sonst) in einer **eigenen Session**; der Prompt trägt nur den Ausschnitt (Cap
+  6 000 Zeichen) und verbietet Tools/Änderungen ausdrücklich. Die Antwort erscheint als
+  Karte im Verlauf („Use in prompt" / „Open session" / schließen) — der Arbeitsverlauf
+  bleibt unberührt.
+- **Entscheidungs-Journal — Beschlüsse hoheitlich mitgeben.** Beschlüsse werden pro Projekt
+  lokal festgehalten (kostenlos) und auf Wunsch **an den Agenten übergeben**: das injiziert
+  eine `synthetic`-Nachricht (`POST /api/session/{id}/synthetic`) und erscheint als eigener
+  Block im Verlauf. Live verifiziert: der Agent behandelt sie als **bindenden Kontext** für
+  spätere Prompts — und weil die Nachricht zugestellt wird, **startet sie einen Turn**
+  (Tokens; die UI sagt das vorher). Menüeintrag „Decisions (N)" mit Erfassen, Übergeben,
+  Löschen und Markdown-Export.
+- **Alle dauerhaften/automatischen Funktionen sind jetzt schaltbar** (Settings → General →
+  **Live & background**): Live-Status-Oberflächen, Hintergrund-Überwachung (aus = nichts
+  läuft im Hintergrund), Verbindung am Leben halten (Foreground-Service), Erklär-Modus,
+  „Beschlüsse an den Agenten übergeben", Model Race, Outbox automatisch senden. Ist eine
+  Funktion aus, meldet sie „Disabled in settings: …" statt heimlich zu arbeiten.
+
+### Added (tests)
+
+- `GlanceStatusTest` (Präzedenz Waiting > Stuck > Running > Idle, Fortschrittszeile,
+  Kostenformat, Dedupe in 10-s-Schritten), `ExplainPolicyTest` (Agentenwahl, Prompt-Vertrag
+  „no tools", Snippet-Cap) und `JournalPolicyTest` (Projekt-Scope, Cap, Einmal-Markierung
+  der Übergabe, Suche, Markdown-Export). Gesamt im betroffenen Satz: **480 Tests, 0 Fehler**.
+
 ## [1.5.15] - 2026-10-13
 
 ### Fixed
@@ -818,7 +856,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.15...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.16...HEAD
+[1.5.16]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.15...v1.5.16
 [1.5.15]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.14...v1.5.15
 [1.5.14]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.13...v1.5.14
 [1.5.13]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...v1.5.13

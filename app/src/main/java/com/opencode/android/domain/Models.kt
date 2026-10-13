@@ -185,6 +185,8 @@ data class Message(
      */
     val skill: String? = null,
     val name: String? = null,
+    /** `synthetic` messages carry a short description (journal: where/when). */
+    val description: String? = null,
     // Web endpoint structure: { info, parts }
     val info: MessageInfo? = null,
 )
@@ -900,6 +902,21 @@ val BUILTIN_COMMANDS: List<CommandEntry> =
 
 // GET /mcp → { "<name>": { "status": "connected" | "disabled" | "failed" |
 // "needs_auth" | "pending" | "needs_client_registration" } }
+
+/**
+ * `GET /api/experimental/session/stats` — server-side usage aggregate.
+ *
+ * Only what the glance surfaces need is mapped (cost today); the endpoint also reports
+ * sessions/prompts/steps/tools/streak/model usage, which the unknown-keys policy drops.
+ */
+@Serializable
+@Immutable
+data class SessionStats(
+    val cost: Double? = null,
+    val sessions: Int? = null,
+    val prompts: Int? = null,
+    val steps: Int? = null,
+)
 
 /** One installed plugin (Extensions → Plugins, `GET /api/plugin`). */
 @Serializable

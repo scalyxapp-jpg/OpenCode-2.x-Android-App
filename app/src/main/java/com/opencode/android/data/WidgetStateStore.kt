@@ -18,6 +18,7 @@ object WidgetStateStore {
     private const val KEY_STATUS = "status"
     private const val KEY_MODEL = "model"
     private const val KEY_GENERATING = "generating"
+    private const val KEY_GLANCE = "glance"
 
     @Volatile
     private var prefs: SharedPreferences? = null
@@ -59,6 +60,29 @@ object WidgetStateStore {
             putString(KEY_MODEL, model)
             putBoolean(KEY_GENERATING, generating)
         }
+    }
+
+    /**
+     * Persists the ambient facts (widget/notification/tile read them from another
+     * entry point) — the glance line is derived, never stored pre-rendered.
+     */
+    fun saveGlance(facts: GlanceFacts) {
+        prefs?.edit {
+            putString(
+                KEY_GLANCE,
+                kotlinx.serialization.json.Json.encodeToString(
+                    GlanceFacts.serializer(),
+                    facts,
+                ),
+            )
+        }
+    }
+
+    fun glance(): GlanceFacts {
+        val raw = prefs?.getString(KEY_GLANCE, null) ?: return GlanceFacts()
+        return runCatching {
+            kotlinx.serialization.json.Json.decodeFromString(GlanceFacts.serializer(), raw)
+        }.getOrDefault(GlanceFacts())
     }
 
     data class Snapshot(

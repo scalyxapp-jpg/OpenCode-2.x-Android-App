@@ -71,6 +71,8 @@ internal fun MessageBubble(
     shellToolPartsExpanded: Boolean = false,
     editToolPartsExpanded: Boolean = false,
     onOpenSession: (String) -> Unit = {},
+    /** Explain mode: ask about this message in its own session. */
+    onExplain: (String) -> Unit = {},
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Revert is destructive (everything after the message is discarded), so it
@@ -85,6 +87,12 @@ internal fun MessageBubble(
         // Subtle timeline notice, the same divider treatment as the compaction
         // block — a bare centred line looked like a stray paragraph next to it.
         TimelineNotice(stringResource(R.string.model_label, message.model?.id ?: "?"))
+        return
+    }
+    if (type == "synthetic") {
+        // Injected context (decision journal, scripted context): shown as its own block
+        // so it is visibly NOT a chat message — the agent treats it as binding context.
+        SyntheticMessageRow(message)
         return
     }
     if (type == "skill") {
@@ -445,6 +453,17 @@ Row(
                     },
                 )
             }
+            if (text.isNotBlank()) {
+                // Explain mode: a side question in its own session (the message stays
+                // the artifact here — diffs and tool outputs usually live in it).
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.explain_message_action)) },
+                    onClick = {
+                        showContextMenu = false
+                        onExplain(text)
+                    },
+                )
+            }
             if (!isUser) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.regenerate)) },
@@ -572,6 +591,46 @@ private fun SkillMessageRow(message: com.opencode.android.domain.Message) {
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     MarkdownText(text = text, modifier = Modifier.fillMaxWidth())
                 }
+            }
+        }
+    }
+}
+
+
+/**
+ * One `synthetic` message (e.g. a decision handed over from the journal). Rendered as its
+ * own block: label + optional description + text, visually distinct from chat bubbles
+ * because the agent treats it as binding context rather than as the user's opinion.
+ */
+@Composable
+private fun SyntheticMessageRow(message: com.opencode.android.domain.Message) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.journal_block_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                message.description?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = " · $it",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (!message.text.isNullOrBlank()) {
+                MarkdownText(text = message.text.orEmpty(), modifier = Modifier.fillMaxWidth())
             }
         }
     }

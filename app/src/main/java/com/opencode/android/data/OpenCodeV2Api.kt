@@ -351,6 +351,21 @@ interface OpenCodeV2Api {
         @Header("x-opencode-directory") directory: String? = null,
     ): Response<ResponseBody>
 
+    @POST("api/session/{sessionID}/synthetic")
+    suspend fun synthetic(
+        @Path("sessionID") sessionId: String,
+        @Body body: JsonElement,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): Response<ResponseBody>
+
+    @GET("api/experimental/session/stats")
+    suspend fun stats(
+        @Query("from") from: String? = null,
+        @Query("to") to: String? = null,
+        @Query("project") project: String? = null,
+        @Query("tools") tools: String? = null,
+    ): WireEnvelope<com.opencode.android.domain.SessionStats>
+
     @GET("api/mcp/resource")
     suspend fun mcpResources(
         @Header("x-opencode-directory") directory: String? = null,

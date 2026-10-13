@@ -52,6 +52,14 @@ object BackgroundSessionWatcher {
 
     private var job: Job? = null
     private var policy = SessionAlertPolicy.State()
+
+    // Ambient glance state while the app is in the BACKGROUND (the widget/notification
+    // are the only UI then): steps of the newest turn, failures, elapsed time.
+    private var glanceSession: String? = null
+    private var glanceStep = 0
+    private var glanceFailures = 0
+    private var glanceStartedAt = 0L
+    private var pendingDecisionIds = mutableSetOf<String>()
     private val running = mutableSetOf<String>()
     private val retrying = mutableSetOf<String>()
 
@@ -78,8 +86,24 @@ object BackgroundSessionWatcher {
 
     fun start() {
         if (job?.isActive == true) return
+        // Setting: nothing at all runs in the background when monitoring is off.
+        if (!AppSettingsStore.state.value.backgroundMonitoring) return
         val url = baseUrlProvider()
         if (url.isBlank()) return
+        // Cost of the day for the glance surfaces: one call when the watcher starts (the
+        // app then keeps it fresh by re-entering the foreground), never a timer.
+        scope.launch {
+            runCatching {
+                val start =
+                    java.util.Calendar.getInstance().apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                api?.getStats(fromMs = start)?.cost?.let { GlanceStore.update(costTodayUsd = it) }
+            }
+        }
         AppLog.d(APP_LOG_TAG) { "BackgroundSessionWatcher: collect $url" }
         job =
             scope.launch {
@@ -134,6 +158,10 @@ object BackgroundSessionWatcher {
                         ?: input?.get("filePath").asText()
                         ?: input?.get("path").asText()
                         ?: input?.get("description").asText()
+                if (status == "error") {
+                    glanceFailures += 1
+                    GlanceStore.update(failures = glanceFailures, running = true)
+                }
                 val label = ToolText.notificationLabel(part.tool ?: part.name, detail)
                 policy = SessionAlertPolicy.toolSeen(policy, eventSession, label)
             }
@@ -142,7 +170,40 @@ object BackgroundSessionWatcher {
                 val (nextPolicy, tools) =
                     SessionAlertPolicy.stepEnded(policy, eventSession, System.currentTimeMillis())
                 policy = nextPolicy
+                // Glance: this is the "Step 7 · 42s" the surfaces show.
+                glanceStep += 1
+                if (glanceSession != eventSession) {
+                    glanceSession = eventSession
+                    glanceStep = 1
+                    glanceFailures = 0
+                    glanceStartedAt = System.currentTimeMillis()
+                }
+                GlanceStore.update(
+                    sessionId = eventSession,
+                    running = true,
+                    step = glanceStep,
+                    elapsedMs = System.currentTimeMillis() - glanceStartedAt,
+                    failures = glanceFailures,
+                )
                 if (tools != null) onStepDone(eventSession, tools)
+            }
+
+            "permission.asked", "permission.v2.asked", "question.asked", "question.v2.asked" -> {
+                // Ambient "waiting for you": counted from the event stream, so the
+                // surfaces are right without polling the request list.
+                (event.properties?.requestId ?: event.properties?.part?.id)?.let { id ->
+                    pendingDecisionIds += id
+                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                }
+            }
+
+            "permission.replied", "permission.v2.replied", "question.replied", "question.rejected",
+            "question.v2.replied", "question.v2.rejected",
+            -> {
+                (event.properties?.requestId ?: event.properties?.part?.id)?.let { id ->
+                    pendingDecisionIds -= id
+                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                }
             }
         }
     }
@@ -173,6 +234,14 @@ object BackgroundSessionWatcher {
         turnFailed: Boolean,
     ) {
         policy = SessionAlertPolicy.turnEnded(policy, sessionId)
+        // Glance: the turn is over — clear the running line so a finished turn cannot
+        // look stuck on the widget.
+        if (glanceSession == sessionId || glanceSession == null) {
+            glanceSession = null
+            glanceStep = 0
+            glanceFailures = 0
+            GlanceStore.update(sessionId = sessionId, clearRunning = true)
+        }
         val context = context ?: return
         val title = sessionTitle(sessionId) ?: context.getString(R.string.app_name)
         val answer = lastAssistantAnswer(sessionId)

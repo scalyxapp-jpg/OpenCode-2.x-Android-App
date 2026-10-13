@@ -258,3 +258,84 @@ internal fun RaceCard(
         }
     }
 }
+
+/**
+ * The explain card: a side question about one artifact, answered by the `ask`/`docs`
+ * agent in its own session. Lives in the transcript like the race card (an ephemeral
+ * block), because that is where the artifact the user pointed at is.
+ */
+@Composable
+internal fun ExplainCard(
+    state: com.opencode.android.ui.explain.ExplainState,
+    onUseInPrompt: (String) -> Unit,
+    onOpenSession: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.explain_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                state.label?.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            Text(
+                text = state.snippet,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            when {
+                state.running -> Text(
+                    text = stringResource(R.string.explain_running),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                state.failed -> Text(
+                    text = stringResource(R.string.explain_failed),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+
+                else -> MarkdownText(text = state.answer, modifier = Modifier.fillMaxWidth())
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
+                if (!state.running && !state.failed && state.answer.isNotBlank()) {
+                    TextButton(onClick = { onUseInPrompt(state.answer) }) {
+                        Text(stringResource(R.string.explain_use), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                state.sessionId?.let { sessionId ->
+                    TextButton(onClick = { onOpenSession(sessionId) }) {
+                        Text(
+                            stringResource(R.string.explain_open),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.close), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}

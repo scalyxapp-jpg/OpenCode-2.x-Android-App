@@ -65,15 +65,41 @@ class SessionWidget : GlanceAppWidget() {
 private fun SessionWidgetContent() {
     val context = LocalContext.current
     val snapshot = WidgetStateStore.snapshot()
-    val sessionId = LastSessionStore.sessionId()
-    val title = LastSessionStore.title() ?: context.getString(com.opencode.android.R.string.app_name)
+    // Ambient facts (from the app's GlanceStore, persisted for this process): what the
+    // app is doing RIGHT NOW, not just "working/idle".
+    val facts = WidgetStateStore.glance()
+    val kind = com.opencode.android.data.GlanceStatus.kind(facts)
+    val sessionId = facts.sessionId ?: LastSessionStore.sessionId()
+    val title = facts.title ?: LastSessionStore.title() ?: context.getString(com.opencode.android.R.string.app_name)
+    val progress = com.opencode.android.data.GlanceStatus.progress(facts)
+    val cost = com.opencode.android.data.GlanceStatus.cost(facts.costTodayUsd)
     val status =
-        when {
-            snapshot.generating -> snapshot.status ?: context.getString(com.opencode.android.R.string.widget_working)
-            sessionId != null -> snapshot.status ?: context.getString(com.opencode.android.R.string.widget_idle)
-            else -> context.getString(com.opencode.android.R.string.widget_no_session)
+        when (kind) {
+            com.opencode.android.data.GlanceKind.WAITING ->
+                context.getString(com.opencode.android.R.string.glance_waiting, facts.pendingDecisions)
+
+            com.opencode.android.data.GlanceKind.STUCK ->
+                context.getString(com.opencode.android.R.string.glance_stuck, facts.failures)
+
+            com.opencode.android.data.GlanceKind.RUNNING ->
+                progress ?: context.getString(com.opencode.android.R.string.glance_running)
+
+            com.opencode.android.data.GlanceKind.IDLE ->
+                when {
+                    snapshot.generating ->
+                        snapshot.status ?: context.getString(com.opencode.android.R.string.widget_working)
+
+                    sessionId != null ->
+                        snapshot.status ?: context.getString(com.opencode.android.R.string.widget_idle)
+
+                    else -> context.getString(com.opencode.android.R.string.widget_no_session)
+                }
         }
-    val model = snapshot.model
+    val model =
+        com.opencode.android.data.GlanceStatus
+            .cost(facts.costTodayUsd)
+            ?.let { context.getString(com.opencode.android.R.string.glance_cost_today, it) }
+            ?: snapshot.model
 
     Column(
         modifier =
@@ -101,6 +127,8 @@ private fun SessionWidgetContent() {
         )
         Spacer(GlanceModifier.height(4.dp))
         Text(
+            // Second line: the live line, plus cost-today (or the model when the server
+            // has no stats endpoint).
             text = if (model != null) "$status · $model" else status,
             style = TextStyle(color = ColorProvider(Color(0xFF8B97A3)), fontSize = 12.sp),
             maxLines = 1,

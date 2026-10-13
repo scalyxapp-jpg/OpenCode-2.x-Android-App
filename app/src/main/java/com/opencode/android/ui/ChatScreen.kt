@@ -415,6 +415,34 @@ internal fun ChatScreen(
                     }
                     // "/mcp" dialog (web parity: title "MCPs", "N of M enabled",
                     // search, per-server switch, auth for needs-auth servers).
+                    // Decisions of this project (capture is local; handing over is an
+                    // explicit, switchable action).
+                    if (uiState.journalDialogVisible) {
+                        JournalDialog(
+                            entries = uiState.journal,
+                            openInSession = uiState.session != null,
+                            onInject = viewModel::injectJournalEntry,
+                            onDelete = viewModel::deleteJournalEntry,
+                            onExport = {
+                                val markdown = viewModel.exportJournal()
+                                if (markdown.isNotBlank()) {
+                                    copyToClipboard(context, "Decision journal", markdown)
+                                    toast(resources.getString(R.string.copied))
+                                }
+                            },
+                            onNew = { viewModel.showNewJournalEntry(true) },
+                            onDismiss = viewModel::closeJournal,
+                        )
+                    }
+                    if (uiState.journalNewEntryVisible) {
+                        NewJournalEntryDialog(
+                            onSave = { text, where ->
+                                viewModel.addJournalEntry(text, where)
+                                viewModel.showNewJournalEntry(false)
+                            },
+                            onDismiss = { viewModel.showNewJournalEntry(false) },
+                        )
+                    }
                     if (uiState.historyDialogVisible) {
                         PromptHistoryDialog(
                             entries = uiState.history,
@@ -479,6 +507,20 @@ internal fun ChatScreen(
                         ) {
                             // Model race: the composer's text as the task, sent to
                             // 2–3 models in parallel (their sessions, same project).
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.journal_menu,
+                                            uiState.journal.size,
+                                        ),
+                                    )
+                                },
+                                onClick = {
+                                    showMore = false
+                                    viewModel.openJournal()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.race_entry)) },
                                 onClick = {
@@ -910,6 +952,13 @@ internal fun ChatScreen(
                                             onSteer = viewModel::steerMessage,
                                             onHistory = viewModel::openHistory,
                                             onFlushOutbox = viewModel::flushOutbox,
+                                            onExplain = { text ->
+                                                viewModel.explain(
+                                                    com.opencode.android.ui.explain.ExplainPolicy.Kind.TEXT,
+                                                    text,
+                                                )
+                                            },
+                                            onDismissExplain = viewModel::dismissExplain,
                                             onClearOutbox = viewModel::clearOutbox,
                                             onStopRace = viewModel::stopRace,
                                             onDismissRace = viewModel::dismissRace,
@@ -1048,6 +1097,10 @@ internal class ChatActions(
     val onHistory: () -> Unit = {},
     /** Offline outbox: deliver the waiting prompts now. */
     val onFlushOutbox: () -> Unit = {},
+    /** Explain mode: ask about one artifact in its own session. */
+    val onExplain: (String) -> Unit = {},
+    /** Explain mode: drop the running side question / its card. */
+    val onDismissExplain: () -> Unit = {},
     /** Offline outbox: drop them. */
     val onClearOutbox: () -> Unit = {},
     /** Model race: stop every member that is still running. */
@@ -1539,6 +1592,7 @@ internal fun SessionTab(
                                 0
                             }) +
                                 (if (uiState.race != null) 1 else 0) +
+                                (if (uiState.explain != null) 1 else 0) +
                                 (if (uiState.queuedMessages.isNotEmpty()) uiState.queuedMessages.size + 1 else 0)
                         // A tapped background notification names the message it
                         // describes. Scroll there once the list contains it; a
@@ -1617,6 +1671,18 @@ internal fun SessionTab(
                                 // the live items, so in the reversed layout they sit
                                 // just above them: the newest thing that has not run
                                 // yet. The server delivers them when the turn ends.
+                                // Explain mode: a side question about an artifact, shown as
+                                // an ephemeral transcript block like the race card.
+                                uiState.explain?.let { explain ->
+                                    item(key = "explain-card") {
+                                        ExplainCard(
+                                            state = explain,
+                                            onUseInPrompt = { answer -> onInputChange(answer) },
+                                            onOpenSession = onOpenSession,
+                                            onDismiss = actions.onDismissExplain,
+                                        )
+                                    }
+                                }
                                 uiState.race?.let { race ->
                                     item(key = "race-card") {
                                         RaceCard(

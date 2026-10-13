@@ -17,6 +17,9 @@ class NewSessionTileService : TileService() {
     @SuppressLint("StartActivityAndCollapseDeprecated")
     override fun onClick() {
         super.onClick()
+        // Subtitle = ambient decision count, so the tile doubles as the glance
+        // surface instead of adding a second tile.
+        runCatching { updateSubtitle() }
         val intent =
             Intent(this, MainActivity::class.java).apply {
                 action = MainActivity.ACTION_NEW_SESSION
@@ -45,5 +48,21 @@ class NewSessionTileService : TileService() {
                 "NewSessionTileService: could not start activity: ${error.message}"
             }
         }
+    }
+
+    /**
+     * Shows the open decisions in the tile's subtitle (API 29+); a no-op below that.
+     * Counters only — the tile never carries prompt text.
+     */
+    private fun updateSubtitle() {
+        if (android.os.Build.VERSION.SDK_INT < 29) return
+        val pending = com.opencode.android.data.GlanceStore.facts().pendingDecisions
+        val text =
+            if (pending > 0) {
+                getString(com.opencode.android.R.string.glance_tile_pending, pending)
+            } else {
+                getString(com.opencode.android.R.string.glance_tile_idle)
+            }
+        qsTile?.subtitle = text
     }
 }

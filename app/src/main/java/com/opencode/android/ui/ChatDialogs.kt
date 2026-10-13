@@ -25,6 +25,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import com.opencode.android.data.JournalEntry
 import com.opencode.android.data.PromptHistoryEntry
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -951,6 +952,144 @@ internal fun PromptHistoryDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+        },
+    )
+}
+
+/**
+ * Decision journal for the current project.
+ *
+ * Capture is local and free; "Hand to agent" is the explicit (and switchable) hand-over
+ * that injects the decision as a `synthetic` message — verified live: it becomes part of
+ * the transcript, is binding for later prompts, and starts a turn (tokens).
+ */
+@Composable
+internal fun JournalDialog(
+    entries: List<JournalEntry>,
+    openInSession: Boolean,
+    onInject: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onExport: () -> Unit,
+    onNew: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.journal_title)) },
+        text = {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp),
+            ) {
+                if (entries.isEmpty()) {
+                    EmptyState(title = stringResource(R.string.journal_empty), compact = true)
+                    return@Column
+                }
+                LazyColumn {
+                    itemsIndexed(entries, key = { index, entry -> "${entry.id}#$index" }) { _, entry ->
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = MaterialTheme.spacing.small),
+                        ) {
+                            entry.description?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            Text(
+                                text = entry.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 4,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                            ) {
+                                TextButton(onClick = { onInject(entry.id) }) {
+                                    Text(
+                                        text = stringResource(R.string.journal_inject),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                TextButton(onClick = { onDelete(entry.id) }) {
+                                    Text(
+                                        text = stringResource(R.string.journal_delete),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onExport) {
+                Text(stringResource(R.string.journal_export))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onNew) { Text(stringResource(R.string.journal_add)) }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+            }
+        },
+    )
+}
+
+/** Tiny capture dialog: the decision text plus an optional "where/when". */
+@Composable
+internal fun NewJournalEntryDialog(
+    onSave: (String, String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var where by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.journal_add)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small)) {
+                Text(
+                    text = stringResource(R.string.journal_add_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text(stringResource(R.string.journal_text_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = where,
+                    onValueChange = { where = it },
+                    label = { Text(stringResource(R.string.journal_description_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    // Honest about the hand-over: it is the switchable action later.
+                    text = stringResource(R.string.journal_inject_warning),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(text, where) },
+                enabled = text.isNotBlank(),
+            ) { Text(stringResource(R.string.journal_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }

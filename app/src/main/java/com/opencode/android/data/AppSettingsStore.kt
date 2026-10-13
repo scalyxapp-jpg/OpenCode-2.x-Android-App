@@ -94,6 +94,31 @@ object AppSettingsStore {
          * sounds). The per-event switches below only matter while this is on.
          */
         val notificationsEnabled: Boolean = true,
+        // --- live & background -------------------------------------------------
+        /**
+         * Live status surfaces (widget, ongoing notification, tile): step/progress,
+         * waiting decisions, failures and the cost of the day.
+         */
+        val glanceEnabled: Boolean = true,
+        /**
+         * Background monitoring: watch the sessions' event stream while the app is not
+         * in focus (feeds notifications AND the live surfaces). Off = nothing runs in
+         * the background.
+         */
+        val backgroundMonitoring: Boolean = true,
+        /**
+         * Keep the connection alive with a foreground service while the app is open
+         * (survives backgrounding; Android caps it at ~6 h/day).
+         */
+        val keepAliveService: Boolean = true,
+        /** Explain mode: side questions in their own session. */
+        val explainEnabled: Boolean = true,
+        /** Handing a captured decision to the agent (injects a synthetic message). */
+        val journalInjectEnabled: Boolean = true,
+        /** Model race: starts extra sessions and spends tokens. */
+        val raceEnabled: Boolean = true,
+        /** Offline outbox: send waiting prompts automatically when the network is back. */
+        val outboxAutoFlush: Boolean = true,
         val notifyAgent: Boolean = true,
         val notifyPermissions: Boolean = true,
         val notifyErrors: Boolean = false,
@@ -138,6 +163,13 @@ object AppSettingsStore {
             monoFont = prefs.getString("monoFont", "") ?: "",
             terminalFont = prefs.getString("terminalFont", "") ?: "",
             notificationsEnabled = prefs.getBoolean("notificationsEnabled", true),
+            glanceEnabled = prefs.getBoolean("glanceEnabled", true),
+            backgroundMonitoring = prefs.getBoolean("backgroundMonitoring", true),
+            keepAliveService = prefs.getBoolean("keepAliveService", true),
+            explainEnabled = prefs.getBoolean("explainEnabled", true),
+            journalInjectEnabled = prefs.getBoolean("journalInjectEnabled", true),
+            raceEnabled = prefs.getBoolean("raceEnabled", true),
+            outboxAutoFlush = prefs.getBoolean("outboxAutoFlush", true),
             notifyAgent = prefs.getBoolean("notifyAgent", true),
             notifyPermissions = prefs.getBoolean("notifyPermissions", true),
             notifyErrors = prefs.getBoolean("notifyErrors", false),
@@ -220,6 +252,20 @@ object AppSettingsStore {
     fun setTerminalFont(v: String) = update { it.putString("terminalFont", v) }
 
     fun setNotificationsEnabled(v: Boolean) = update { it.putBoolean("notificationsEnabled", v) }
+
+    fun setGlanceEnabled(v: Boolean) = update { it.putBoolean("glanceEnabled", v) }
+
+    fun setBackgroundMonitoring(v: Boolean) = update { it.putBoolean("backgroundMonitoring", v) }
+
+    fun setKeepAliveService(v: Boolean) = update { it.putBoolean("keepAliveService", v) }
+
+    fun setExplainEnabled(v: Boolean) = update { it.putBoolean("explainEnabled", v) }
+
+    fun setJournalInjectEnabled(v: Boolean) = update { it.putBoolean("journalInjectEnabled", v) }
+
+    fun setRaceEnabled(v: Boolean) = update { it.putBoolean("raceEnabled", v) }
+
+    fun setOutboxAutoFlush(v: Boolean) = update { it.putBoolean("outboxAutoFlush", v) }
 
     fun setNotifyAgent(v: Boolean) = update { it.putBoolean("notifyAgent", v) }
 
@@ -334,6 +380,13 @@ object AppSettingsStore {
                 putString("monoFont", parsed.monoFont)
                 putString("terminalFont", parsed.terminalFont)
                 putBoolean("notificationsEnabled", parsed.notificationsEnabled)
+                putBoolean("glanceEnabled", parsed.glanceEnabled)
+                putBoolean("backgroundMonitoring", parsed.backgroundMonitoring)
+                putBoolean("keepAliveService", parsed.keepAliveService)
+                putBoolean("explainEnabled", parsed.explainEnabled)
+                putBoolean("journalInjectEnabled", parsed.journalInjectEnabled)
+                putBoolean("raceEnabled", parsed.raceEnabled)
+                putBoolean("outboxAutoFlush", parsed.outboxAutoFlush)
                 putBoolean("notifyAgent", parsed.notifyAgent)
                 putBoolean("notifyPermissions", parsed.notifyPermissions)
                 putBoolean("notifyErrors", parsed.notifyErrors)
