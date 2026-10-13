@@ -3,6 +3,8 @@ import com.opencode.android.util.formatCount
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import com.opencode.android.domain.SkillEntry
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -722,4 +724,106 @@ internal fun QuestionRequestCard(
             }
         }
     }
+}
+
+/**
+ * "/skills" picker (TUI parity: `/skills` opens the skill list, picking one injects
+ * the skill into the session). Search matches name, id and description, exactly the
+ * keywords the TUI's palette indexes.
+ */
+@Composable
+internal fun SkillsDialog(
+    skills: List<SkillEntry>,
+    loading: Boolean,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val visible =
+        remember(skills, query) {
+            if (query.isBlank()) {
+                skills
+            } else {
+                skills.filter {
+                    it.id.contains(query, ignoreCase = true) ||
+                        (it.name ?: "").contains(query, ignoreCase = true) ||
+                        (it.description ?: "").contains(query, ignoreCase = true)
+                }
+            }
+        }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.skills_pick_title)) },
+        text = {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.skills_pick_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                when {
+                    loading && skills.isEmpty() -> Text(stringResource(R.string.extensions_loading))
+                    skills.isEmpty() ->
+                        EmptyState(
+                            title = stringResource(R.string.skills_pick_empty),
+                            compact = true,
+                        )
+
+                    else -> {
+                        PickerSearchField(
+                            query = query,
+                            onQueryChange = { query = it },
+                            placeholder = stringResource(R.string.skills_pick_search),
+                            modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
+                        )
+                        LazyColumn {
+                            // Unique keys: two skills could share an id-shaped label
+                            // in theory, and a duplicate key is a hard crash.
+                            itemsIndexed(
+                                visible,
+                                key = { index, skill -> "skill-${skill.id}#$index" },
+                            ) { _, skill ->
+                                Row(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onPick(skill.id) }
+                                            .padding(vertical = MaterialTheme.spacing.small),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = skill.name ?: skill.id,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        skill.description?.takeIf { it.isNotBlank() }?.let {
+                                            Text(
+                                                text = it,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
 }

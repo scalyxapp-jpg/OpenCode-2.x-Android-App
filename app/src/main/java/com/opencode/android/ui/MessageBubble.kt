@@ -20,6 +20,8 @@ import androidx.compose.foundation.border
 import androidx.compose.material3.Surface
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +85,13 @@ internal fun MessageBubble(
         // Subtle timeline notice, the same divider treatment as the compaction
         // block — a bare centred line looked like a stray paragraph next to it.
         TimelineNotice(stringResource(R.string.model_label, message.model?.id ?: "?"))
+        return
+    }
+    if (type == "skill") {
+        // `session.skill.activated` (TUI: /skills): the server stores a `skill`
+        // message holding the injected text. Shown as its own block — name first,
+        // text collapsed unless the user wants to read it.
+        SkillMessageRow(message)
         return
     }
     if (type == "compaction") {
@@ -506,5 +515,64 @@ private fun MessageActionsButton(onClick: () -> Unit) {
             modifier = Modifier.size(16.dp),
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
         )
+    }
+}
+
+/**
+ * One injected skill (`type = "skill"`), rendered like the TUI's skill block: the
+ * skill's name with the injected text folded away, so a long skill does not push the
+ * conversation off screen.
+ */
+@Composable
+private fun SkillMessageRow(message: com.opencode.android.domain.Message) {
+    var expanded by remember(message.id) { mutableStateOf(false) }
+    val text = message.text.orEmpty()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(
+            modifier = Modifier.padding(MaterialTheme.spacing.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.skill_message_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = " · " + (message.name ?: message.skill.orEmpty()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (text.isNotBlank()) {
+                    TextButton(onClick = { expanded = !expanded }) {
+                        Text(
+                            text =
+                                stringResource(
+                                    if (expanded) {
+                                        R.string.skill_message_hide
+                                    } else {
+                                        R.string.skill_message_show
+                                    },
+                                ),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+            if (expanded && text.isNotBlank()) {
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    MarkdownText(text = text, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
     }
 }

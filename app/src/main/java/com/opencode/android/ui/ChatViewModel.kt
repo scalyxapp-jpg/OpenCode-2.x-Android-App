@@ -36,6 +36,7 @@ import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.InboxPayload
 import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
 import com.opencode.android.domain.SessionTimeUpdate
@@ -171,6 +172,10 @@ data class ChatUiState(
     // "/mcp": configured MCP servers (name + status), alphabetical.
     val mcpServers: List<McpEntry> = emptyList(),
     val mcpDialogVisible: Boolean = false,
+    /** "/skills": the picker (TUI: skill menu) and the loaded skill catalog. */
+    val skillsDialogVisible: Boolean = false,
+    val skills: List<SkillEntry> = emptyList(),
+    val skillsLoading: Boolean = false,
     val pendingQuestions: List<SessionQuestion> = emptyList(),
     // Tool-permission prompts awaiting an answer (web: Deny/Allow always/Allow once).
     val pendingPermissions: List<PermissionRequest> = emptyList(),
@@ -1049,7 +1054,64 @@ class ChatViewModel
             when (name) {
                 "compact" -> compactSession()
                 "mcp" -> openMcpDialog()
+                "skills" -> openSkillsDialog()
                 else -> AppLog.w(APP_LOG_TAG) { "builtin /$name is not implemented; ignoring" }
+            }
+        }
+
+        /**
+         * "/skills" — mirrors the TUI: clear the composer, show the skill list, and
+         * on pick inject the skill into the session
+         * (`POST /api/experimental/session/{id}/skill`). The server then emits
+         * `session.skill.activated`, stores a `skill` message and starts a turn, so
+         * the injection is visible in the transcript exactly like in the TUI.
+         */
+        fun openSkillsDialog() {
+            _uiState.update { it.copy(skillsDialogVisible = true, inputText = "") }
+            loadSkills()
+        }
+
+        fun closeSkillsDialog() {
+            _uiState.update { it.copy(skillsDialogVisible = false) }
+        }
+
+        fun loadSkills() {
+            val directory = _uiState.value.session?.directory
+            _uiState.update { it.copy(skillsLoading = true) }
+            viewModelScope.launch {
+                try {
+                    val skills =
+                        api
+                            .getSkills(directory)
+                            .sortedWith(compareBy({ it.name ?: it.id }))
+                    _uiState.update { it.copy(skills = skills, skillsLoading = false) }
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "loadSkills failed: ${e.message}")
+                    _uiState.update { it.copy(skillsLoading = false) }
+                    UserMessages.post(R.string.could_not_load_skills, "${e.message}")
+                }
+            }
+        }
+
+        /** Picks a skill: inject it into the session and close the picker. */
+        fun activateSkill(skillId: String) {
+            val session = _uiState.value.session ?: return
+            val name = _uiState.value.skills.firstOrNull { it.id == skillId }?.name ?: skillId
+            _uiState.update { it.copy(skillsDialogVisible = false) }
+            viewModelScope.launch {
+                try {
+                    if (api.activateSkill(session.id, skillId, session.directory)) {
+                        UserMessages.post(R.string.skill_injected, name)
+                        // The skill message + the started turn arrive over SSE; the
+                        // reload makes them visible even if the event is in flight.
+                        refreshMessages(session.id)
+                    } else {
+                        UserMessages.post(R.string.skill_injection_failed, name)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "activateSkill failed: ${e.message}")
+                    UserMessages.post(R.string.skill_injection_failed, "${e.message}")
+                }
             }
         }
 

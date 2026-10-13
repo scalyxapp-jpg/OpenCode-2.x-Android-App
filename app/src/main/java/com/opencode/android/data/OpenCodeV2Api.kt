@@ -336,6 +336,21 @@ interface OpenCodeV2Api {
         @Header("x-opencode-directory") directory: String? = null,
     ): WireEnvelope<List<WireCommand>>
 
+    /**
+     * Injects a skill into the session (TUI: `/skills` → pick).
+     *
+     * Verified against the running server (2.0.26): the non-experimental
+     * `/api/session/{id}/skill` answers **404**, the experimental route answers
+     * **204** and the server emits `session.skill.activated` plus a `skill`
+     * message and starts a turn.
+     */
+    @POST("api/experimental/session/{sessionID}/skill")
+    suspend fun activateSkill(
+        @Path("sessionID") sessionId: String,
+        @Body body: JsonElement,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): Response<ResponseBody>
+
     @GET("api/mcp/resource")
     suspend fun mcpResources(
         @Header("x-opencode-directory") directory: String? = null,

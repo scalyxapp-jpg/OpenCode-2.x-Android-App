@@ -143,4 +143,28 @@ class ExtensionsContractTest {
             assertEquals(2, resources.count { it.server.isNotBlank() })
             assertEquals(1, resources.count { it.server == "gdb-mcp" })
         }
+
+    @Test
+    fun `injecting a skill uses the experimental route the server actually serves`() =
+        runBlocking<Unit> {
+            server.enqueue(MockResponse().setResponseCode(204))
+
+            val ok = session.api.activateSkill("ses_a", "agent-browser", null)
+
+            assertTrue(ok)
+            val request = server.takeRequest()
+            assertEquals("POST", request.method)
+            // Verified live: /api/session/{id}/skill answers 404 on 2.0.26, only the
+            // experimental route injects the skill (204 + session.skill.activated).
+            assertEquals("/api/experimental/session/ses_a/skill", request.path)
+            assertEquals("""{"id":"agent-browser"}""", request.body.readUtf8())
+        }
+
+    @Test
+    fun `a rejected skill injection reports false instead of crashing`() =
+        runBlocking<Unit> {
+            server.enqueue(MockResponse().setResponseCode(404).setBody(""))
+
+            assertEquals(false, session.api.activateSkill("ses_a", "nope", null))
+        }
 }

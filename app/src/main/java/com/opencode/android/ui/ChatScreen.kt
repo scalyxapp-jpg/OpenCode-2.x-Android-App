@@ -415,6 +415,15 @@ internal fun ChatScreen(
                     }
                     // "/mcp" dialog (web parity: title "MCPs", "N of M enabled",
                     // search, per-server switch, auth for needs-auth servers).
+                    // "/skills" picker (TUI parity: list, pick, inject).
+                    if (uiState.skillsDialogVisible) {
+                        SkillsDialog(
+                            skills = uiState.skills,
+                            loading = uiState.skillsLoading,
+                            onPick = viewModel::activateSkill,
+                            onDismiss = viewModel::closeSkillsDialog,
+                        )
+                    }
                     if (uiState.mcpDialogVisible) {
                         McpDialog(
                             servers = uiState.mcpServers,

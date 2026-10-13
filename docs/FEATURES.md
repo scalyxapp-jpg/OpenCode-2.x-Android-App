@@ -193,10 +193,25 @@ Two kinds of commands exist, and the app is explicit about which is which:
   the command's template exactly as the TUI does. Anything the server expands is
   usable.
 - **Locally implemented built-ins** — only what the client can really do:
-  `/compact` (compaction with the web's request shape) and `/mcp` (MCP status /
-  auth). A built-in is only listed when it actually works; server commands that
-  would shadow a built-in are filtered out, so the list is honest rather than
-  pretty.
+  `/compact` (compaction with the web's request shape), `/mcp` (MCP status / auth)
+  and **`/skills`**. A built-in is only listed when it actually works; a server
+  command that would shadow a built-in is filtered out (so a server-side `skills`
+  command would take precedence), and the list is honest rather than pretty.
+
+### `/skills` — inject a skill (TUI parity)
+
+Read out of the TUI binary and verified against the running server:
+
+| Step | What happens |
+| --- | --- |
+| `/skills` typed or picked | the composer is cleared and the skill list opens (`browse available skills`) |
+| pick a skill | `POST /api/experimental/session/{id}/skill` with `{"id":"<skill>"}` → 204 |
+| server side | emits `session.skill.activated`, stores a **`skill` message** and starts a turn on that skill |
+
+The transcript then shows a **skill block** (name + the injected text, folded away
+until you tap "Show skill text"), exactly like the TUI's skill block. Note: the
+non-experimental path `/api/session/{id}/skill` answers **404** on 2.0.26 — only the
+experimental route injects, which is why that is the one wired in.
 
 Typing `/` opens the picker with the command's description; choosing one inserts
 its template and leaves the cursor where the arguments belong.

@@ -477,4 +477,14 @@
     <string name="settings_notifications_enabled_sub" formatted="false">Master switch for every system notification and sound this app posts</string>
     <string name="settings_notifications_sounds_on_off" formatted="false">Notifications and sounds are off</string>
     <string name="settings_extensions_hint" formatted="false">Skills, MCP servers and plugins are managed under Extensions.</string>
+    <!-- "/skills" (TUI parity: browse available skills and inject one) -->
+    <string name="skills_pick_title" formatted="false">Skills</string>
+    <string name="skills_pick_hint" formatted="false">Pick a skill to inject it into this session — the agent starts on it right away.</string>
+    <string name="skills_pick_empty" formatted="false">No skills installed</string>
+    <string name="skills_pick_search" formatted="false">Search skills</string>
+    <string name="skill_injected" formatted="false">Skill “%1$s” injected</string>
+    <string name="skill_injection_failed" formatted="false">Could not inject the skill: %1$s</string>
+    <string name="skill_message_label" formatted="false">Skill</string>
+    <string name="skill_message_show" formatted="false">Show skill text</string>
+    <string name="skill_message_hide" formatted="false">Hide skill text</string>
 </resources>

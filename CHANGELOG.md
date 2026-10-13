@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.12] - 2026-10-13
+
+### Added
+
+- **Neuer Befehl `/skills` — 1:1 wie in der TUI.** Technisch aus dem TUI-Binary
+  ausgelesen (der Befehl ist dort ein clientseitiger Slash-Eintrag
+  `{action:"skill-menu", display:"/skills", description:"browse available skills"}`,
+  der den Composer leert und die Skill-Liste öffnet) und dann live gegen den Server
+  verifiziert:
+  - Auswahl injiziert den Skill per **`POST /api/experimental/session/{id}/skill`**
+    mit `{"id":"<skill>"}` → **204**. Wichtig: der im TUI-SDK definierte Pfad
+    `/api/session/{id}/skill` antwortet auf 2.0.26 mit **404** — nur die
+    Experimental-Route injiziert.
+  - Der Server sendet `session.skill.activated`, legt eine **`skill`-Nachricht** an
+    und **startet einen Turn** mit dem Skill.
+  - Die App zeigt die Skill-Nachricht als eigenen **Skill-Block** (Name + injizierter
+    Text, eingeklappt mit „Show skill text"), lädt den Verlauf nach dem Event nach
+    und meldet „Skill „X" injected".
+  - Der Picker listet Skills aus `GET /api/skill` (Name, Id, Beschreibung
+    durchsuchbar — dieselben Felder, die die TUI-Palette indexiert) mit klarem
+    Leerzustand („No skills installed"). Der Eintrag wird nur angeboten, wenn die App
+    ihn auch ausführt; ein Server-Befehl namens `skills` hätte Vorrang (TUI-Regel).
+
+### Added (tests)
+
+- `ExtensionsContractTest`: Skill-Injektion pinnt die Experimental-Route, den Body
+  `{"id":…}` und den 404-Fall (`false` statt Absturz). Bestehendes
+  `BuiltinCommandsTest` erzwingt weiterhin, dass Liste und Handler nicht auseinanderlaufen.
+
 ## [1.5.11] - 2026-10-13
 
 ### Added
@@ -680,7 +709,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...HEAD
+[1.5.12]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...v1.5.12
 [1.5.11]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...v1.5.9

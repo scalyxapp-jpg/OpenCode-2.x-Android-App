@@ -296,6 +296,15 @@ object V2EventNormalizer {
                 )
             }
 
+            // A skill was injected (TUI: /skills): the server stores a `skill`
+            // message and starts a turn, so the transcript has to be re-read.
+            "session.skill.activated" -> {
+                Event(
+                    type = "session.next.skill.activated",
+                    properties = EventProperties(sessionId = d.str("sessionID")),
+                )
+            }
+
             // The queued prompt was delivered / dropped / steered: the QUEUE (the
             // session inbox) changed, which the chat renders separately from the
             // message list.

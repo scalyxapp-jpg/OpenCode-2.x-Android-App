@@ -791,6 +791,12 @@ object StreamReducer {
                 state.copy(effects = listOf(StreamEffect.RefreshInbox))
             }
 
+            // A skill was injected: reload the transcript so the `skill` message
+            // (and the turn it starts) shows up.
+            "session.next.skill.activated" -> {
+                state.copy(effects = listOf(StreamEffect.Reconcile(includeMeta = true)))
+            }
+
             "session.next.model.switched" -> {
                 state.copy(effects = listOf(StreamEffect.Reconcile(includeMeta = false)))
             }

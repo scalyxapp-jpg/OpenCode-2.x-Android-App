@@ -179,6 +179,12 @@ data class Message(
     val status: String? = null,
     val reason: String? = null,
     val summary: String? = null,
+    /**
+     * Skill messages (`type = "skill"`, from `session.skill.activated`): the skill's
+     * id, its display name and the injected text.
+     */
+    val skill: String? = null,
+    val name: String? = null,
     // Web endpoint structure: { info, parts }
     val info: MessageInfo? = null,
 )
@@ -870,7 +876,7 @@ const val BUILTIN_SOURCE = "builtin"
  * Every name here MUST have a branch in `ChatViewModel.runBuiltinCommand`;
  * `BuiltinCommandsTest` guards that the list and the handlers cannot drift apart.
  */
-val IMPLEMENTED_BUILTIN_COMMANDS: Set<String> = setOf("compact", "mcp")
+val IMPLEMENTED_BUILTIN_COMMANDS: Set<String> = setOf("compact", "mcp", "skills")
 
 val BUILTIN_COMMANDS: List<CommandEntry> =
     listOf(
@@ -882,6 +888,12 @@ val BUILTIN_COMMANDS: List<CommandEntry> =
         CommandEntry(
             name = "mcp",
             description = "Toggle MCPs",
+            source = BUILTIN_SOURCE,
+        ),
+        CommandEntry(
+            // TUI parity: the slash menu lists "/skills — browse available skills".
+            name = "skills",
+            description = "Browse available skills",
             source = BUILTIN_SOURCE,
         ),
     )

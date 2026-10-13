@@ -245,6 +245,26 @@ typed value is what the server accepts. Errors: `FormNotFoundError`,
 question card can carry a non-form id, so the reply is retried once with the server's
 pending form id.
 
+### Skills (`/skills`)
+
+```
+POST /api/experimental/session/{id}/skill   body {"id":"<skill id>"}   -> 204
+POST /api/session/{id}/skill                -> 404 on 2.0.26 (TUI SDK path, not served here)
+```
+
+Verified live: the experimental route answers 204, emits `session.skill.activated`
+(`{sessionID, id, name, text}`), stores a message of type **`skill`**
+(`{id, type:"skill", skill:"<id>", name:"<name>", text:"<instructions>"}`) and starts
+a turn — i.e. the skill is injected into the session, not merely attached to the next
+prompt. The transcript renders that `skill` message.
+
+The composer variant (web `@`-mention) travels in the prompt body instead:
+
+```
+POST /api/session/{id}/prompt
+{ … "skills":[{"id":"<skill id>","mention":{"start":0,"end":9,"text":"@skill"}}] … }
+```
+
 ### Extensions (Settings → Extensions)
 
 ```

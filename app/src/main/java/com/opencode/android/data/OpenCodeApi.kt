@@ -266,6 +266,17 @@ interface OpenCodeApi {
 
     suspend fun getMcpServers(directory: String? = null): Map<String, McpStatus>
 
+    /**
+     * Injects a skill into the session, exactly like the TUI's `/skills` (the
+     * server then emits `session.skill.activated`, stores a `skill` message and
+     * starts a turn).
+     */
+    suspend fun activateSkill(
+        sessionId: String,
+        skillId: String,
+        directory: String? = null,
+    ): Boolean
+
     /** Installed plugins (`GET /api/plugin`) — Extensions → Plugins. */
     suspend fun getPlugins(directory: String? = null): List<PluginEntry>
 

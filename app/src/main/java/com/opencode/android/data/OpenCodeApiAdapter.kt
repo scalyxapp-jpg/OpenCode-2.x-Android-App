@@ -814,6 +814,25 @@ class OpenCodeApiAdapter(
             .orEmpty()
             .associate { it.name to McpStatus(status = it.status?.status) }
 
+    override suspend fun activateSkill(
+        sessionId: String,
+        skillId: String,
+        directory: String?,
+    ): Boolean {
+        val response =
+            v2.activateSkill(
+                sessionId = sessionId,
+                body =
+                    kotlinx.serialization.json.buildJsonObject {
+                        put("id", kotlinx.serialization.json.JsonPrimitive(skillId))
+                    },
+                directory = directory,
+            )
+        response.body()?.close()
+        response.errorBody()?.close()
+        return response.isSuccessful
+    }
+
     override suspend fun getPlugins(directory: String?): List<PluginEntry> =
         v2
             .plugins(directory)
