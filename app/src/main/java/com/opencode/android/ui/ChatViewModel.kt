@@ -301,43 +301,59 @@ class ChatViewModel
                 com.opencode.android.data.NetworkMonitor.available
                     .collect { flushOutbox() }
             }
-            // Always-on glance: the open session's live state feeds the widget,
-            // notification and tile (step, elapsed, tool, run state).
-            viewModelScope.launch {
-                // When the current turn started; the glance line shows the wall-clock of
-                // THAT turn ("Step 7 · 42s"), not of the app session.
-                var runningSince: Long? = null
-                conversation.liveState.collect { live ->
-                    val state = _uiState.value
-                    if (state.isGenerating) {
-                        if (runningSince == null) runningSince = System.currentTimeMillis()
-                    } else {
-                        runningSince = null
-                    }
-                    com.opencode.android.data.GlanceStore.update(
-                        sessionId = state.session?.id,
-                        title = state.session?.title,
-                        running = state.isGenerating,
-                        step = live.stepIndex,
-                        elapsedMs = runningSince?.let { System.currentTimeMillis() - it } ?: 0L,
-                        toolName =
-                            live.parts.lastOrNull()?.let { part ->
-                                com.opencode.android.ui
-                                    .toolRowTitle(part.tool ?: part.name)
-                            },
-                        failures =
-                            live.parts.count {
-                                com.opencode.android.ui
-                                    .toolStatus(it) == "error"
-                            },
-                        clearRunning = !state.isGenerating,
-                    )
-                }
-            }
             // Today's cost for the glance line (server aggregate, once per session open).
             viewModelScope.launch {
                 runCatching { refreshGlanceCost() }
             }
+        }
+
+        /**
+         * Always-on glance: the open session's live state feeds the widget, notification and
+         * tile (step, elapsed, tool, run state).
+         *
+         * Deliberately NOT in `init`: `Main.immediate` runs a coroutine body synchronously on
+         * the main thread, so touching `conversation` there read its `lazy` delegate before
+         * the property initializer had run — **NullPointerException on every session open**
+         * (crash in 1.5.18, retraced from the device: `ChatViewModel.getConversation` ←
+         * `ChatViewModel.<init>`). It is started from [loadSession] instead, which runs after
+         * construction; the guard keeps it to one collector.
+         */
+        private var glanceFeed: Job? = null
+
+        private fun startGlanceFeed() {
+            if (glanceFeed?.isActive == true) return
+            glanceFeed =
+                viewModelScope.launch {
+                    // When the current turn started; the glance line shows the wall-clock of
+                    // THAT turn ("Step 7 · 42s"), not of the app session.
+                    var runningSince: Long? = null
+                    conversation.liveState.collect { live ->
+                        val state = _uiState.value
+                        if (state.isGenerating) {
+                            if (runningSince == null) runningSince = System.currentTimeMillis()
+                        } else {
+                            runningSince = null
+                        }
+                        com.opencode.android.data.GlanceStore.update(
+                            sessionId = state.session?.id,
+                            title = state.session?.title,
+                            running = state.isGenerating,
+                            step = live.stepIndex,
+                            elapsedMs = runningSince?.let { System.currentTimeMillis() - it } ?: 0L,
+                            toolName =
+                                live.parts.lastOrNull()?.let { part ->
+                                    com.opencode.android.ui
+                                        .toolRowTitle(part.tool ?: part.name)
+                                },
+                            failures =
+                                live.parts.count {
+                                    com.opencode.android.ui
+                                        .toolStatus(it) == "error"
+                                },
+                            clearRunning = !state.isGenerating,
+                        )
+                    }
+                }
         }
 
         /** Reads "today so far" from the stats hub; silent when unavailable. */
@@ -652,6 +668,9 @@ class ChatViewModel
                     // the user had to leave and re-enter to see remote (web/TUI) turns.
                     startSse(sessionId)
                     startPolling(sessionId)
+                    // Glance feed: started here (never in init) because it reads
+                    // `conversation`, which does not exist until construction finished.
+                    startGlanceFeed()
                     loadInbox(sessionId)
                     // Offline outbox: show this session's waiting prompts and try to
                     // deliver them (opening a session is a user signal that the server

@@ -5,7 +5,47 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.18] - 2026-10-14
+## [1.5.19] - 2026-10-14
+
+### Fixed
+
+- **Absturz beim Öffnen einer Session (NullPointerException) — gefunden über adb, behoben,
+  auf dem Gerät verifiziert.** Die vom Nutzer gemeldete Ursache steckte in meiner eigenen
+  Änderung aus 1.5.18: Der neue **Glance-Feed** wurde im `init` des `ChatViewModel` gestartet
+  und las dort `conversation` — ein `by lazy`-Feld, dessen Delegate zu diesem Zeitpunkt noch
+  **null** ist, weil `viewModelScope` mit `Dispatchers.Main.immediate` den Coroutine-Rumpf
+  sofort ausführt (wir sind schon auf dem Main-Thread). Ergebnis: NPE bei **jedem** Öffnen
+  eines Chats.
+
+    ```
+    java.lang.NullPointerException: Attempt to invoke virtual method
+        'java.lang.Object n73.getValue()' on a null object reference
+      at com.opencode.android.ui.ChatViewModel.getConversation(ChatViewModel.kt:534)   ← retraced
+      at com.opencode.android.ui.ChatViewModel.<init>(ChatViewModel.kt:306)
+    ```
+
+    **Vorgehen (neu etabliert):** Crash-Buffer per `adb logcat -b crash -d` gelesen, die
+    R8-minifizierte Spur mit `cmdline-tools/latest/bin/retrace mapping.txt` **entpackt** — so
+    wird aus `mx.s`/`ev.q` wieder `ChatViewModel.getConversation` ← `ChatViewModel.<init>`.
+    Zusätzlich `dumpsys dropbox --print` für die Crash-Historie: genau drei Einträge
+    (00:05:59, 00:06:04, 00:15:49) mit diesem NPE.
+    **Fix:** Der Feed startet jetzt in `loadSession()` (nach der Konstruktion, einmalig per
+    Job-Guard) statt im `init`; im `init` berührt nichts mehr spät initialisierte Felder.
+
+    **Geräteverifikation:** `adb install -r` (gleiche Signatur, Daten unangetastet) →
+    Deep-Link in eine Session (der abstürzende Pfad) → Prozess lebt, **Crash-Buffer leer,
+    0 FATAL**; danach Kaltstart auf Home und ein Hintergrund-/Vordergrund-Zyklus ebenfalls
+    ohne Fatal.
+
+### Changed
+
+- **Debugging-Werkzeuge im Repo dokumentiert:** Retrace über das R8-Mapping und
+  `dumpsys dropbox` als Standardweg bei Geräte-Crashes (statt Raten aus dem Quelltext).
+
+### Added (tests)
+
+- Betroffene Teilmengen: **482 Tests, 0 Fehler** (der Fix ist eine Initialisierungsreihenfolge;
+  die Geräteprüfung oben ist der eigentliche Nachweis).
 
 ### Fixed
 
