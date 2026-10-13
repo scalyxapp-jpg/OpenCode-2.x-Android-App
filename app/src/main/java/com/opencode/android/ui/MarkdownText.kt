@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
@@ -68,8 +69,10 @@ internal fun MarkdownText(
     // AnnotatedString on every composition — a heap spike on top of the
     // streaming path. Plain Text still shows the full content.
     if (text.length > MARKDOWN_MAX_CHARS) {
+        // Still auto-link: the Markdown pass bails out for size, but a URL in a huge
+        // message has to stay tappable.
         Text(
-            text = text,
+            text = rememberAutoLinked(text, DEFAULT_LINK_COLOR),
             style = MaterialTheme.typography.bodyMedium,
             color = color,
             modifier = modifier,
@@ -90,12 +93,14 @@ internal fun MarkdownText(
     // Inline styles come from the theme (no hardcoded colours).
     val linkColor = Color(0xFF00BFFF) // explizit sichtbar, theme-unabhängig
     val codeBackground = MaterialTheme.colorScheme.surfaceContainerHighest
+    val linkListener = rememberBrowserLinkListener()
     val inlineStyle =
         InlineStyle(
             link = linkColor,
             code = codeBackground,
             codeText = MaterialTheme.colorScheme.onSurface,
             codeFont = codeFont(),
+            linkListener = linkListener,
         )
     // Picks the light or dark syntax palette, matching the surface the code
     // block sits on.
@@ -336,6 +341,8 @@ internal data class InlineStyle(
     val code: Color,
     val codeText: Color,
     val codeFont: FontFamily = FontFamily.Monospace,
+    /** Opens a tapped link (null = the platform default handler). */
+    val linkListener: LinkInteractionListener? = null,
 )
 
 @Composable
@@ -387,7 +394,7 @@ private val RE_FENCE = Regex("^\\s*```\\s*(.*)$")
  * Bare URLs and www hostnames. Trailing punctuation is trimmed afterwards, so
  * "see https://x.dev." links the URL and keeps the full stop outside.
  */
-private val RE_AUTOLINK = Regex("""(https?://[^\s<>\[\]"']+|www\.[^\s<>\[\]"']+)""")
+private val RE_AUTOLINK = URL_PATTERN
 
 internal enum class TableAlign { Start, Center, End }
 
@@ -713,7 +720,9 @@ internal fun inline(
                     if (range.first > i) withStyle(base) { append(plain.substring(i, range.first)) }
                     val url = plain.substring(range.first, range.last + 1)
                     val href = if (url.startsWith("http")) url else "https://$url"
-                    withLink(LinkAnnotation.Url(href, linkStyles(style))) { append(url) }
+                    withLink(
+                        LinkAnnotation.Url(href, linkStyles(style), style.linkListener),
+                    ) { append(url) }
                     i = range.last + 1
                 }
             }
@@ -794,7 +803,9 @@ internal fun inline(
                     else -> {
                         // [label](url)
                         val url = match.groupValues[2]
-                        withLink(LinkAnnotation.Url(url, linkStyles(style))) {
+                        withLink(
+                            LinkAnnotation.Url(url, linkStyles(style), style.linkListener),
+                        ) {
                             emit(inner, base + SpanStyle(color = style.link))
                         }
                     }

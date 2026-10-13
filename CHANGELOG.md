@@ -20,6 +20,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.5] - 2026-10-13
+
+### Fixed
+- **Links im Chat sind jetzt überall antippbar und öffnen im Browser.** Bisher wurde nur die
+  Markdown-Antwort des Assistenten verlinkt; **im eigenen Prompt** (und in Tool-Ausgaben) war eine
+  URL reiner Text und ließ sich nicht öffnen. Jetzt werden URLs in allen Chat-Texten erkannt und
+  verlinkt: eigene Nachrichten, Assistenten-Antworten (Markdown-Links UND nackte URLs), live
+  streamende Antwort, Tool-Ausgaben und auch sehr lange Nachrichten (dort greift der Markdown-Parser
+  nicht mehr, die Link-Erkennung schon).
+- **Öffnen ist explizit und sicher:** Ein Tap startet `ACTION_VIEW` mit `CATEGORY_BROWSABLE`
+  (also Browser bzw. die App, die die Domain beansprucht); kann kein Handler geöffnet werden, kommt
+  ein Hinweis statt eines Absturzes. Die Erkennung ist dieselbe wie im Markdown-Renderer
+  (gemeinsames URL-Muster), damit ein `www.`-Link in Prompt und Antwort identisch funktioniert —
+  inklusive „Satzpunkt bleibt außerhalb des Links".
+- Linkfarbe im Klartext nutzt das Theme-Primary (die Markdown-Anker behalten ihr bewusst
+  kontrastreiches Blau).
+
+### Added
+- Tests (`LinkTextTest`): nackte http(s)-URLs, `www.`-Präfix → https, Text vor/nach dem Link,
+  mehrere URLs, abschließender Satzpunkt, und „normaler Text bleibt linkfrei".
+
 ## [1.5.4] - 2026-10-13
 
 ### Added
@@ -415,7 +436,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...v1.5.2

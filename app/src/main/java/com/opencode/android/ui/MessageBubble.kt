@@ -245,7 +245,13 @@ internal fun MessageBubble(
             ) {
                 androidx.compose.foundation.text.selection.SelectionContainer {
                     Text(
-                        text = text,
+                        // Auto-linked: a URL in the user's own prompt was plain text and
+                        // could not be opened at all.
+                        text =
+                            rememberAutoLinked(
+                                text,
+                                com.opencode.android.ui.theme.primaryLinkColor(),
+                            ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(

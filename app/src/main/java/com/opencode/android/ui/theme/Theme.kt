@@ -624,3 +624,11 @@ fun OpenCodeTheme(
         )
     }
 }
+
+/**
+ * Link colour for auto-linked plain text: the Material primary of the CURRENT theme
+ * (Markdown anchors use an explicit blue, which can vanish on some surfaces).
+ */
+@androidx.compose.runtime.Composable
+internal fun primaryLinkColor(): androidx.compose.ui.graphics.Color =
+    androidx.compose.material3.MaterialTheme.colorScheme.primary

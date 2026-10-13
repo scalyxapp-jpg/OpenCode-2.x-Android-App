@@ -638,13 +638,17 @@ internal fun ToolCallRow(
                         // impossible before (only the copy button, which takes all).
                         androidx.compose.foundation.text.selection.SelectionContainer {
                             Text(
+                                // Auto-linked: tool output regularly contains URLs.
                                 text =
-                                    cappedForDisplay(
-                                        buildString {
-                                            command?.let { append("$ ").append(it).append('\n') }
-                                            append(output ?: "")
-                                        },
-                                    ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
+                                    rememberAutoLinked(
+                                        cappedForDisplay(
+                                            buildString {
+                                                command?.let { append("$ ").append(it).append('\n') }
+                                                append(output ?: "")
+                                            },
+                                        ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
+                                        com.opencode.android.ui.theme.primaryLinkColor(),
+                                    ),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily =
                                     com.opencode.android.ui.theme

@@ -411,4 +411,5 @@
     <string name="status_tool_count" formatted="false">(%1$d tools)</string>
     <string name="status_writing_answer" formatted="false">Writing the answer</string>
     <string name="status_streamed_chars" formatted="false">%1$s chars</string>
+    <string name="could_not_open_link" formatted="false">No app can open this link</string>
 </resources>
