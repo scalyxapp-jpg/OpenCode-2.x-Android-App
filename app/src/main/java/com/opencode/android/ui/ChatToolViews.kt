@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -168,10 +169,21 @@ internal fun DiffBlock(
                 .padding(vertical = MaterialTheme.spacing.small),
     ) {
         val viewWidth = maxWidth
+        // Preferences → Wrap lines: wrapping keeps a long diff readable on a phone,
+        // horizontal scrolling keeps columns aligned. Collected so the switch takes
+        // effect on an already open chat.
+        val appSettings by
+            com.opencode.android.data.AppSettingsStore.state.collectAsStateWithLifecycle()
+        val wrapLines = appSettings.wrapLines
         // Selectable so a single diff line can be copied (the copy button grabs it all).
         androidx.compose.foundation.text.selection.SelectionContainer {
             Column(
-                modifier = Modifier.horizontalScroll(contentScroll),
+                modifier =
+                    if (wrapLines) {
+                        Modifier
+                    } else {
+                        Modifier.horizontalScroll(contentScroll)
+                    },
             ) {
             rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
                 // Full-width tint like the TUI: added rows green, removed red.

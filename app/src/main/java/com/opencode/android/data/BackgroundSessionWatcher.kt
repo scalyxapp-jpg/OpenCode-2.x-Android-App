@@ -99,6 +99,8 @@ object BackgroundSessionWatcher {
     }
 
     private suspend fun onEvent(event: Event) {
+        // Nothing to collect for: a disabled master switch means no alerts at all.
+        if (!AppSettingsStore.state.value.notificationsEnabled) return
         if (!SseFilter.shouldDeliver(event, "")) return
         val eventSession = event.properties?.sessionId
         if (eventSession != null) {

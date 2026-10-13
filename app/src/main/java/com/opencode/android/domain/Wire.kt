@@ -244,6 +244,32 @@ data class WireSkill(
     val path: String? = null,
 )
 
+/**
+ * `/api/plugin` item (web: Settings → Extensions → Plugins).
+ *
+ * ```
+ * {"id":"opencode.tool.input.repair","source":{"type":"builtin"},
+ *  "features":{"server":true},"state":{"status":"active"}}
+ * ```
+ */
+@Serializable
+data class WirePlugin(
+    val id: String,
+    val source: WirePluginSource? = null,
+    val features: kotlinx.serialization.json.JsonElement? = null,
+    val state: WirePluginState? = null,
+)
+
+@Serializable
+data class WirePluginSource(
+    val type: String? = null,
+)
+
+@Serializable
+data class WirePluginState(
+    val status: String? = null,
+)
+
 /** `/api/credential` item. */
 @Serializable
 data class WireCredential(

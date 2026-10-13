@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.R
 import com.opencode.android.ui.theme.codeFont
 import com.opencode.android.ui.theme.spacing
@@ -68,6 +70,10 @@ internal fun MarkdownText(
     // or verbose tool output would otherwise build a huge block list and
     // AnnotatedString on every composition — a heap spike on top of the
     // streaming path. Plain Text still shows the full content.
+    // Preferences → Wrap lines: long code lines wrap instead of scrolling sideways.
+    val appSettings by
+        com.opencode.android.data.AppSettingsStore.state.collectAsStateWithLifecycle()
+    val wrapLines = appSettings.wrapLines
     if (text.length > MARKDOWN_MAX_CHARS) {
         // Still auto-link: the Markdown pass bails out for size, but a URL in a huge
         // message has to stay tappable.
@@ -260,11 +266,17 @@ internal fun MarkdownText(
                                 text = highlighted,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = codeFont(),
-                                softWrap = false,
+                                softWrap = wrapLines,
                                 modifier =
                                     Modifier
                                         .weight(1f)
-                                        .horizontalScroll(rememberScrollState())
+                                        .then(
+                                            if (wrapLines) {
+                                                Modifier
+                                            } else {
+                                                Modifier.horizontalScroll(rememberScrollState())
+                                            },
+                                        )
                                         .padding(start = MaterialTheme.spacing.small),
                             )
                         }

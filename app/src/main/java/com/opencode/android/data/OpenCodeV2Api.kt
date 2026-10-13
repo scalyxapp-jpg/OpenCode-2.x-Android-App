@@ -16,6 +16,7 @@ import com.opencode.android.domain.PermissionDecision
 import com.opencode.android.domain.Project
 import com.opencode.android.domain.PromptBody
 import com.opencode.android.domain.PtyShell
+import com.opencode.android.domain.WirePlugin
 import com.opencode.android.domain.RevertStageBody
 import com.opencode.android.domain.ServerInfo
 import com.opencode.android.domain.Session
@@ -334,6 +335,16 @@ interface OpenCodeV2Api {
     suspend fun commands(
         @Header("x-opencode-directory") directory: String? = null,
     ): WireEnvelope<List<WireCommand>>
+
+    @GET("api/mcp/resource")
+    suspend fun mcpResources(
+        @Header("x-opencode-directory") directory: String? = null,
+    ): WireEnvelope<kotlinx.serialization.json.JsonObject>
+
+    @GET("api/plugin")
+    suspend fun plugins(
+        @Header("x-opencode-directory") directory: String? = null,
+    ): WireEnvelope<List<WirePlugin>>
 
     @GET("api/skill")
     suspend fun skills(

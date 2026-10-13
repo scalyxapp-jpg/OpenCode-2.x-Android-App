@@ -9,6 +9,7 @@ import com.opencode.android.domain.FileContent
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.HealthResponse
+import com.opencode.android.domain.McpResourceEntry
 import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.Message
@@ -18,6 +19,7 @@ import com.opencode.android.domain.Model
 import com.opencode.android.domain.ModelRefRequest
 import com.opencode.android.domain.PathInfo
 import com.opencode.android.domain.PermissionReplyRequest
+import com.opencode.android.domain.PluginEntry
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.Project
 import com.opencode.android.domain.ProjectAgent
@@ -29,6 +31,7 @@ import com.opencode.android.domain.ProviderAuthMethod
 import com.opencode.android.domain.ProvidersResponse
 import com.opencode.android.domain.QuestionReplyRequest
 import com.opencode.android.domain.RevertRequest
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionCreateRequest
 import com.opencode.android.domain.SessionGuard
@@ -223,8 +226,6 @@ interface OpenCodeApi {
         directory: String? = null,
     ): Boolean
 
-    suspend fun getSkills(): List<JsonElement>
-
     // --- project / vcs -----------------------------------------------------
 
     suspend fun getProjects(): List<Project>
@@ -264,6 +265,15 @@ interface OpenCodeApi {
     // --- mcp ---------------------------------------------------------------
 
     suspend fun getMcpServers(directory: String? = null): Map<String, McpStatus>
+
+    /** Installed plugins (`GET /api/plugin`) — Extensions → Plugins. */
+    suspend fun getPlugins(directory: String? = null): List<PluginEntry>
+
+    /** Installed skills (`GET /api/skill`) — Extensions → Skills. */
+    suspend fun getSkills(directory: String? = null): List<SkillEntry>
+
+    /** MCP resources exposed by the connected servers (`GET /api/mcp/resource`). */
+    suspend fun getMcpResources(directory: String? = null): List<McpResourceEntry>
 
     suspend fun connectMcp(name: String): ResponseBody
 

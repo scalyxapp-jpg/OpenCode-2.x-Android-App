@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -180,6 +181,8 @@ internal class ComposerActions(
      * (POST /prompt with `delivery:"queue"`).
      */
     val onQueue: () -> Unit = {},
+    /** Hands the text to the running turn (web: Steer). */
+    val onSteer: () -> Unit = {},
     val onInterrupt: () -> Unit,
     val onAddFiles: () -> Unit,
     val onRemoveAttachment: (String) -> Unit,
@@ -209,6 +212,8 @@ internal fun Composer(
     statusError: String? = null,
     /** Prompts waiting in the session queue (web shows "{{count}} queued"). */
     queuedCount: Int = 0,
+    /** "queue" or "steer" — what the follow-up button does (Preferences). */
+    followUpBehavior: String = "queue",
     showAgent: Boolean = true,
     agents: List<Agent>,
     models: List<Model>,
@@ -221,6 +226,7 @@ internal fun Composer(
     val onInputChange = actions.onInputChange
     val onSend = actions.onSend
     val onQueue = actions.onQueue
+    val onSteer = actions.onSteer
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
     val onRemoveAttachment = actions.onRemoveAttachment
@@ -653,6 +659,7 @@ internal fun Composer(
                                 animationSpec = com.opencode.android.ui.theme.Motion.effects(),
                             ),
                     ) {
+                        val steers = followUpBehavior == "steer"
                         androidx.compose.material3.BadgedBox(
                             badge = {
                                 if (queuedCount > 0) {
@@ -667,13 +674,24 @@ internal fun Composer(
                                     haptics.performHapticFeedback(
                                         androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
                                     )
-                                    onQueue()
+                                    // Follow-up behavior (web: Preferences):
+                                    // queue the message or steer the running turn.
+                                    // The queued cards' "Steer" stays available as
+                                    // the explicit override either way.
+                                    if (steers) onSteer() else onQueue()
                                 },
                                 modifier = Modifier.size(40.dp),
                             ) {
                                 Icon(
-                                    Icons.Default.PlaylistAdd,
-                                    contentDescription = stringResource(R.string.queue_send),
+                                    if (steers) {
+                                        Icons.Default.PlaylistPlay
+                                    } else {
+                                        Icons.Default.PlaylistAdd
+                                    },
+                                    contentDescription =
+                                        stringResource(
+                                            if (steers) R.string.queue_steer else R.string.queue_send,
+                                        ),
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }

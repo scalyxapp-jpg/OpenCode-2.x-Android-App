@@ -530,6 +530,7 @@ object Notifier {
      * device's notification/alarm ringtones (the web assets are not shipped).
      */
     private fun playSound(name: String) {
+        if (!AppSettingsStore.state.value.notificationsEnabled) return
         val context = appContext ?: return
         // Atomic throttle + retain the Ringtone so it can be stopped: the old
         // code played a fresh ringtone and discarded the reference, so the alarm

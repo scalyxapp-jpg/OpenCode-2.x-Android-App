@@ -159,7 +159,11 @@ The web composer queues a follow-up with **Ctrl+Enter** instead of interrupting
 the running turn. The app mirrors that exactly (verified against the live server):
 
 - **Queue button** — visible only while you have typed something, sitting left of
-  send/stop, with a **count badge** as soon as prompts are waiting. It posts
+  send/stop, with a **count badge** as soon as prompts are waiting. What it does is
+  the **Follow-up behavior** preference: `queue` (default) waits for the turn,
+  `steer` hands the text to the running turn **without interrupting** (the server
+  accepts this; verified live) — the queued cards' "Steer" stays the explicit
+  override either way. It posts
   `/api/session/{id}/prompt` with `"delivery":"queue"` and **does not interrupt**
   the running turn. If the request fails, the optimistic card disappears and your
   text comes back into the composer instead of being lost.
@@ -269,11 +273,37 @@ web's context panel.
 - **Model list** — search and toggle visibility; the same list feeds the composer
   picker.
 
-## 13. MCP servers, skills and resources
+## 13. Extensions: MCP servers, plugins and skills
 
-- **MCP list** with per-server enable/disable toggles and a search field; a
-  per-server toggle (rather than one global switch) means you can always see
-  *which* server is off.
+**Settings → Extensions** mirrors the web's Extensions tab with the same three
+sub-tabs (**MCPs · Plugins · Skills**) and the same "Available to all projects ·
+Manage in opencode.json" note.
+
+- **MCPs** — one row per server with its status (Connected / Disabled / Failed /
+  Needs authentication / Starting…), its exposed resource count when it has any,
+  and a **switch**. Switching calls exactly one endpoint, verified against the
+  running server and the web bundle:
+
+  | Action | Call |
+  | --- | --- |
+  | switch ON | `POST /api/experimental/mcp/{name}/connect` → 204 |
+  | switch OFF | `POST /api/experimental/mcp/{name}/disconnect` → 204 |
+  | list | `GET /api/mcp` → `[{name, status:{status}}]` |
+
+  The row updates optimistically, then the list is re-read so a rejected change
+  cannot look like success; a server that needs authentication offers its own auth
+  action. A per-server toggle (rather than one global switch) means you can always
+  see *which* server is off.
+- **Plugins** — `GET /api/plugin`, each entry with its id, source (`builtin`,
+  …), state and contributed features; read-only on purpose, exactly like the web
+  ("Manage in opencode.json").
+- **Skills** — `GET /api/skill`, each entry with name and description (three lines,
+  searchable). The old thin skills dialog in the Server tab is gone; this is the
+  one place skills live.
+- Resources (`GET /api/mcp/resource`) are folded into the MCP rows, so a server's
+  reach is visible without opening a second screen.
+- Below the list a single count line shows `MCPs N/M connected · P plugins ·
+  S skills`, which also distinguishes "nothing installed" from "load failed".
 - **Auth** — servers that need it show a "click to authenticate" hint and are
   authenticated from the app; the list refreshes afterwards so the new state is
   visible immediately.
@@ -295,6 +325,11 @@ another:
 | `permissions-urgent` (HIGH) | actionable permission prompts                            | setting |
 | `errors`                    | turn/stream errors                                       | setting |
 | `connection`                | the ongoing "connected" notice of the foreground service | silent  |
+
+**Master switch.** "Enable notifications" (Settings → General, first row of the
+notification block) gates *everything*: no notification and no sound is posted while
+it is off, and the background watcher stops collecting. The per-event switches and
+their sounds only apply while it is on.
 
 **While the app is in the background** (tracked from the activity lifecycle, so a
 focused app stays quiet):
@@ -342,7 +377,11 @@ focused app stays quiet):
 
 Four tabs:
 
-**General** — theme, colour scheme, UI font, code font, show reasoning summaries,
+**General** — **enable notifications** (master switch for every notification and
+sound the app posts), **follow-up behavior** (queue / steer), **timeline detail**
+(compact / advanced preset over the three expansion switches), **wrap lines** (diffs
+and code wrap instead of scrolling sideways), theme, colour scheme, UI font, code
+font, show reasoning summaries,
 **expand thinking blocks** (whether "Thinking…" starts expanded or collapsed),
 expand shell tool parts, expand edit tool parts, file tree panel, command-palette
 button, server-status button, show agent picker, auto-accept permissions,

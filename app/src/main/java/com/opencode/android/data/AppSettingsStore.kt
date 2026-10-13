@@ -61,6 +61,25 @@ object AppSettingsStore {
          * proxy still pins the selection), only the chrome disappears.
          */
         val hideSessionGuardInChat: Boolean = false,
+        /**
+         * What a follow-up does while a turn runs: `queue` (wait for the turn to
+         * finish — the app's default and the queue button's behaviour so far) or
+         * `steer` (hand it to the running turn without interrupting, which the live
+         * server accepts without an interrupt call). Web parity: Settings →
+         * Preferences → Follow-up behavior.
+         */
+        val followUpBehavior: String = "queue",
+        /**
+         * How much detail the timeline shows by default: `compact` (all tool and
+         * thinking blocks collapsed) or `advanced` (expanded). A preset over the
+         * three individual switches, which stay available for fine-tuning.
+         */
+        val timelineDetail: String = "compact",
+        /**
+         * Wrap long lines in tool output/code instead of scrolling horizontally
+         * (web: Preferences → Wrap lines).
+         */
+        val wrapLines: Boolean = false,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -70,6 +89,11 @@ object AppSettingsStore {
         val monoFont: String = "",
         val terminalFont: String = "",
         // notifications
+        /**
+         * Master switch for ALL app notifications (system notifications and their
+         * sounds). The per-event switches below only matter while this is on.
+         */
+        val notificationsEnabled: Boolean = true,
         val notifyAgent: Boolean = true,
         val notifyPermissions: Boolean = true,
         val notifyErrors: Boolean = false,
@@ -104,12 +128,16 @@ object AppSettingsStore {
             editToolPartsExpanded = prefs.getBoolean("editToolPartsExpanded", false),
             expandThinkingBlocks = prefs.getBoolean("expandThinkingBlocks", false),
             hideSessionGuardInChat = prefs.getBoolean("hideSessionGuardInChat", false),
+            followUpBehavior = prefs.getString("followUpBehavior", "queue") ?: "queue",
+            timelineDetail = prefs.getString("timelineDetail", "compact") ?: "compact",
+            wrapLines = prefs.getBoolean("wrapLines", false),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
             sansFont = prefs.getString("sansFont", "") ?: "",
             monoFont = prefs.getString("monoFont", "") ?: "",
             terminalFont = prefs.getString("terminalFont", "") ?: "",
+            notificationsEnabled = prefs.getBoolean("notificationsEnabled", true),
             notifyAgent = prefs.getBoolean("notifyAgent", true),
             notifyPermissions = prefs.getBoolean("notifyPermissions", true),
             notifyErrors = prefs.getBoolean("notifyErrors", false),
@@ -162,6 +190,23 @@ object AppSettingsStore {
 
     fun setHideSessionGuardInChat(v: Boolean) = update { it.putBoolean("hideSessionGuardInChat", v) }
 
+    fun setFollowUpBehavior(v: String) = update { it.putString("followUpBehavior", v) }
+
+    fun setWrapLines(v: Boolean) = update { it.putBoolean("wrapLines", v) }
+
+    /**
+     * Sets the timeline detail AND the three switches it presets, so the control
+     * and the fine-tuning never disagree about what is on.
+     */
+    fun setTimelineDetail(v: String) =
+        update {
+            val advanced = v == "advanced"
+            it.putString("timelineDetail", v)
+            it.putBoolean("shellToolPartsExpanded", advanced)
+            it.putBoolean("editToolPartsExpanded", advanced)
+            it.putBoolean("expandThinkingBlocks", advanced)
+        }
+
     fun setColorScheme(v: String) = update { it.putString("colorScheme", v) }
 
     fun setTheme(v: String) = update { it.putString("theme", v) }
@@ -173,6 +218,8 @@ object AppSettingsStore {
     fun setMonoFont(v: String) = update { it.putString("monoFont", v) }
 
     fun setTerminalFont(v: String) = update { it.putString("terminalFont", v) }
+
+    fun setNotificationsEnabled(v: Boolean) = update { it.putBoolean("notificationsEnabled", v) }
 
     fun setNotifyAgent(v: Boolean) = update { it.putBoolean("notifyAgent", v) }
 
@@ -277,12 +324,16 @@ object AppSettingsStore {
                 putBoolean("editToolPartsExpanded", parsed.editToolPartsExpanded)
                 putBoolean("expandThinkingBlocks", parsed.expandThinkingBlocks)
                 putBoolean("hideSessionGuardInChat", parsed.hideSessionGuardInChat)
+                putString("followUpBehavior", parsed.followUpBehavior)
+                putString("timelineDetail", parsed.timelineDetail)
+                putBoolean("wrapLines", parsed.wrapLines)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)
                 putString("sansFont", parsed.sansFont)
                 putString("monoFont", parsed.monoFont)
                 putString("terminalFont", parsed.terminalFont)
+                putBoolean("notificationsEnabled", parsed.notificationsEnabled)
                 putBoolean("notifyAgent", parsed.notifyAgent)
                 putBoolean("notifyPermissions", parsed.notifyPermissions)
                 putBoolean("notifyErrors", parsed.notifyErrors)

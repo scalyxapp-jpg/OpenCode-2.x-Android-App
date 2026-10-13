@@ -245,6 +245,25 @@ typed value is what the server accepts. Errors: `FormNotFoundError`,
 question card can carry a non-form id, so the reply is retried once with the server's
 pending form id.
 
+### Extensions (Settings → Extensions)
+
+```
+GET  /api/mcp                                   -> [{name, status:{status}}]   # connected|disabled|failed|needs_auth|pending
+POST /api/experimental/mcp/{server}/connect     -> 204    # per-server switch ON
+POST /api/experimental/mcp/{server}/disconnect  -> 204    # per-server switch OFF
+PUT  /api/experimental/mcp/{server}             -> 204    # body {config} (web: add/update)
+DELETE /api/experimental/mcp/{server}           -> 204    # web: remove
+GET  /api/mcp/resource                          -> {data:{resources:[{server,name,uri,description,mimeType}]}}
+GET  /api/plugin                                -> [{id, source:{type}, features:{…}, state:{status}}]
+GET  /api/skill                                 -> [{id, name, description, autoinvoke?, path?}]
+```
+
+The toggle endpoints were read out of the web bundle (`mcp.connect`/`mcp.disconnect`)
+and re-verified against the running server: switching a server on/off issues exactly
+one `POST …/connect|disconnect` and returns 204. The MCP list is **not** scoped per
+session in the app's Extensions tab (the web shows "available to all projects"), so
+the request is sent without a directory header.
+
 ## Model / provider
 
 - `/api/model` item: `{id, modelID, providerID, family?, name, package, settings,

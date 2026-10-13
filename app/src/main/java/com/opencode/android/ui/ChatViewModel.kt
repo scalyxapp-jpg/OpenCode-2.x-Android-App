@@ -1252,6 +1252,14 @@ class ChatViewModel
         /** Queues the composer's text instead of interrupting the running turn. */
         fun queueMessage() = performSend(queued = true)
 
+        /**
+         * Hands the composer's text to the RUNNING turn without interrupting it
+         * (web: "Steer", tooltip "Send without interrupting"). Verified live: the
+         * server accepts the prompt while a turn runs, finishes that turn and then
+         * handles the follow-up — no interrupt call is involved.
+         */
+        fun steerMessage() = performSend(steer = true)
+
         // "/compact": summarize the session to shrink the context window.
         //
         // Web parity (verified against the running server): the request is
@@ -2965,7 +2973,10 @@ class ChatViewModel
             }
         }
 
-        private fun performSend(queued: Boolean = false) {
+        private fun performSend(
+            queued: Boolean = false,
+            steer: Boolean = false,
+        ) {
             val session =
                 _uiState.value.session ?: run {
                     AppLog.e(APP_LOG_TAG, "sendMessage: no session")
@@ -3094,23 +3105,30 @@ class ChatViewModel
 
             sendJob =
                 viewModelScope.launch {
-                    // Only interrupt a turn that was actually still running.
-                    if (wasGenerating) {
-                        try {
-                            api.interrupt(session.id)
-                        } catch (e: kotlinx.coroutines.CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            // Not fatal — the new prompt is sent either way — but a
-                            // silently swallowed failure here made "the old turn kept
-                            // running" impossible to diagnose.
-                            AppLog.e(APP_LOG_TAG, "interrupt failed: ${e.message}")
-                            UserMessages.post(R.string.could_not_interrupt, "${e.message}")
+                    // A STEER goes into the running turn: interrupting or clearing the
+                    // live buffers would kill exactly what the user wants to keep
+                    // watching.
+                    if (!steer) {
+                        // Only interrupt a turn that was actually still running.
+                        if (wasGenerating) {
+                            try {
+                                api.interrupt(session.id)
+                            } catch (e: kotlinx.coroutines.CancellationException) {
+                                throw e
+                            } catch (e: Exception) {
+                                // Not fatal — the new prompt is sent either way — but a
+                                // silently swallowed failure here made "the old turn kept
+                                // running" impossible to diagnose.
+                                AppLog.e(APP_LOG_TAG, "interrupt failed: ${e.message}")
+                                UserMessages.post(R.string.could_not_interrupt, "${e.message}")
+                            }
                         }
+                        // Reset all live-stream buffers so the previous turn's reasoning,
+                        // response text and tool rows cannot bleed into the new turn.
+                        conversation.resetLive()
+                    } else {
+                        AppLog.d(APP_LOG_TAG) { "sendMessage: steer into the running turn" }
                     }
-                    // Reset all live-stream buffers so the previous turn's reasoning,
-                    // response text and tool rows cannot bleed into the new turn.
-                    conversation.resetLive()
                     _uiState.update { it.copy(isGenerating = true, error = null) }
                     try {
                         // Primary flow mirrors web: POST /session/{id}/prompt_async

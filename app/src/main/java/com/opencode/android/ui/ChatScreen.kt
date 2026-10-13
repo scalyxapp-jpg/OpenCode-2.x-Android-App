@@ -870,6 +870,7 @@ internal fun ChatScreen(
                                             onInputChange = viewModel::updateInput,
                                             onSend = viewModel::sendMessage,
                                             onQueue = viewModel::queueMessage,
+                                            onSteer = viewModel::steerMessage,
                                             onSteerQueued = viewModel::steerQueued,
                                             onRemoveQueued = viewModel::cancelQueued,
                                             onInterrupt = viewModel::interrupt,
@@ -999,6 +1000,8 @@ internal class ChatActions(
     val onSend: () -> Unit,
     /** Queues the composer's text (web: Ctrl+Enter). */
     val onQueue: () -> Unit = {},
+    /** Steers the running turn with the composer's text (web: Steer). */
+    val onSteer: () -> Unit = {},
     /** The web's "Steer" on a queued prompt: deliver it now. */
     val onSteerQueued: (String) -> Unit = {},
     /** The web's "Remove" on a queued prompt. */
@@ -1917,6 +1920,7 @@ internal fun SessionTab(
                         onInputChange = onInputChange,
                         onSend = onSend,
                         onQueue = actions.onQueue,
+                        onSteer = actions.onSteer,
                         onInterrupt = onInterrupt,
                         onAddFiles = onAddFiles,
                         onRemoveAttachment = onRemoveAttachment,
@@ -1941,6 +1945,7 @@ internal fun SessionTab(
             uploadingUris = uiState.uploadingUris,
             statusError = uiState.statusError,
             queuedCount = uiState.queuedMessages.size,
+            followUpBehavior = appSettings.followUpBehavior,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,
             models = uiState.models,

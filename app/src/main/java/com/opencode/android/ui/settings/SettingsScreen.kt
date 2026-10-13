@@ -57,6 +57,7 @@ internal fun SettingsScreen(
             stringResource(R.string.settings_tab_servers),
             stringResource(R.string.settings_tab_providers),
             stringResource(R.string.settings_tab_models),
+            stringResource(R.string.settings_tab_extensions),
         )
     // Web parity: the settings header shows "OpenCode Desktop · v<version>".
     var version by remember { mutableStateOf<String?>(null) }
@@ -115,6 +116,7 @@ internal fun SettingsScreen(
                 1 -> ServersTab(onSwitchBackend)
                 2 -> ProvidersTab()
                 3 -> ModelsTab()
+                4 -> ExtensionsTab()
                 // Defensive: a stale saved index (from a build that still had the
                 // removed "Shortcuts" tab) must not render an empty screen.
                 else -> GeneralTab()
@@ -184,6 +186,60 @@ internal fun GeneralTab() {
                 subtitle = stringResource(R.string.settings_expand_thinking_sub),
                 checked = settings.expandThinkingBlocks,
                 onCheckedChange = { AppSettingsStore.setExpandThinkingBlocks(it) },
+            )
+        }
+
+        item {
+            // Master switch first: it gates every notification AND its sound, so it
+            // belongs above the per-event switches.
+            SettingSwitch(
+                title = stringResource(R.string.settings_notifications_enabled),
+                subtitle =
+                    if (settings.notificationsEnabled) {
+                        stringResource(R.string.settings_notifications_enabled_sub)
+                    } else {
+                        stringResource(R.string.settings_notifications_sounds_on_off)
+                    },
+                checked = settings.notificationsEnabled,
+                onCheckedChange = { AppSettingsStore.setNotificationsEnabled(it) },
+            )
+        }
+        item {
+            // Web parity: Settings → Preferences → Follow-up behavior.
+            SettingDropdown(
+                title = stringResource(R.string.settings_follow_up_behavior),
+                subtitle = stringResource(R.string.settings_follow_up_behavior_sub),
+                value = settings.followUpBehavior,
+                options =
+                    listOf(
+                        "queue" to stringResource(R.string.settings_follow_up_queue),
+                        "steer" to stringResource(R.string.settings_follow_up_steer),
+                    ),
+                onSelect = { AppSettingsStore.setFollowUpBehavior(it) },
+            )
+        }
+        item {
+            // Web parity: Settings → Preferences → Timeline detail (a preset over
+            // the three expansion switches right below).
+            SettingDropdown(
+                title = stringResource(R.string.settings_timeline_detail),
+                subtitle = stringResource(R.string.settings_timeline_detail_sub),
+                value = settings.timelineDetail,
+                options =
+                    listOf(
+                        "compact" to stringResource(R.string.settings_timeline_compact),
+                        "advanced" to stringResource(R.string.settings_timeline_advanced),
+                    ),
+                onSelect = { AppSettingsStore.setTimelineDetail(it) },
+            )
+        }
+        item {
+            // Web parity: Settings → Preferences → Wrap lines.
+            SettingSwitch(
+                title = stringResource(R.string.settings_wrap_lines),
+                subtitle = stringResource(R.string.settings_wrap_lines_sub),
+                checked = settings.wrapLines,
+                onCheckedChange = { AppSettingsStore.setWrapLines(it) },
             )
         }
 
@@ -473,67 +529,20 @@ internal fun GeneralTab() {
     }
 }
 
+/**
+ * Server tab: everything that is not per-model belongs here. Skills/MCPs/plugins
+ * moved to [ExtensionsTab] (web parity), so this only points there.
+ */
 @Composable
-// Web-parity endpoints the app did not expose yet: POST /global/upgrade and
-// GET /skill (Settings → Server).
 private fun ServerSection() {
-    val backendSession = com.opencode.android.ui.LocalBackendSession.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var showSkills by remember { mutableStateOf(false) }
-    var skills by remember { mutableStateOf<List<String>>(emptyList()) }
-    // A failed load used to be swallowed into an empty list, so the dialog claimed
-    // "no skills" when the server was unreachable (and double taps fired parallel
-    // requests).
-    var skillsError by remember { mutableStateOf<String?>(null) }
-
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(stringResource(R.string.settings_skills))
-            androidx.compose.material3.TextButton(enabled = !busy, onClick = {
-                scope.launch {
-                    busy = true
-                    skillsError = null
-                    try {
-                        skills =
-                            backendSession.api.getSkills().mapNotNull { el ->
-                                (el as? kotlinx.serialization.json.JsonObject)
-                                    ?.get("name")
-                                    ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-                            }
-                    } catch (e: Exception) {
-                        skills = emptyList()
-                        skillsError = e.message ?: e::class.java.simpleName
-                    } finally {
-                        busy = false
-                        showSkills = true
-                    }
-                }
-            }) { Text(stringResource(R.string.settings_skills)) }
-        }
-    }
-
-    if (showSkills) {
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { showSkills = false },
-            title = { Text(stringResource(R.string.settings_skills)) },
-            text = {
-                val error = skillsError
-                when {
-                    error != null -> Text(stringResource(R.string.could_not_load_skills, error))
-                    skills.isEmpty() -> Text(stringResource(R.string.settings_no_skills))
-                    else -> Column { skills.forEach { Text(it) } }
-                }
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showSkills = false }) {
-                    Text(stringResource(R.string.close))
-                }
-            },
+        // Skills used to live here as a thin dialog; they are now part of
+        // Settings → Extensions (web parity: MCPs, Plugins and Skills share that
+        // tab there too), so this is only a pointer — no second, thinner list.
+        Text(
+            text = stringResource(R.string.settings_extensions_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

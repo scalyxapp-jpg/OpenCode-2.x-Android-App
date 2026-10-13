@@ -447,4 +447,34 @@
     <string name="settings_hide_session_guard_unavailable" formatted="false">No Session Guard detected right now — the switch has no effect until one is running</string>
     <string name="queue_count" formatted="false">%1$d queued</string>
     <string name="notif_finished_queued" formatted="false">%1$d queued</string>
+    <!-- Extensions (web: Settings → Extensions → MCPs | Plugins | Skills) -->
+    <string name="settings_tab_extensions" formatted="false">Extensions</string>
+    <string name="extensions_tab_mcps" formatted="false">MCPs</string>
+    <string name="extensions_tab_plugins" formatted="false">Plugins</string>
+    <string name="extensions_tab_skills" formatted="false">Skills</string>
+    <string name="extensions_available_to_all_projects" formatted="false">Available to all projects</string>
+    <string name="extensions_manage_in_config" formatted="false">Manage in opencode.json</string>
+    <string name="extensions_loading" formatted="false">Loading extensions…</string>
+    <string name="extensions_resource_count" formatted="false">%1$d resources</string>
+    <string name="extensions_counts" formatted="false">MCPs %1$d/%2$d connected · %3$d plugins · %4$d skills</string>
+    <string name="mcp_status_connected" formatted="false">Connected</string>
+    <string name="mcp_status_disabled" formatted="false">Disabled</string>
+    <string name="mcp_status_failed" formatted="false">Failed</string>
+    <string name="mcp_status_needs_auth" formatted="false">Needs authentication</string>
+    <string name="mcp_status_pending" formatted="false">Starting…</string>
+    <!-- Preferences (web: Settings → Preferences) -->
+    <string name="settings_follow_up_behavior" formatted="false">Follow-up behavior</string>
+    <string name="settings_follow_up_behavior_sub" formatted="false">What the queue button does while a turn is running: queue the message or steer the running turn (send without interrupting)</string>
+    <string name="settings_follow_up_queue" formatted="false">Queue</string>
+    <string name="settings_follow_up_steer" formatted="false">Steer</string>
+    <string name="settings_timeline_detail" formatted="false">Timeline detail</string>
+    <string name="settings_timeline_detail_sub" formatted="false">Compact collapses tool and thinking blocks by default; advanced expands them. The individual switches below stay available.</string>
+    <string name="settings_timeline_compact" formatted="false">Compact</string>
+    <string name="settings_timeline_advanced" formatted="false">Advanced</string>
+    <string name="settings_wrap_lines" formatted="false">Wrap lines</string>
+    <string name="settings_wrap_lines_sub" formatted="false">Wrap long lines in diffs and code instead of scrolling horizontally</string>
+    <string name="settings_notifications_enabled" formatted="false">Enable notifications</string>
+    <string name="settings_notifications_enabled_sub" formatted="false">Master switch for every system notification and sound this app posts</string>
+    <string name="settings_notifications_sounds_on_off" formatted="false">Notifications and sounds are off</string>
+    <string name="settings_extensions_hint" formatted="false">Skills, MCP servers and plugins are managed under Extensions.</string>
 </resources>

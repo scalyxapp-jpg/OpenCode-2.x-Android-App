@@ -5,6 +5,45 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.11] - 2026-10-13
+
+### Added
+
+- **Settings → Extensions: MCPs, Plugins und Skills 1:1 wie im Web.** Die Web-Settings
+  per Playwright analysiert (`/settings` mit Preferences/Appearance/Notifications/
+  Shortcuts/Projects/Worktrees/Providers/Models/**Extensions**/Server/About) und die
+  Extensions-Untertabs nachgebaut:
+  - **MCPs** — pro Server eine Zeile mit Status (Connected/Disabled/Failed/Needs
+    authentication/Starting…), Anzahl der Ressourcen und **Schalter**. Der Schalter
+    ruft genau einen Endpunkt auf (aus dem Web-Bundle gelesen und live verifiziert):
+    `POST /api/experimental/mcp/{name}/connect` bzw. `…/disconnect` (204), Liste über
+    `GET /api/mcp`. Optimistisch geschaltet und danach nachgelesen, damit eine
+    abgelehnte Änderung nicht wie Erfolg aussieht; Server mit Auth-Bedarf haben ihre
+    eigene Aktion.
+  - **Plugins** — `GET /api/plugin` (Id, Quelle, Status, Feature-Flags), bewusst
+    read-only wie im Web („Manage in opencode.json").
+  - **Skills** — `GET /api/skill` (Name, Beschreibung, durchsuchbar). Der alte dünne
+    Skills-Dialog im Server-Tab ist entfallen — Skills leben jetzt an einer Stelle.
+  - Ressourcen (`GET /api/mcp/resource`) stehen als Detail in der jeweiligen MCP-Zeile,
+    plus eine Zählerzeile („MCPs N/M connected · P plugins · S skills"), die „nichts
+    installiert" von „Laden fehlgeschlagen" unterscheidet.
+- **Globaler Notifications-Schalter** („Enable notifications"): ein Master-Schalter
+  über allen Benachrichtigungen und Tönen. Er wirkt zentral in `Notifier` (ein neuer
+  Benachrichtigungspfad kann ihn nicht vergessen) und stoppt auch das Sammeln des
+  Hintergrund-Watchers; der Untertext sagt „Notifications and sounds are off", wenn er aus ist.
+- **Preferences-Lücken geschlossen** (Web: Settings → Preferences):
+  **Follow-up behavior** (queue | steer), **Timeline detail** (compact | advanced als
+  Preset über die drei Aufklapp-Schalter) und **Wrap lines** (Diffs und Code brechen um
+  statt seitlich zu scrollen). „Steer" ist live verifiziert: der Server nimmt den Prompt
+  während eines laufenden Turns an, **ohne** zu unterbrechen — die App unterbricht dafür
+  nicht mehr und lässt die Live-Anzeige stehen.
+
+### Added (tests)
+
+- `ExtensionsContractTest` — Toggle eines MCP-Servers (connect/disconnect, genau ein
+  Aufruf, exakter Pfad), MCP-Liste mit Status, Plugin- und Skill-Parsing inkl.
+  Feature-Flags, MCP-Ressourcen pro Server.
+
 ## [1.5.10] - 2026-10-13
 
 ### Fixed
@@ -641,7 +680,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...HEAD
+[1.5.11]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...v1.5.8

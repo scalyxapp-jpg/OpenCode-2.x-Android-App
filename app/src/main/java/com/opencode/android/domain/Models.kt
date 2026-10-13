@@ -888,6 +888,37 @@ val BUILTIN_COMMANDS: List<CommandEntry> =
 
 // GET /mcp → { "<name>": { "status": "connected" | "disabled" | "failed" |
 // "needs_auth" | "pending" | "needs_client_registration" } }
+
+/** One installed plugin (Extensions → Plugins, `GET /api/plugin`). */
+@Serializable
+@Immutable
+data class PluginEntry(
+    val id: String,
+    val sourceType: String? = null,
+    val status: String? = null,
+    /** Feature flags the plugin contributes (e.g. `server`), for a compact row. */
+    val features: List<String> = emptyList(),
+)
+
+/** One installed skill (Extensions → Skills, `GET /api/skill`). */
+@Serializable
+@Immutable
+data class SkillEntry(
+    val id: String,
+    val name: String? = null,
+    val description: String? = null,
+)
+
+/** One MCP resource (`GET /api/mcp/resource`). */
+@Serializable
+@Immutable
+data class McpResourceEntry(
+    val server: String,
+    val name: String? = null,
+    val uri: String? = null,
+    val description: String? = null,
+)
+
 @Serializable
 @Immutable
 data class McpStatus(

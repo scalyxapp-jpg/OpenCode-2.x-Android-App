@@ -16,6 +16,7 @@ import com.opencode.android.domain.FormReplyBody
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.InboxItem
+import com.opencode.android.domain.McpResourceEntry
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
@@ -26,6 +27,7 @@ import com.opencode.android.domain.PathInfo
 import com.opencode.android.domain.PermissionDecision
 import com.opencode.android.domain.PermissionReplyRequest
 import com.opencode.android.domain.PermissionRequest
+import com.opencode.android.domain.PluginEntry
 import com.opencode.android.domain.Project
 import com.opencode.android.domain.ProjectAgent
 import com.opencode.android.domain.PromptAgent
@@ -47,6 +49,7 @@ import com.opencode.android.domain.QuestionToolRef
 import com.opencode.android.domain.RevertRequest
 import com.opencode.android.domain.RevertStageBody
 import com.opencode.android.domain.Session
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SessionCreateRequest
 import com.opencode.android.domain.SessionGuard
 import com.opencode.android.domain.SessionGuardHealth
@@ -614,17 +617,6 @@ class OpenCodeApiAdapter(
             .orEmpty()
             .map { CommandEntry(name = it.name, description = it.description) }
 
-    override suspend fun getSkills(): List<JsonElement> =
-        v2.skills().data.orEmpty().map {
-            json.encodeToJsonElement(
-                com.opencode.android.domain.WireSkill
-                    .serializer(),
-                it,
-            )
-        }
-
-    // --- project / vcs -----------------------------------------------------
-
     override suspend fun getProjects(): List<Project> = v2.projects()
 
     override suspend fun getVcs(directory: String?): VcsInfo {
@@ -821,6 +813,59 @@ class OpenCodeApiAdapter(
             .data
             .orEmpty()
             .associate { it.name to McpStatus(status = it.status?.status) }
+
+    override suspend fun getPlugins(directory: String?): List<PluginEntry> =
+        v2
+            .plugins(directory)
+            .data
+            .orEmpty()
+            .map { plugin ->
+                PluginEntry(
+                    id = plugin.id,
+                    sourceType = plugin.source?.type,
+                    status = plugin.state?.status,
+                    features =
+                        (plugin.features as? kotlinx.serialization.json.JsonObject)
+                            ?.filterValues { it is kotlinx.serialization.json.JsonPrimitive && it.content == "true" }
+                            ?.keys
+                            ?.toList()
+                            .orEmpty(),
+                )
+            }
+
+    override suspend fun getSkills(directory: String?): List<SkillEntry> =
+        v2
+            .skills(directory)
+            .data
+            .orEmpty()
+            .map { skill ->
+                SkillEntry(id = skill.id, name = skill.name, description = skill.description)
+            }
+
+    override suspend fun getMcpResources(directory: String?): List<McpResourceEntry> =
+        v2
+            .mcpResources(directory)
+            .data
+            ?.get("resources")
+            ?.let { resources ->
+                (resources as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { item ->
+                    val obj = item as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                    val server = obj["server"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                    if (server.isNullOrBlank()) {
+                        null
+                    } else {
+                        McpResourceEntry(
+                            server = server,
+                            name = obj["name"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content },
+                            uri = obj["uri"]?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content },
+                            description =
+                                obj["description"]?.let {
+                                    (it as? kotlinx.serialization.json.JsonPrimitive)?.content
+                                },
+                        )
+                    }
+                }
+            }.orEmpty()
 
     override suspend fun connectMcp(name: String): ResponseBody = requireBody(v2.mcpConnect(name))
 
