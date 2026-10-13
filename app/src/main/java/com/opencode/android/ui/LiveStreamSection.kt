@@ -55,6 +55,7 @@ internal fun LiveStatusItem(
                         live.parts.isEmpty(),
                 parts = live.parts,
                 streamingChars = live.response.length,
+                step = live.stepIndex,
             ),
     )
 }
@@ -179,7 +180,7 @@ internal fun LiveStatusIndicator(
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
             ) {
                 Text(
-                    text = liveStatusText(status),
+                    text = liveStatusText(status, model),
                     style = MaterialTheme.typography.bodySmall,
                     color =
                         if (status.kind == LiveStatusKind.DISCONNECTED) {
@@ -194,7 +195,11 @@ internal fun LiveStatusIndicator(
                 if (status.animated) DotsPulse()
             }
             // Line 2: who is doing it (kept, so the row still identifies the model).
-            val who = listOfNotNull(agent, model).filter { it.isNotBlank() }.joinToString(" · ")
+            // The agent is Title Case, exactly like the web's agent chip.
+            val who =
+                listOfNotNull(agent?.replaceFirstChar { it.uppercase() }, model)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
             if (who.isNotBlank()) {
                 Text(
                     text = who,
@@ -213,38 +218,58 @@ internal fun LiveStatusIndicator(
  * "Writing the answer · 1,240 chars". Falls back to the generic phases.
  */
 @Composable
-private fun liveStatusText(status: LiveStatus): String =
-    when (status.kind) {
+private fun liveStatusText(
+    status: LiveStatus,
+    model: String?,
+): String {
+    // Every phase names the running step (2nd, 3rd … model call of the turn) so a
+    // long agent turn is never just the generic "waiting" line again.
+    val stepSuffix =
+        if (status.step > 1) " · " + stringResource(R.string.status_step, status.step) else ""
+    return when (status.kind) {
         LiveStatusKind.DISCONNECTED -> stringResource(R.string.reconnecting)
-        LiveStatusKind.COMPACTING -> stringResource(R.string.compacting)
-        LiveStatusKind.THINKING -> stringResource(R.string.thinking)
-        LiveStatusKind.WAITING -> stringResource(R.string.waiting_for_model)
+        LiveStatusKind.COMPACTING -> stringResource(R.string.compacting) + stepSuffix
+        LiveStatusKind.THINKING -> stringResource(R.string.thinking) + stepSuffix
+        LiveStatusKind.WAITING ->
+            // Naming the model makes the phase specific: "Waiting for V4 Flash…"
+            // instead of a bare "Waiting for the model…".
+            stringResource(
+                R.string.status_waiting_model,
+                model?.takeIf { it.isNotBlank() } ?: stringResource(R.string.status_waiting_any_model),
+            ) + stepSuffix
         LiveStatusKind.TOOL -> {
-            val tool = status.tool?.takeIf { it.isNotBlank() } ?: stringResource(R.string.tool)
+            val tool = toolRowTitle(status.tool?.takeIf { it.isNotBlank() } ?: stringResource(R.string.tool))
             val base =
                 status.detail?.takeIf { it.isNotBlank() }?.let { detail ->
-                    // Long paths/commands: keep the row readable.
-                    stringResource(R.string.status_running_tool_detail, tool, detail.take(60))
+                    // Long paths/commands: keep the row readable — and say so
+                    // with a real ellipsis instead of cutting the text silently.
+                    val shown = if (detail.length > 60) detail.take(59) + "…" else detail
+                    stringResource(R.string.status_running_tool_detail, tool, shown)
                 } ?: stringResource(R.string.status_running_tool, tool)
-            if (status.toolCount > 1) {
-                base + " " + stringResource(R.string.status_tool_count, status.toolCount)
-            } else {
-                base
-            }
+            val counted =
+                if (status.toolCount > 1) {
+                    base + " " + stringResource(R.string.status_tool_count, status.toolCount)
+                } else {
+                    base
+                }
+            counted + stepSuffix
         }
         LiveStatusKind.WRITING -> {
             val base = stringResource(R.string.status_writing_answer)
-            if (status.streamingChars > 0) {
-                base + " · " +
-                    stringResource(
-                        R.string.status_streamed_chars,
-                        com.opencode.android.util.formatCount(status.streamingChars),
-                    )
-            } else {
-                base
-            }
+            val counted =
+                if (status.streamingChars > 0) {
+                    base + " · " +
+                        stringResource(
+                            R.string.status_streamed_chars,
+                            com.opencode.android.util.formatCount(status.streamingChars),
+                        )
+                } else {
+                    base
+                }
+            counted + stepSuffix
         }
     }
+}
 
 /** Shared animated dots ("…") for the live status row. */
 @Composable

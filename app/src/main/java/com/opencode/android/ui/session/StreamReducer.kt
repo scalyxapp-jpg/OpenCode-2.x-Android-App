@@ -393,6 +393,7 @@ object StreamReducer {
                                     reasoning = "",
                                     parts = emptyList(),
                                     thinking = false,
+                                    stepIndex = state.live.stepIndex + 1,
                                 ),
                             isGenerating = true,
                             turnEnded = false,
@@ -673,6 +674,11 @@ object StreamReducer {
                             parts = emptyList(),
                             agent = event.data?.agent ?: state.live.agent,
                             model = selected ?: modelId ?: state.live.model,
+                            // This server opens every step with this event (it
+                            // sends no step-start PART), so the counter has to
+                            // advance here too — otherwise the status row could
+                            // never name the step and a long turn stayed generic.
+                            stepIndex = state.live.stepIndex + 1,
                         ),
                     isGenerating = true,
                     isStreaming = true,
@@ -838,6 +844,38 @@ object StreamReducer {
 
     private fun cap(s: String): String = if (s.length > LIVE_TEXT_MAX_CHARS) s.takeLast(LIVE_TEXT_MAX_CHARS) else s
 
+    /**
+     * Carries over what a later frame of the SAME call does not repeat.
+     *
+     * The server splits one tool call into several events: `input.started` names
+     * the tool, `called` carries the input, `success` the output. Replacing the
+     * part wholesale lost the name, so the live status row read
+     * "Running  · echo hallo" and the tool row had no title. Identity and the
+     * state object are merged instead of overwritten.
+     */
+    private fun carryIdentity(
+        previous: Part,
+        next: Part,
+    ): Part =
+        next.copy(
+            tool = next.tool ?: previous.tool,
+            name = next.name ?: previous.name,
+            title = next.title ?: previous.title,
+            messageId = next.messageId ?: previous.messageId,
+            time = next.time ?: previous.time,
+            state = mergeJson(previous.state, next.state),
+        )
+
+    /** Shallow object merge: keys the new frame does not carry are kept. */
+    private fun mergeJson(
+        previous: JsonElement?,
+        next: JsonElement?,
+    ): JsonElement? {
+        val old = previous as? kotlinx.serialization.json.JsonObject ?: return next ?: previous
+        val fresh = next as? kotlinx.serialization.json.JsonObject ?: return previous
+        return kotlinx.serialization.json.JsonObject(old + fresh)
+    }
+
     private fun mergePart(
         parts: List<Part>,
         part: Part,
@@ -851,7 +889,7 @@ object StreamReducer {
         val idx = parts.indexOfFirst { it.id != null && it.id == capped.id }
         val merged =
             if (idx >= 0) {
-                parts.toMutableList().also { it[idx] = capped }
+                parts.toMutableList().also { it[idx] = carryIdentity(parts[idx], capped) }
             } else {
                 parts + capped
             }

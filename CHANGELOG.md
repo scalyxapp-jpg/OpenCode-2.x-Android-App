@@ -20,6 +20,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.6] - 2026-10-13
+
+### Fixed
+- **Live-Status zeigt jetzt wirklich, was läuft.** Der Statustext blieb bei „Waiting for the model…“,
+  obwohl Werkzeuge liefen. Ursache (mit einer echten Server-Spur belegt und als Test eingefroren):
+  Der Server zerlegt einen Tool-Aufruf in mehrere Events; das spätere Event überschrieb das frühere,
+  wodurch der **Werkzeugname verloren ging** (die Zeile las „Running · echo hallo“) — und der
+  Schrittzähler wurde nie hochgezählt, sodass zwischen den Schritten immer das generische Label
+  stand. Jetzt: Werkzeugname bleibt erhalten (Titel-Case wie im Web), jeder Schritt wird gezählt
+  („… · step 2“), und die Warte-Phase nennt das Modell („Waiting for V4 Flash…“) statt eines
+  nichtssagenden Textes. Tool-Details werden mit sichtbarer Auslassung gekürzt statt still
+  abgeschnitten.
+- **`/compact` bildet das Web 1:1 ab.** Per Playwright gegen den laufenden Server geprüft: das Web
+  sendet `POST /api/session/{id}/compact` mit Body `{"id":"msg_…"}` — einer **client-generierten**
+  Id, ohne Modell. Die App sendete einen leeren Body (der Server erfand die Id) und warf die
+  Antwort weg; außerdem war der Verzeichnis-Header URL-kodiert, sodass der Server nach einem
+  Ordner namens `%2Fhome%2F…` suchte. Jetzt: gleiche Anfrage wie das Web, und der Befehl hat
+  **sichtbaren Output**: „Session compaction queued“ direkt nach dem Absenden, danach der
+  Compaction-Block wie im Web — Trennlinie „Session compaction started“, die generierte
+  Zusammenfassung als Markdown, beim Laufen Spinner + „Compacting“ und am Ende
+  „Session compacted · 34,997 in · 140 out“ (bzw. „by provider“, „failed“, „cancelled“,
+  „interrupted“). Die Nutzungszeile rechnet Cache-Reads als Input und Reasoning als Output, wie das Web.
+
+### Changed (10 kosmetische Verbesserungen)
+1. Modell-Wechsel im Chat nutzt dieselbe Trennlinien-Optik wie der Compaction-Block (vorher eine
+   nackte zentrierte Zeile).
+2. Werkzeugtitel in allen Tool-Zeilen und im Detail-Dialog in Titel-Schreibweise wie im Web
+   („Shell“, „Read“, „Edit“, …) statt roher Kennung.
+3. Werkzeugname im Live-Status ebenfalls Titel-Schreibweise.
+4. Anhang-Miniatur nutzt die Shape-Skala statt eines magischen 4-dp-Radius.
+5. Berechtigungs-Banner: Abstände aus der Spacing-Skala, Meta-Icon auf einheitlichen 16 dp.
+6. Tool-Karten: alle Mikro-Abstände aus der Spacing-Skala statt 2-dp-Literale.
+7. Projekt-/Session-Titel brechen auf zwei Zeilen um, statt nach einer Zeile abzuschneiden.
+8. Änderungs-Tab: eine gepolsterte Trennlinie statt zwei Spacer um eine nackte Linie — gleicher
+   Rhythmus wie alle anderen Abschnitte.
+9. Agent-Name im Live-Status in Titel-Schreibweise („Build“) wie der Agent-Chip im Web.
+10. „Compacting“-Zeile nutzt dieselbe Typo-Skala wie die Live-Status-Zeile.
+
+### Added
+- Tests: `LiveStatusTraceTest` (echte Wire-Spur eines kompletten Turns durch Normalizer + Filter +
+  Reducer, inkl. Regression-Pins für Werkzeugname und Schrittzähler), `CompactionMessageTest`
+  (Ergebnis-Wortlaut und Nutzungszeile), sowie ein neu geschriebener `CompactContractTest`
+  (Body `{"id":…}`, roher Verzeichnis-Header, Antwort als Compaction-Nachricht mit Status/Summary/Tokens).
+
 ## [1.5.5] - 2026-10-13
 
 ### Fixed
@@ -436,7 +480,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...HEAD
+[1.5.6]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...v1.5.3

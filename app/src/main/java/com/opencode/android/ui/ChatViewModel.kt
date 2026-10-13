@@ -125,6 +125,10 @@ data class LiveStreamState(
     // Live tool parts of the in-flight step, rendered immediately so tool rows
     // appear without waiting for a full message reload.
     val parts: List<Part> = emptyList(),
+    // 1-based step of the running turn. A turn can consist of several model
+    // calls ("steps"); the status row names the one that is running so a long
+    // turn does not read like a single generic wait.
+    val stepIndex: Int = 0,
 )
 
 @Immutable
@@ -1172,50 +1176,29 @@ class ChatViewModel
         }
 
         // "/compact": summarize the session to shrink the context window.
+        //
+        // Web parity (verified against the running server): the request is
+        // `POST /api/session/{id}/compact` with `{"id":"msg_…"}` — a
+        // CLIENT-generated id and nothing else (no model). The server echoes that
+        // id on the compaction message, which the transcript renders as the web's
+        // compaction block ("Session compaction started" + summary +
+        // "Session compacted · X in · Y out").
         fun compactSession() {
             val session = _uiState.value.session ?: return
             if (_uiState.value.isCompacting) return
-            // Web parity: /compact summarizes with the model currently selected in
-            // the composer, so prefer that model's provider from the catalog and
-            // only fall back to the session's stored model.
-            val modelRef =
-                _uiState.value.selectedModel
-                    .ifBlank {
-                        com.opencode.android.util
-                            .sessionModelRef(session.model?.id, session.model?.provider ?: session.model?.providerID)
-                    }
-            if (modelRef.isBlank()) {
-                _uiState.update { it.copy(statusError = "No model selected") }
-                return
-            }
-            // Catalog model ids are authoritative. NVIDIA exposes ids that already
-            // include the provider prefix; other providers expose bare ids.
-            val modelEntry =
-                _uiState.value.models.firstOrNull {
-                    com.opencode.android.util
-                        .sessionModelRef(it.id, it.providerId) == modelRef
-                } ?: _uiState.value.models.firstOrNull { it.id == modelRef }
-            val provider =
-                modelEntry?.providerId
-                    ?: session.model?.provider
-                    ?: session.model?.providerID
-                    ?: modelRef.substringBefore('/', "")
-            val modelId =
-                modelEntry?.id
-                    ?: session.model?.id?.takeIf { it.isNotBlank() }
-                    ?: modelRef.substringAfter('/', modelRef)
             val compactSessionId = session.id
+            val compactionId = generateOpenCodeId("msg")
             _uiState.update { it.copy(isCompacting = true, statusError = null) }
             viewModelScope.launch {
                 try {
                     val response =
                         api.summarizeSession(
                             session.id,
-                            // URL-encoded, exactly as the web sends it.
-                            session.directory?.let {
-                                java.net.URLEncoder.encode(it, Charsets.UTF_8.name())
-                            },
-                            SummarizeRequest(providerID = provider, modelID = modelId),
+                            // Raw path — the same directory value every other
+                            // call sends. URL-encoding it made the server look
+                            // for a location literally named "%2Fhome%2F…".
+                            session.directory,
+                            SummarizeRequest(id = compactionId),
                         )
                     if (!response.isSuccessful) {
                         val message =
@@ -1230,8 +1213,35 @@ class ChatViewModel
                         }
                         return@launch
                     }
-                    response.body()?.close()
-                    // Compaction appends a summary part + resets the window. The web
+                    // The server answers with the pending compaction message.
+                    // Showing it right away matches the web, which puts
+                    // "Session compaction queued" into the transcript before the
+                    // summary exists; the reload below replaces the optimistic
+                    // row with the server's copy (summary + usage).
+                    val created = response.body()?.data
+                    if (created != null) {
+                        val optimistic =
+                            created.copy(
+                                type = "compaction",
+                                // The endpoint answers with the inbox item; the
+                                // web labels that state "queued".
+                                status = created.status ?: "queued",
+                                sessionId = created.sessionId ?: compactSessionId,
+                            )
+                        _uiState.update { current ->
+                            if (current.session?.id != compactSessionId) {
+                                current
+                            } else {
+                                current.copy(
+                                    messages =
+                                        current.messages.filterNot {
+                                            (it.id ?: it.info?.id) == (optimistic.id ?: optimistic.info?.id)
+                                        } + optimistic,
+                                )
+                            }
+                        }
+                    }
+                    // Compaction appends a summary + resets the window. The web
                     // refetches the session todo right after; we additionally reload
                     // the messages and the context figures so the chip updates at
                     // once instead of waiting for the next SSE tick.

@@ -152,7 +152,7 @@ interface OpenCodeV2Api {
         @Path("sessionID") sessionId: String,
         @Body body: CompactBody,
         @Header("x-opencode-directory") directory: String? = null,
-    ): Response<ResponseBody>
+    ): Response<WireData<Message>>
 
     @POST("api/session/{sessionID}/fork")
     suspend fun fork(

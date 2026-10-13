@@ -173,6 +173,12 @@ data class Message(
     val error: kotlinx.serialization.json.JsonElement? = null,
     val cost: Double? = null,
     val tokens: Tokens? = null,
+    // Compaction messages (`type = "compaction"`) carry their own state instead of
+    // a role: `status` (running/completed/failed), `reason` (auto/manual) and the
+    // generated `summary` markdown. Rendered as the web's compaction block.
+    val status: String? = null,
+    val reason: String? = null,
+    val summary: String? = null,
     // Web endpoint structure: { info, parts }
     val info: MessageInfo? = null,
 )
@@ -872,8 +878,15 @@ data class McpEntry(
 @Serializable
 @Immutable
 data class SummarizeRequest(
-    val providerID: String,
-    val modelID: String,
+    /**
+     * Client-generated `msg_…` id for the compaction message.
+     *
+     * The web sends `{"id":"msg_…"}` and the server echoes that id on the
+     * compaction message, so the client can follow its own request in the
+     * transcript. An empty body made the server mint the id instead, which is
+     * why the running compaction could not be matched to the request.
+     */
+    val id: String? = null,
 )
 
 @Serializable

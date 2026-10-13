@@ -35,6 +35,8 @@ data class LiveStatus(
     val streamingChars: Int = 0,
     /** True while the label should animate dots (i.e. something is in progress). */
     val animated: Boolean = true,
+    /** 1-based step of the running turn (0 when the server sends none). */
+    val step: Int = 0,
 )
 
 private val RUNNING_TOOL_STATES = setOf("running", "pending", "in_progress")
@@ -57,12 +59,13 @@ fun liveStatus(
     waiting: Boolean,
     parts: List<Part>,
     streamingChars: Int = 0,
+    step: Int = 0,
 ): LiveStatus {
     if (!connected) {
-        return LiveStatus(LiveStatusKind.DISCONNECTED, animated = true)
+        return LiveStatus(LiveStatusKind.DISCONNECTED, animated = true, step = step)
     }
     if (compacting) {
-        return LiveStatus(LiveStatusKind.COMPACTING, toolCount = parts.size)
+        return LiveStatus(LiveStatusKind.COMPACTING, toolCount = parts.size, step = step)
     }
     val running =
         parts.lastOrNull { part ->
@@ -74,17 +77,19 @@ fun liveStatus(
             tool = running.toolName(),
             detail = extractToolDetail(running) ?: running.title,
             toolCount = parts.size,
+            step = step,
         )
     }
     if (thinking) {
-        return LiveStatus(LiveStatusKind.THINKING, toolCount = parts.size)
+        return LiveStatus(LiveStatusKind.THINKING, toolCount = parts.size, step = step)
     }
     if (waiting) {
-        return LiveStatus(LiveStatusKind.WAITING, toolCount = parts.size)
+        return LiveStatus(LiveStatusKind.WAITING, toolCount = parts.size, step = step)
     }
     return LiveStatus(
         kind = LiveStatusKind.WRITING,
         toolCount = parts.size,
         streamingChars = streamingChars,
+        step = step,
     )
 }

@@ -11,6 +11,7 @@ import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.Message
+import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
 import com.opencode.android.domain.Model
 import com.opencode.android.domain.ModelRefRequest
@@ -317,7 +318,7 @@ interface OpenCodeApi {
         sessionId: String,
         directory: String?,
         body: SummarizeRequest,
-    ): Response<ResponseBody>
+    ): Response<WireData<Message>>
 
     suspend fun postLog(body: JsonElement): ResponseBody
 

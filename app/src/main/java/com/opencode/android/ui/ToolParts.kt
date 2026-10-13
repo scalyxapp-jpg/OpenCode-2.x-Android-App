@@ -102,6 +102,31 @@ internal fun Part.stateField(name: String): String? = stateObject()?.get(name).a
 
 internal fun Part.inputField(name: String): String? = stateInput()?.get(name).asRawString()
 
+/**
+ * The row label of a tool call, Title Case like the web's tool headers
+ * ("Shell", "Read", "Edit"). Unknown tools keep their raw id so no information
+ * is lost, an empty id falls back to a neutral "Tool".
+ */
+internal fun toolRowTitle(tool: String?): String {
+    val raw = tool?.trim().orEmpty()
+    if (raw.isEmpty()) return "Tool"
+    return when (raw.lowercase()) {
+        "bash", "shell", "execute" -> "Shell"
+        "read" -> "Read"
+        "write" -> "Write"
+        "edit", "multiedit" -> "Edit"
+        "patch", "apply_patch" -> "Patch"
+        "grep", "search", "ripgrep" -> "Search"
+        "glob", "list", "ls" -> "List"
+        "todowrite", "todo_write" -> "Todos"
+        "task", "subagent", "delegate_task" -> "Subagent"
+        "question" -> "Question"
+        "skill" -> "Skill"
+        "websearch", "webfetch" -> "Web"
+        else -> raw
+    }
+}
+
 // Tool ids → web display labels. Web shows "Shell" for bash and
 // "Called `delegate_task`" for anything without a friendly name.
 internal fun toolDisplayName(tool: String): String =

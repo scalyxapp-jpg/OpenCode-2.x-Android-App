@@ -388,11 +388,9 @@ internal fun ChangesTab(
                 }
             }
             item {
-                Column {
-                    Spacer(Modifier.height(MaterialTheme.spacing.small))
-                    HorizontalDivider()
-                    Spacer(Modifier.height(MaterialTheme.spacing.small))
-                }
+                // Same divider rhythm as the other sections (one padded rule
+                // instead of two spacers around a bare line).
+                HorizontalDivider(modifier = Modifier.padding(vertical = MaterialTheme.spacing.small))
             }
         }
 

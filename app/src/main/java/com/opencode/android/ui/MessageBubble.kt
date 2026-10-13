@@ -78,17 +78,15 @@ internal fun MessageBubble(
     // - GET /api/session/{id}/message → type/agent/model + text/content[] (with .name)
     val type = message.type?.trim()
     if (type == "model-switched") {
-        // Subtle system line (mirrors the web model indicator change).
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = stringResource(R.string.model_label, message.model?.id ?: "?"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        // Subtle timeline notice, the same divider treatment as the compaction
+        // block — a bare centred line looked like a stray paragraph next to it.
+        TimelineNotice(stringResource(R.string.model_label, message.model?.id ?: "?"))
+        return
+    }
+    if (type == "compaction") {
+        // `/compact` output: the web renders a compaction message as a timeline
+        // notice plus the generated summary, not as a chat bubble.
+        CompactionMessageRow(message)
         return
     }
     val role = message.role ?: message.info?.role ?: type

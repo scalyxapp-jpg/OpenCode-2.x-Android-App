@@ -264,7 +264,7 @@ internal fun DiffBlock(
                         modifier =
                             Modifier
                                 .width(16.dp)
-                                .padding(horizontal = 2.dp),
+                                .padding(horizontal = MaterialTheme.spacing.extraSmall),
                     )
                     Text(
                         text = if (line.startsWith("+") || line.startsWith("-")) line.drop(1) else line,
@@ -353,7 +353,7 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
                                 .clickable(enabled = !file.diff.isNullOrBlank()) {
                                     expandedPaths[file.path] = !isExpanded
                                 }.semantics { contentDescription = file.path }
-                                .padding(vertical = 2.dp),
+                                .padding(vertical = MaterialTheme.spacing.extraSmall),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -440,7 +440,7 @@ internal fun ToolCallRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 2.dp),
+                .padding(vertical = MaterialTheme.spacing.extraSmall),
     ) {
         Column(modifier = Modifier.animateContentSize()) {
             Row(
@@ -725,7 +725,7 @@ internal fun ToolSummaryCard(parts: List<Part>) {
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = part.toolName() ?: "Tool",
+                                text = toolRowTitle(part.toolName()),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -753,7 +753,7 @@ internal fun ToolSummaryCard(parts: List<Part>) {
         val detail = extractToolDetail(part)
         AlertDialog(
             onDismissRequest = { selected = null },
-            title = { Text("${part.toolName() ?: "Tool"} · ${toolBasename(part)}") },
+            title = { Text("${toolRowTitle(part.toolName())} · ${toolBasename(part)}") },
             text = {
                 Column {
                     detail?.let {

@@ -412,4 +412,16 @@
     <string name="status_writing_answer" formatted="false">Writing the answer</string>
     <string name="status_streamed_chars" formatted="false">%1$s chars</string>
     <string name="could_not_open_link" formatted="false">No app can open this link</string>
+    <string name="status_waiting_model" formatted="false">Waiting for %1$s…</string>
+    <string name="status_waiting_any_model" formatted="false">the model</string>
+    <string name="status_step" formatted="false">step %1$d</string>
+    <!-- Compaction (`/compact`) — the web's own wording, 1:1. -->
+    <string name="compaction_started" formatted="false">Session compaction started</string>
+    <string name="compaction_running" formatted="false">Compacting</string>
+    <string name="compaction_completed" formatted="false">Session compacted</string>
+    <string name="compaction_completed_provider" formatted="false">Session compacted by provider</string>
+    <string name="compaction_failed" formatted="false">Session compaction failed</string>
+    <string name="compaction_cancelled" formatted="false">Session compaction cancelled</string>
+    <string name="compaction_interrupted" formatted="false">Session compaction interrupted</string>
+    <string name="compaction_queued" formatted="false">Session compaction queued</string>
 </resources>

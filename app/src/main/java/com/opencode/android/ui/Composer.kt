@@ -150,7 +150,7 @@ private fun AttachmentLeadingIcon(attachment: Attachment) {
                 modifier =
                     Modifier
                         .size(24.dp)
-                        .clip(RoundedCornerShape(4.dp)),
+                        .clip(MaterialTheme.shapes.extraSmall),
             )
             return
         }

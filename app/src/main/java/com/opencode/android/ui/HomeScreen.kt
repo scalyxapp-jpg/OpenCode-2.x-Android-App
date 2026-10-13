@@ -1481,7 +1481,9 @@ private fun SessionRow(
                         ?: stringResource(R.string.new_session),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
-                maxLines = 1,
+                // Two lines: real session titles ("Metal-Theme passend zum
+                // App-Icon") were cut after one line while the row had room.
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             val now = System.currentTimeMillis()

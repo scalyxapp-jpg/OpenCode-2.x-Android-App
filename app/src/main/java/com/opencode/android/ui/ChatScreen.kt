@@ -1120,18 +1120,25 @@ internal fun SessionTab(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 1.dp),
+                        .padding(
+                            horizontal = MaterialTheme.spacing.small,
+                            vertical = MaterialTheme.spacing.extraSmall,
+                        ),
                 shape = MaterialTheme.shapes.small,
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    modifier =
+                        Modifier.padding(
+                            horizontal = MaterialTheme.spacing.small,
+                            vertical = MaterialTheme.spacing.extraSmall,
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                 ) {
                     Icon(
                         Icons.Default.Security,
                         contentDescription = null,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size(16.dp),
                     )
                     Text(
                         text =

@@ -16,6 +16,7 @@ import com.opencode.android.domain.FormReplyBody
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.Message
+import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
 import com.opencode.android.domain.Model
 import com.opencode.android.domain.ModelRef
@@ -922,7 +923,10 @@ class OpenCodeApiAdapter(
         sessionId: String,
         directory: String?,
         body: SummarizeRequest,
-    ): Response<ResponseBody> = v2.compact(sessionId, CompactBody(), directory)
+    ): Response<WireData<Message>> =
+        // Exactly the web's request: the client-generated id and NOTHING else
+        // (no model — the server compacts with the session's model).
+        v2.compact(sessionId, CompactBody(id = body.id), directory)
 
     override suspend fun postLog(body: JsonElement): ResponseBody {
         // OpenCode 2.x has no `/log` server endpoint. Forward through the
