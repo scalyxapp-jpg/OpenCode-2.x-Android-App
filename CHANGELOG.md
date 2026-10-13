@@ -20,6 +20,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.8] - 2026-10-13
+
+### Added
+- **Message-Queue im Composer — 1:1 wie das Web (Ctrl+Enter).** Per Playwright gegen den laufenden
+  Server analysiert: Ctrl+Enter sendet `POST /api/session/{id}/prompt` mit **`"delivery":"queue"`**
+  (sonst identischer Body) und legt die Nachricht in die Session-**Inbox**, statt den laufenden Turn
+  zu unterbrechen. Das ist jetzt in der App:
+  - **Zweiter Button links neben Senden/Stopp**, nur sichtbar solange im Composer Text steht
+    (animiert ein-/ausblendend) — Tipp darauf reiht die Nachricht ein, ohne den laufenden Turn
+    abzubrechen. Fehler geben den Text in den Composer zurück.
+  - **Queue-Anzeige im Verlauf:** die Inbox-Einträge werden als Karten mit dem Web-Wortlaut gezeigt —
+    Badge **„Queued“** (bzw. **„Steer“**, wenn schon freigegeben), Nachrichtentext und die beiden
+    Aktionen, die der Server anbietet: **„Steer“** (sofort ausliefern, `PATCH …/inbox/{id}`
+    `{delivery:"steer"}`) und **„Remove“** (`DELETE …/inbox/{id}`).
+  - **Auslieferung** macht der Server: sobald der laufende Turn endet, wandert der älteste Eintrag
+    als echte Nachricht in den Verlauf (live verifiziert: Enqueue → Inbox → Steer → Remove →
+    Auslieferung, Inbox danach leer). Bei idle Session wird sofort ausgeliefert.
+  - **Nachladen** der Queue bei `session.inbox.delivered/cancelled/delivery.changed`
+    (neuer `StreamEffect.RefreshInbox`), beim Session-Load, nach jedem Queue-Vorgang und am
+    Turn-Ende.
+  - Anhänge sind auf dem Queue-Pfad nicht möglich (der Inbox-Eintrag müsste die Base64-Teile
+    mitführen); statt die Dateien still zu verlieren, weist die App darauf hin, direkt zu senden.
+
+### Added (tests)
+- `InboxQueueTest` (Inbox lesen mit Verzeichnis-Header, DELETE-Pfad, PATCH-Body `{"delivery":"steer"}`,
+  Fehler → `false` statt Exception), `PromptRequestBuilderTest` (+ Queue-/Direkt-Send-Fälle),
+  `SseEventDecoderTest` (Inbox-Übergänge → `session.inbox.changed`), `StreamReducerTest`
+  (`RefreshInbox`) — 424 Tests grün in den betroffenen Teilmengen.
+
 ## [1.5.7] - 2026-10-13
 
 ### Added
@@ -520,7 +549,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...HEAD
+[1.5.8]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...v1.5.5

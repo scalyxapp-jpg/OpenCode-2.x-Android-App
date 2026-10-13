@@ -431,4 +431,13 @@
     <string name="notif_finished_text" formatted="false">The agent finished this turn</string>
     <string name="notif_failed_title" formatted="false">Turn failed — %1$s</string>
     <string name="notif_failed_text" formatted="false">The turn ended with an error</string>
+    <!-- Message queue (Ctrl+Enter in the web): a second composer button. -->
+    <string name="queue_send" formatted="false">Queue</string>
+    <string name="queued_badge" formatted="false">Queued</string>
+    <string name="queue_steer" formatted="false">Steer</string>
+    <string name="queue_steer_hint" formatted="false">Send without interrupting</string>
+    <string name="queue_remove" formatted="false">Remove</string>
+    <string name="queued_message_added" formatted="false">Added to the queue</string>
+    <string name="queue_action_failed" formatted="false">Could not change the queue</string>
+    <string name="queue_attachments_unsupported" formatted="false">Attachments cannot be queued — send the message directly</string>
 </resources>

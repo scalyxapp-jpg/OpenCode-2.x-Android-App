@@ -32,6 +32,7 @@ import com.opencode.android.domain.PromptRequest
 import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.QuestionReplyRequest
 import com.opencode.android.domain.RevertRequest
+import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
@@ -134,6 +135,12 @@ data class LiveStreamState(
 @Immutable
 data class ChatUiState(
     val session: Session? = null,
+    /**
+     * Prompts waiting in the session INBOX (web parity: `/prompt` with
+     * `delivery:"queue"`). Rendered in the transcript with a "Queued" badge and
+     * delivered by the server when the running turn ends.
+     */
+    val queuedMessages: List<InboxItem> = emptyList(),
     val messages: List<Message> = emptyList(),
     val agents: List<Agent> = emptyList(),
     val models: List<Model> = emptyList(),
@@ -287,6 +294,8 @@ class ChatViewModel
                 }
 
                 override fun refreshMessages(sessionId: String) = this@ChatViewModel.refreshMessages(sessionId)
+
+                override fun refreshInbox(sessionId: String) = this@ChatViewModel.loadInbox(sessionId)
 
                 override fun resyncSessionStatus() {
                     val session = _uiState.value.session ?: return
@@ -498,6 +507,7 @@ class ChatViewModel
                                 vcsDiffError = null,
                                 contextUsage = null,
                                 contextInfo = null,
+                                queuedMessages = emptyList(),
                             )
                         }
                         // Fence the old refresh: while this load runs, `_uiState.session`
@@ -529,6 +539,7 @@ class ChatViewModel
                     // the user had to leave and re-enter to see remote (web/TUI) turns.
                     startSse(sessionId)
                     startPolling(sessionId)
+                    loadInbox(sessionId)
                     try {
                         // The session header, its full payload (for `directory`), the
                         // message page and the agent list are independent requests.
@@ -1174,6 +1185,70 @@ class ChatViewModel
                 }
             }
         }
+
+        /**
+         * Reads the session INBOX: the prompts the user queued (Ctrl+Enter in the
+         * web, the queue button in the composer here).
+         */
+        fun loadInbox(sessionId: String? = null) {
+            val session = _uiState.value.session ?: return
+            val id = sessionId ?: session.id
+            if (_uiState.value.session?.id != id) return
+            viewModelScope.launch {
+                try {
+                    val items = api.getInbox(id, session.directory)
+                    // Fence: the session may have changed while the request ran.
+                    if (_uiState.value.session?.id != id) return@launch
+                    _uiState.update {
+                        // Only user prompts are rendered; synthetic/compaction/move
+                        // inbox items are not queued messages.
+                        it.copy(queuedMessages = items.filter { item -> item.type == "user" })
+                    }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The queue is an extra: a failure must not disturb the chat.
+                    AppLog.w(APP_LOG_TAG) { "loadInbox failed: ${e.message}" }
+                }
+            }
+        }
+
+        /** The web's "Remove" on a queued prompt. */
+        fun cancelQueued(inboxId: String) {
+            val session = _uiState.value.session ?: return
+            viewModelScope.launch {
+                try {
+                    if (!api.cancelInboxItem(session.id, inboxId, session.directory)) {
+                        UserMessages.post(R.string.queue_action_failed)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "cancelQueued failed: ${e.message}")
+                    UserMessages.post(R.string.queue_action_failed)
+                } finally {
+                    loadInbox(session.id)
+                }
+            }
+        }
+
+        /** The web's "Steer" on a queued prompt: deliver it without waiting. */
+        fun steerQueued(inboxId: String) {
+            val session = _uiState.value.session ?: return
+            viewModelScope.launch {
+                try {
+                    if (!api.steerInboxItem(session.id, inboxId, session.directory)) {
+                        UserMessages.post(R.string.queue_action_failed)
+                    }
+                } catch (e: Exception) {
+                    AppLog.e(APP_LOG_TAG, "steerQueued failed: ${e.message}")
+                    UserMessages.post(R.string.queue_action_failed)
+                } finally {
+                    loadInbox(session.id)
+                }
+            }
+        }
+
+        /** Queues the composer's text instead of interrupting the running turn. */
+        fun queueMessage() = performSend(queued = true)
 
         // "/compact": summarize the session to shrink the context window.
         //
@@ -2558,6 +2633,13 @@ class ChatViewModel
 
         // Client IDs in web format: {prefix}_{12 hex of time*4096+counter}{14 random base62}.
         private var idCounter = 0
+        /**
+         * `delivery` value that asks the server to QUEUE the prompt instead of
+         * running it immediately (verified against the live server: Ctrl+Enter in
+         * the web sends exactly this).
+         */
+        private val QUEUE_DELIVERY = "queue"
+
         private var lastIdMs = 0L
 
         private fun generateOpenCodeId(prefix: String): String {
@@ -2789,7 +2871,71 @@ class ChatViewModel
             conversation.seedGenerating(false)
         }
 
-        private fun performSend() {
+        /**
+         * Posts the composer's text with `delivery:"queue"` — exactly what Ctrl+Enter
+         * does in the web composer: the server keeps it in the session inbox and
+         * runs it once the current turn is done.
+         */
+        private fun queuePrompt(
+            session: Session,
+            rawText: String,
+        ) {
+            val (providerId, modelId) = parseModelRef(_uiState.value.selectedModel)
+            _uiState.update {
+                it.copy(inputText = "", attachments = emptyList(), statusError = null)
+            }
+            sendJob =
+                viewModelScope.launch {
+                    try {
+                        val body =
+                            buildPromptAsyncRequest(
+                                messageId = generateOpenCodeId("msg"),
+                                partId = generateOpenCodeId("prt"),
+                                agent = _uiState.value.selectedAgent,
+                                providerId = providerId,
+                                modelId = modelId,
+                                variant = _uiState.value.selectedVariant,
+                                finalText = rawText,
+                                delivery = QUEUE_DELIVERY,
+                            )
+                        when (val result = promptSender.send(session.id, body)) {
+                            PromptSendResult.Ok -> {
+                                UserMessages.post(R.string.queued_message_added)
+                            }
+
+                            PromptSendResult.Conflict -> {
+                                UserMessages.post(R.string.queue_action_failed)
+                                restoreQueuedInput(rawText)
+                            }
+
+                            is PromptSendResult.Failed -> {
+                                AppLog.e(APP_LOG_TAG, "queueMessage failed: ${result.message}")
+                                UserMessages.post(R.string.could_not_send, result.message)
+                                restoreQueuedInput(rawText)
+                            }
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        AppLog.e(APP_LOG_TAG, "queueMessage failed: ${e.message}")
+                        UserMessages.post(R.string.could_not_send, "${e.message}")
+                        restoreQueuedInput(rawText)
+                    } finally {
+                        // The server owns the queue: read it back (delivery may keep
+                        // the item queued while the turn runs).
+                        loadInbox(session.id)
+                    }
+                }
+        }
+
+        /** Gives the text back to the composer when queueing failed. */
+        private fun restoreQueuedInput(rawText: String) {
+            _uiState.update {
+                if (it.inputText.isBlank()) it.copy(inputText = rawText) else it
+            }
+        }
+
+        private fun performSend(queued: Boolean = false) {
             val session =
                 _uiState.value.session ?: run {
                     AppLog.e(APP_LOG_TAG, "sendMessage: no session")
@@ -2858,6 +3004,21 @@ class ChatViewModel
                         }
                     return
                 }
+
+            // A QUEUED prompt never interrupts and never echoes locally: the web
+            // keeps it out of the transcript as a normal message and instead shows
+            // it from the session INBOX (badge "Queued") until the server delivers
+            // it. Attachments are not supported on the queue path — the queued item
+            // would have to carry the base64 parts through the inbox — so the user
+            // is asked to send directly instead of losing the files silently.
+            if (queued) {
+                if (attachments.isNotEmpty()) {
+                    UserMessages.post(R.string.queue_attachments_unsupported)
+                    return
+                }
+                queuePrompt(session, rawText)
+                return
+            }
 
             // Web shape: text part + one "file" part per attachment, each with a
             // base64 data URL. The old text-only "[Attached: name]" marker never

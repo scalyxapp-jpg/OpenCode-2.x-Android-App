@@ -10,6 +10,7 @@ import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.McpStatus
+import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
@@ -313,6 +314,29 @@ interface OpenCodeApi {
         sessionId: String,
         body: JsonElement,
     ): ResponseBody
+
+    /** Queued prompts waiting for the running turn (`GET /api/session/{id}/inbox`). */
+    suspend fun getInbox(
+        sessionId: String,
+        directory: String? = null,
+    ): List<InboxItem>
+
+    /** Drops a queued prompt from the session inbox. */
+    suspend fun cancelInboxItem(
+        sessionId: String,
+        inboxId: String,
+        directory: String? = null,
+    ): Boolean
+
+    /**
+     * Delivers a queued prompt immediately (`PATCH {delivery:"steer"}`), the web's
+     * "Steer" action.
+     */
+    suspend fun steerInboxItem(
+        sessionId: String,
+        inboxId: String,
+        directory: String? = null,
+    ): Boolean
 
     suspend fun summarizeSession(
         sessionId: String,

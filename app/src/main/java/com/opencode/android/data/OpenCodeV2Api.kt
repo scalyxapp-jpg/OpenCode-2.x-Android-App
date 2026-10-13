@@ -7,6 +7,7 @@ import com.opencode.android.domain.ContextItem
 import com.opencode.android.domain.CreateSessionBody
 import com.opencode.android.domain.FileContent
 import com.opencode.android.domain.ForkBody
+import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.FormReplyBody
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.MessageListResponse
@@ -131,6 +132,27 @@ interface OpenCodeV2Api {
         @Path("sessionID") sessionId: String,
         @Body body: PromptBody,
         @Header("X-Session-Guard-Revision") guardRevision: Long? = null,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): Response<ResponseBody>
+
+    @GET("api/session/{sessionID}/inbox")
+    suspend fun inbox(
+        @Path("sessionID") sessionId: String,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): WireData<List<InboxItem>>
+
+    @DELETE("api/session/{sessionID}/inbox/{inboxID}")
+    suspend fun cancelInboxItem(
+        @Path("sessionID") sessionId: String,
+        @Path("inboxID") inboxId: String,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): Response<ResponseBody>
+
+    @PATCH("api/session/{sessionID}/inbox/{inboxID}")
+    suspend fun updateInboxItem(
+        @Path("sessionID") sessionId: String,
+        @Path("inboxID") inboxId: String,
+        @Body body: JsonElement,
         @Header("x-opencode-directory") directory: String? = null,
     ): Response<ResponseBody>
 

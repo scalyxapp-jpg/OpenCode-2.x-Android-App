@@ -793,4 +793,17 @@ class StreamReducerTest {
         }
         assertTrue("partTypes must not grow without limit (was ${state.partTypes.size})", state.partTypes.size <= 240)
     }
+
+    @Test
+    fun `an inbox change asks the owner to re-read the queue`() {
+        val next =
+            reduce(
+                StreamState(),
+                Event(
+                    type = "session.inbox.changed",
+                    properties = props(),
+                ),
+            )
+        assertTrue(next.effects.contains(StreamEffect.RefreshInbox))
+    }
 }

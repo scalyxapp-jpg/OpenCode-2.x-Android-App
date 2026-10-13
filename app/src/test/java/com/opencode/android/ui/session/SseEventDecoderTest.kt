@@ -21,4 +21,18 @@ class SseEventDecoderTest {
         assertNull(SseEventDecoder.decode(""))
         assertNull(SseEventDecoder.decode("""{"payload":null}"""))
     }
+
+    @Test
+    fun `a delivered queued prompt surfaces as an inbox change`() {
+        // The queue lives in the session INBOX, not in the message list: the chat
+        // re-reads it when the server delivers / drops / steers an item.
+        for (type in listOf("session.inbox.delivered", "session.inbox.cancelled", "session.inbox.delivery.changed")) {
+            val event =
+                SseEventDecoder.decode(
+                    """{"type":"$type","data":{"sessionID":"s1"}}""",
+                )
+            assertEquals("session.inbox.changed", event?.type)
+            assertEquals("s1", event?.properties?.sessionId)
+        }
+    }
 }

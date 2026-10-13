@@ -108,4 +108,36 @@ class PromptRequestBuilderTest {
         assertEquals(1, body.parts.size)
         assertEquals("file", body.parts.single().type)
     }
+
+    @Test
+    fun `a queued prompt carries delivery queue and keeps the text`() {
+        val body =
+            buildPromptAsyncRequest(
+                messageId = "msg_1",
+                partId = "prt_1",
+                agent = "build",
+                providerId = "deepseek",
+                modelId = "deepseek-v4-flash",
+                variant = "default",
+                finalText = "queued text",
+                delivery = "queue",
+            )
+        assertEquals("queue", body.delivery)
+        assertEquals("msg_1", body.messageID)
+    }
+
+    @Test
+    fun `a direct send leaves the delivery to the server`() {
+        val body =
+            buildPromptAsyncRequest(
+                messageId = "msg_1",
+                partId = "prt_1",
+                agent = "build",
+                providerId = "deepseek",
+                modelId = "deepseek-v4-flash",
+                variant = "default",
+                finalText = "go",
+            )
+        assertNull(body.delivery)
+    }
 }

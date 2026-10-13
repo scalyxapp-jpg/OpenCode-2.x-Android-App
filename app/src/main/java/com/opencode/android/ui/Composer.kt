@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -174,6 +175,11 @@ private fun formatBytes(bytes: Long): String =
 internal class ComposerActions(
     val onInputChange: (String) -> Unit,
     val onSend: () -> Unit,
+    /**
+     * Queues the composer's text instead of sending it now — the web's Ctrl+Enter
+     * (POST /prompt with `delivery:"queue"`).
+     */
+    val onQueue: () -> Unit = {},
     val onInterrupt: () -> Unit,
     val onAddFiles: () -> Unit,
     val onRemoveAttachment: (String) -> Unit,
@@ -212,6 +218,7 @@ internal fun Composer(
 ) {
     val onInputChange = actions.onInputChange
     val onSend = actions.onSend
+    val onQueue = actions.onQueue
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
     val onRemoveAttachment = actions.onRemoveAttachment
@@ -627,6 +634,39 @@ internal fun Composer(
                     // crossfades (wine → error container) and the whole button
                     // scales with an expressive spring so arming a send feels
                     // tactile rather than binary.
+                    // Queue: the web's Ctrl+Enter. Sits LEFT of send/stop and only
+                    // appears while there is something to queue, so the composer
+                    // stays a single calm row when idle.
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = composerHasText && !isUploading,
+                        enter =
+                            androidx.compose.animation.fadeIn(
+                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                            ) +
+                                androidx.compose.animation.scaleIn(
+                                    animationSpec = com.opencode.android.ui.theme.Motion.expressive(),
+                                ),
+                        exit =
+                            androidx.compose.animation.fadeOut(
+                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                            ),
+                    ) {
+                        IconButton(
+                            onClick = {
+                                haptics.performHapticFeedback(
+                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                )
+                                onQueue()
+                            },
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.PlaylistAdd,
+                                contentDescription = stringResource(R.string.queue_send),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
                     val actionActive = composerHasText || isGenerating
                     val actionScale by animateFloatAsState(
                         targetValue = if (actionActive) 1f else 0.86f,

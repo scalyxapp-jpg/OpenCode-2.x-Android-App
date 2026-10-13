@@ -296,9 +296,17 @@ object V2EventNormalizer {
                 )
             }
 
-            "session.inbox.delivered", "session.inbox.cancelled", "session.inbox.delivery.changed",
-            "session.step.streamed",
-            -> {
+            // The queued prompt was delivered / dropped / steered: the QUEUE (the
+            // session inbox) changed, which the chat renders separately from the
+            // message list.
+            "session.inbox.delivered", "session.inbox.cancelled", "session.inbox.delivery.changed" -> {
+                Event(
+                    type = "session.inbox.changed",
+                    properties = EventProperties(sessionId = d.str("sessionID")),
+                )
+            }
+
+            "session.step.streamed" -> {
                 null
             }
 

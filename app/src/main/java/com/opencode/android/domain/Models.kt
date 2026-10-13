@@ -358,7 +358,38 @@ data class PromptAsyncRequest(
     // Web sends the variant as a top-level field (verified via browser trace):
     // {"agent":"oracle","model":{...},"variant":"high","parts":[...]}
     val variant: String? = null,
+    /**
+     * How the server should treat this prompt: `steer` (default) runs it now,
+     * `queue` keeps it for after the running turn — what Ctrl+Enter does in the
+     * web composer. Verified against the live server.
+     */
+    val delivery: String? = null,
     val parts: List<PromptAsyncPart>,
+)
+
+/** `GET /api/session/{id}/inbox` item payload (what the user queued). */
+@Serializable
+@Immutable
+data class InboxPayload(
+    val text: String? = null,
+)
+
+/**
+ * One entry of the session INBOX: a prompt that is waiting to be delivered.
+ *
+ * The web renders these in the transcript (badge "Queued") and offers
+ * "Steer" (deliver now, `PATCH …/inbox/{id}` `{delivery:"steer"}`) and
+ * "Remove" (`DELETE …/inbox/{id}`). Verified against the live server.
+ */
+@Serializable
+@Immutable
+data class InboxItem(
+    val id: String? = null,
+    @SerialName("sessionID") val sessionId: String? = null,
+    val type: String? = null,
+    val time: MessageTime? = null,
+    val payload: InboxPayload? = null,
+    val delivery: String? = null,
 )
 
 @Serializable

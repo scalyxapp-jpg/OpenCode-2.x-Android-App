@@ -56,6 +56,12 @@ class SessionConversationTest {
 
         override fun notifyInterruptFailed(message: String?) {}
 
+        var inboxRefreshes = 0
+
+        override fun refreshInbox(sessionId: String) {
+            inboxRefreshes += 1
+        }
+
         override fun refreshMessages(sessionId: String) {
             refreshes++
         }

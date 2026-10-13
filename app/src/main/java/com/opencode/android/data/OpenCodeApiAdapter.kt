@@ -15,6 +15,7 @@ import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.FormReplyBody
 import com.opencode.android.domain.HealthResponse
 import com.opencode.android.domain.McpStatus
+import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
@@ -269,7 +270,14 @@ class OpenCodeApiAdapter(
                 .map { PromptFile(uri = it.url!!, name = it.filename) }
         return v2.prompt(
             sessionId = sessionId,
-            body = PromptBody(id = request.messageID, text = text, files = files),
+            body =
+                PromptBody(
+                    id = request.messageID,
+                    text = text,
+                    files = files,
+                    // Ctrl+Enter (queue) must survive this mapping.
+                    delivery = request.delivery,
+                ),
             guardRevision = revision,
         )
     }
@@ -918,6 +926,39 @@ class OpenCodeApiAdapter(
                 },
             ),
         )
+
+    override suspend fun getInbox(
+        sessionId: String,
+        directory: String?,
+    ): List<InboxItem> = v2.inbox(sessionId, directory).data.orEmpty()
+
+    override suspend fun cancelInboxItem(
+        sessionId: String,
+        inboxId: String,
+        directory: String?,
+    ): Boolean {
+        val response = v2.cancelInboxItem(sessionId, inboxId, directory)
+        response.body()?.close()
+        response.errorBody()?.close()
+        return response.isSuccessful
+    }
+
+    override suspend fun steerInboxItem(
+        sessionId: String,
+        inboxId: String,
+        directory: String?,
+    ): Boolean {
+        val response =
+            v2.updateInboxItem(
+                sessionId = sessionId,
+                inboxId = inboxId,
+                body = kotlinx.serialization.json.buildJsonObject { put("delivery", kotlinx.serialization.json.JsonPrimitive("steer")) },
+                directory = directory,
+            )
+        response.body()?.close()
+        response.errorBody()?.close()
+        return response.isSuccessful
+    }
 
     override suspend fun summarizeSession(
         sessionId: String,

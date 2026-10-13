@@ -869,6 +869,9 @@ internal fun ChatScreen(
                                             onRetry = viewModel::retry,
                                             onInputChange = viewModel::updateInput,
                                             onSend = viewModel::sendMessage,
+                                            onQueue = viewModel::queueMessage,
+                                            onSteerQueued = viewModel::steerQueued,
+                                            onRemoveQueued = viewModel::cancelQueued,
                                             onInterrupt = viewModel::interrupt,
                                             onAddFiles = {
                                                 filePicker.launch("*/*")
@@ -994,6 +997,12 @@ internal class ChatActions(
     val onRetry: () -> Unit = {},
     val onInputChange: (String) -> Unit,
     val onSend: () -> Unit,
+    /** Queues the composer's text (web: Ctrl+Enter). */
+    val onQueue: () -> Unit = {},
+    /** The web's "Steer" on a queued prompt: deliver it now. */
+    val onSteerQueued: (String) -> Unit = {},
+    /** The web's "Remove" on a queued prompt. */
+    val onRemoveQueued: (String) -> Unit = {},
     val onInterrupt: () -> Unit,
     val onAddFiles: () -> Unit,
     val onRemoveAttachment: (String) -> Unit,
@@ -1467,11 +1476,11 @@ internal fun SessionTab(
                         // a deep link can compute a message's index. reverseLayout
                         // puts the first declared item at the bottom.
                         val liveItemsBeforeMessages =
-                            if (uiState.isGenerating || uiState.pendingPersist || uiState.isCompacting) {
+                            (if (uiState.isGenerating || uiState.pendingPersist || uiState.isCompacting) {
                                 (if (uiState.isGenerating || uiState.isCompacting) 1 else 0) + 3
                             } else {
                                 0
-                            }
+                            }) + uiState.queuedMessages.size
                         // A tapped background notification names the message it
                         // describes. Scroll there once the list contains it; a
                         // message outside the loaded page simply stays put (the
@@ -1541,6 +1550,21 @@ internal fun SessionTab(
                                             editToolPartsExpanded = appSettings.editToolPartsExpanded,
                                         )
                                     }
+                                }
+                                // Queued prompts (the session inbox). Declared after
+                                // the live items, so in the reversed layout they sit
+                                // just above them: the newest thing that has not run
+                                // yet. The server delivers them when the turn ends.
+                                itemsIndexed(
+                                    items = uiState.queuedMessages,
+                                    key = { _, item -> "queue-${item.id ?: item.hashCode()}" },
+                                    contentType = { _, _ -> "queued" },
+                                ) { _, item ->
+                                    QueuedMessageRow(
+                                        item = item,
+                                        onSteer = { item.id?.let(actions.onSteerQueued) },
+                                        onRemove = { item.id?.let(actions.onRemoveQueued) },
+                                    )
                                 }
                                 // Messages in reverse order (newest at the bottom)
                                 // API returns messages chronologically (oldest first),
@@ -1868,6 +1892,7 @@ internal fun SessionTab(
                     ComposerActions(
                         onInputChange = onInputChange,
                         onSend = onSend,
+                        onQueue = actions.onQueue,
                         onInterrupt = onInterrupt,
                         onAddFiles = onAddFiles,
                         onRemoveAttachment = onRemoveAttachment,

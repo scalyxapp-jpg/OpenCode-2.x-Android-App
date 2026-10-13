@@ -49,6 +49,12 @@ sealed interface StreamEffect {
      */
     data object EndTurn : StreamEffect
 
+    /**
+     * The session INBOX changed (a queued prompt was delivered, cancelled or
+     * steered). The owner re-reads the queue; it is not part of the message list.
+     */
+    data object RefreshInbox : StreamEffect
+
     /** Re-read persisted messages (debounced by the caller). */
     data class Reconcile(
         val includeMeta: Boolean,
@@ -776,6 +782,13 @@ object StreamReducer {
                             StreamEffect.LoadPendingQuestions,
                         ),
                 )
+            }
+
+            // Queued prompts: the inbox is the source, so any of its transitions
+            // re-reads it (the delivered one leaves the queue and becomes a real
+            // message).
+            "session.inbox.changed" -> {
+                state.copy(effects = listOf(StreamEffect.RefreshInbox))
             }
 
             "session.next.model.switched" -> {

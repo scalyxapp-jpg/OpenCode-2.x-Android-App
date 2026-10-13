@@ -88,6 +88,9 @@ interface ConversationPort {
     fun refreshMessages(sessionId: String)
 
     /** Re-read the server session status after a stream reconnect. */
+    /** The session inbox (queued prompts) changed; re-read it. */
+    fun refreshInbox(sessionId: String)
+
     fun resyncSessionStatus()
 
     fun refreshSessionModel()
@@ -281,6 +284,10 @@ class SessionConversation(
 
             StreamEffect.NotifyPermission -> {
                 port.notifyPermission()
+            }
+
+            StreamEffect.RefreshInbox -> {
+                _state.value.sessionId?.let { port.refreshInbox(it) }
             }
 
             StreamEffect.NotifyDone -> {

@@ -24,6 +24,8 @@ fun buildPromptAsyncRequest(
     modelId: String,
     variant: String,
     finalText: String,
+    // Rendering of the prompt happened above the call site; this is the wire mode.
+    delivery: String? = null,
     // Portable attachments: one `file` part per attachment, each with a base64
     // data URL (the web shape). Used when the optional guard proxy is absent, so
     // a plain OpenCode server still receives the files. Empty when the guard
@@ -39,6 +41,8 @@ fun buildPromptAsyncRequest(
             },
         // Web sends variant as a top-level field; omit "default".
         variant = variant.takeIf { it.isNotBlank() && it != "default" },
+        // null = the server's default (steer, i.e. run now).
+        delivery = delivery,
         parts =
             buildList {
                 if (finalText.isNotBlank()) {
