@@ -39,6 +39,7 @@ import com.opencode.android.domain.Session
 import com.opencode.android.domain.SkillEntry
 import com.opencode.android.data.OutboxItem
 import com.opencode.android.data.PromptHistoryEntry
+import com.opencode.android.data.PromptHistoryImport
 import com.opencode.android.data.PromptHistoryStore
 import com.opencode.android.data.OutboxPolicy
 import com.opencode.android.data.OutboxStore
@@ -184,6 +185,8 @@ data class ChatUiState(
     /** Prompt history (TUI parity): the composer can recall what was sent before. */
     val historyDialogVisible: Boolean = false,
     val history: List<PromptHistoryEntry> = emptyList(),
+    /** True while prompts are imported from the server (backfill). */
+    val historyImporting: Boolean = false,
     /**
      * Prompts that could not be sent because the server was unreachable; they are
      * delivered automatically once it is back (offline outbox).
@@ -1243,11 +1246,88 @@ class ChatViewModel
 
         // --- prompt history -------------------------------------------------
 
-        /** Opens the history list (newest first, filterable by session). */
+        /**
+         * Opens the history list (newest first, filterable by session).
+         *
+         * The history only contains what THIS app sent, so an empty list is backfilled
+         * from the current session's user messages — the app can then recall prompts that
+         * were sent before the feature existed or from the web UI / TUI.
+         */
         fun openHistory() {
             _uiState.update {
                 it.copy(historyDialogVisible = true, history = PromptHistoryStore.state.value)
             }
+            if (PromptHistoryStore.state.value.isEmpty()) importHistoryFromCurrentSession()
+        }
+
+        /** Imports the user prompts of the OPEN session (already-loaded messages). */
+        fun importHistoryFromCurrentSession() {
+            val sessionId = _uiState.value.session?.id ?: return
+            val messages = _uiState.value.messages
+            if (messages.isEmpty()) return
+            scopeImport {
+                PromptHistoryStore.mergeImported(
+                    PromptHistoryImport.merge(
+                        existing = PromptHistoryStore.state.value,
+                        messages = messages,
+                        sessionId = sessionId,
+                    ),
+                )
+            }
+        }
+
+        /**
+         * Imports prompts from the recent sessions of this project.
+         *
+         * Bounded on purpose ([PromptHistoryImport.MAX_SESSIONS] sessions ×
+         * [PromptHistoryImport.MESSAGES_PER_SESSION] messages): a full-history import of
+         * every session would be a burst of requests on a phone link.
+         */
+        fun importHistoryFromAllSessions() {
+            val directory = _uiState.value.session?.directory ?: return
+            if (_uiState.value.historyImporting) return
+            val current = _uiState.value.session?.id
+            _uiState.update { it.copy(historyImporting = true) }
+            viewModelScope.launch {
+                var sessions: List<String> = emptyList()
+                try {
+                    sessions =
+                        api
+                            .getProjectSessions(directory, roots = true, limit = PromptHistoryImport.MAX_SESSIONS)
+                            .mapNotNull { it.id }
+                            .take(PromptHistoryImport.MAX_SESSIONS)
+                } catch (e: Exception) {
+                    AppLog.w(APP_LOG_TAG) { "history import: session list failed: ${e.message}" }
+                }
+                val targets = (listOfNotNull(current) + sessions).distinct()
+                var merged = PromptHistoryStore.state.value
+                targets.forEach { sessionId ->
+                    try {
+                        val messages = api.getMessages(sessionId, PromptHistoryImport.MESSAGES_PER_SESSION)
+                        merged = PromptHistoryImport.merge(merged, messages, sessionId)
+                    } catch (e: Exception) {
+                        AppLog.w(APP_LOG_TAG) { "history import: $sessionId failed: ${e.message}" }
+                    }
+                }
+                val before = PromptHistoryStore.state.value.size
+                PromptHistoryStore.mergeImported(merged)
+                _uiState.update {
+                    it.copy(
+                        historyImporting = false,
+                        history = PromptHistoryStore.state.value,
+                    )
+                }
+                UserMessages.post(
+                    R.string.history_imported,
+                    (PromptHistoryStore.state.value.size - before).coerceAtLeast(0),
+                )
+            }
+        }
+
+        /** Runs a tiny store merge + refreshes the dialog. */
+        private fun scopeImport(merge: () -> Unit) {
+            merge()
+            _uiState.update { it.copy(history = PromptHistoryStore.state.value) }
         }
 
         fun closeHistory() {

@@ -116,6 +116,14 @@ object PromptHistoryStore {
         persist(PromptHistoryPolicy.record(_state.value, text, sessionId, at))
     }
 
+    /**
+     * Replaces the history with an already-merged list (backfill from the server). The
+     * merge rules live in [PromptHistoryImport]/[PromptHistoryPolicy] so they stay pure.
+     */
+    fun mergeImported(merged: List<PromptHistoryEntry>) {
+        persist(merged.take(PromptHistoryPolicy.MAX_ENTRIES))
+    }
+
     fun clear() {
         persist(emptyList())
     }

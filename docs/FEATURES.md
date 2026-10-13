@@ -158,6 +158,13 @@ One calm row: attachments, input, pickers, then the action buttons.
   History is recorded when the server accepts a prompt (normal send, queued send and the
   offline outbox flush), capped at 100 entries, persisted, and re-sending the newest
   prompt moves it up rather than duplicating it.
+- **Backfill — the history also finds what the app did *not* send.** By construction it
+  only records this app's own sends, so prompts from the web UI/TUI (and anything from
+  before the feature existed) were missing. Opening an *empty* history therefore imports
+  the current session's user messages once, and **"Import from all sessions"** in the
+  dialog pulls the recent sessions of the project (capped at 20 sessions × 60 messages, so
+  a phone link is not flooded). Imported entries keep the server's own timestamps and are
+  merged **by time** — an older web prompt never jumps above a newer one from the app.
 - **IME aware** — the keyboard inset is consumed once, so the composer does not
   jump; the send key is wired to send.
 

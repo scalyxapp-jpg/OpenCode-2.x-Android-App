@@ -521,4 +521,8 @@
     <string name="history_scope_session" formatted="false">This session</string>
     <string name="history_scope_all" formatted="false">All sessions</string>
     <string name="history_open" formatted="false">Prompt history</string>
+    <string name="history_importing" formatted="false">Importing prompts…</string>
+    <string name="history_import_all" formatted="false">Import from all sessions</string>
+    <string name="history_imported" formatted="false">%1$d prompts imported from the server</string>
+    <string name="history_import_none" formatted="false">Nothing to import — the server has no older prompts here</string>
 </resources>

@@ -23,6 +23,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import com.opencode.android.data.PromptHistoryEntry
 import androidx.compose.material3.MaterialTheme
@@ -843,6 +844,8 @@ internal fun SkillsDialog(
 internal fun PromptHistoryDialog(
     entries: List<PromptHistoryEntry>,
     sessionId: String?,
+    importing: Boolean = false,
+    onImportAll: () -> Unit = {},
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -877,6 +880,36 @@ internal fun PromptHistoryDialog(
                         onClick = { allSessions = true },
                         label = { Text(stringResource(R.string.history_scope_all)) },
                     )
+                }
+                // The history only knows what this app sent; the server knows the rest
+                // (web/TUI prompts, anything from before the feature). Offered right here
+                // so an empty or thin list is explainable and fixable.
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = MaterialTheme.spacing.extraSmall),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(
+                            text = stringResource(R.string.history_importing),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = MaterialTheme.spacing.small),
+                        )
+                    } else {
+                        TextButton(onClick = onImportAll) {
+                            Text(
+                                text = stringResource(R.string.history_import_all),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
                 }
                 if (entries.isEmpty()) {
                     EmptyState(title = stringResource(R.string.history_empty), compact = true)

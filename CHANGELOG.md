@@ -5,6 +5,29 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.15] - 2026-10-13
+
+### Fixed
+
+- **Die Prompt-History startete leer — jetzt holt sie den Verlauf nach.** Sie zeichnet
+  naturgemäß nur auf, was **diese App** sendet, also fehlten Prompts aus der Web-UI/TUI und
+  alles, was vor dem Feature gesendet wurde. Jetzt:
+  - Beim Öffnen einer **leeren** History werden die User-Nachrichten der aktuellen Session
+    einmalig importiert (bereits geladene Nachrichten, kein Extra-Request).
+  - **„Import from all sessions"** liest die letzten Sessions des Projekts
+    (`GET /api/session/{id}/message`), begrenzt auf **20 Sessions × 60 Nachrichten** —
+    kein Request-Sturm auf einer Handyverbindung.
+  - Beide Schemas werden gelesen (`role`/`info.role` classic, `type` V2), Attachments-only-
+    Turns übersprungen, aufeinanderfolgende Wiederholungen zusammengefasst.
+  - Importierte Einträge behalten die **Server-Zeitstempel** und werden **nach Zeit**
+    gemischt — ein älterer Web-Prompt rutscht nie über einen neueren aus der App (vom
+    Unit-Test aufgedeckt: der erste Entwurf hat jeden Import oben eingefügt).
+
+### Added (tests)
+
+- `PromptHistoryImportTest` (6 Fälle: beide Schemas, Attachment-only, Wiederholungen,
+  Zeitstempel-Reihenfolge, bestehende App-Einträge bleiben, fehlender Zeitstempel).
+
 ## [1.5.14] - 2026-10-13
 
 ### Added
@@ -795,7 +818,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.14...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.15...HEAD
+[1.5.15]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.14...v1.5.15
 [1.5.14]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.13...v1.5.14
 [1.5.13]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...v1.5.13
 [1.5.12]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...v1.5.12

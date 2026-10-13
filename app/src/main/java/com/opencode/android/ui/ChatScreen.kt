@@ -419,6 +419,8 @@ internal fun ChatScreen(
                         PromptHistoryDialog(
                             entries = uiState.history,
                             sessionId = uiState.session?.id,
+                            importing = uiState.historyImporting,
+                            onImportAll = viewModel::importHistoryFromAllSessions,
                             onPick = viewModel::useHistoryPrompt,
                             onDismiss = viewModel::closeHistory,
                         )
