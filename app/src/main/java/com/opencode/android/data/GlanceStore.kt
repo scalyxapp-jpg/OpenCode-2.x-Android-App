@@ -104,6 +104,7 @@ object GlanceStatus {
  * a refresh when the derived line actually changed (see [GlanceStatus.sameSurface]).
  */
 object GlanceStore {
+
     private val _state = kotlinx.coroutines.flow.MutableStateFlow(GlanceFacts())
     val state: kotlinx.coroutines.flow.StateFlow<GlanceFacts> = _state
 
@@ -112,6 +113,19 @@ object GlanceStore {
     var onSurfaceChanged: ((GlanceFacts) -> Unit)? = null
 
     fun facts(): GlanceFacts = _state.value
+
+    /**
+     * Forgets the ambient state (setting turned off).
+     *
+     * Otherwise the widget kept showing the last "Step 7 · 42s" forever — a stale surface
+     * is worse than a static one. The persisted snapshot is cleared with it so the widget
+     * process sees the reset.
+     */
+    fun reset() {
+        val cleared = GlanceFacts(updatedAt = System.currentTimeMillis())
+        _state.value = cleared
+        onSurfaceChanged?.invoke(cleared)
+    }
 
     /**
      * Merges new facts into the snapshot.
@@ -157,7 +171,9 @@ object GlanceStore {
             } else {
                 next
             }
-        _state.value = cleared
+        // Skip the state write when nothing but the timestamp changed: the live feed calls
+        // this several times per second and an emission per flush is pure waste.
+        if (previous.copy(updatedAt = 0L) != cleared.copy(updatedAt = 0L)) _state.value = cleared
         // Only a change of the DISPLAYED line costs a surface refresh.
         if (!GlanceStatus.sameSurface(previous, cleared)) onSurfaceChanged?.invoke(cleared)
     }

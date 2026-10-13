@@ -130,6 +130,9 @@ internal fun SettingsScreen(
 @Composable
 internal fun GeneralTab() {
     val settings by AppSettingsStore.state.collectAsStateWithLifecycle()
+    // A switch that only takes effect after a restart is a half-truth: the two long-running
+    // pieces (foreground service, background watcher) are applied right at the toggle.
+    val settingsContext = androidx.compose.ui.platform.LocalContext.current
     var showReset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     LazyColumn(
@@ -197,7 +200,17 @@ internal fun GeneralTab() {
                 title = stringResource(R.string.settings_glance),
                 subtitle = stringResource(R.string.settings_glance_sub),
                 checked = settings.glanceEnabled,
-                onCheckedChange = { AppSettingsStore.setGlanceEnabled(it) },
+                onCheckedChange = { enabled ->
+                    AppSettingsStore.setGlanceEnabled(enabled)
+                    if (!enabled) {
+                        // Clearing the facts keeps the surfaces from showing a stale
+                        // "Step 7 · 42s" after the feature is switched off.
+                        com.opencode.android.data.GlanceStore.reset()
+                        com.opencode.android.data.WidgetStateStore.saveGlance(
+                            com.opencode.android.data.GlanceFacts(),
+                        )
+                    }
+                },
             )
         }
         item {
@@ -205,7 +218,11 @@ internal fun GeneralTab() {
                 title = stringResource(R.string.settings_background_monitoring),
                 subtitle = stringResource(R.string.settings_background_monitoring_sub),
                 checked = settings.backgroundMonitoring,
-                onCheckedChange = { AppSettingsStore.setBackgroundMonitoring(it) },
+                onCheckedChange = { enabled ->
+                    AppSettingsStore.setBackgroundMonitoring(enabled)
+                    // Apply immediately: off must stop a RUNNING watcher, not just the next one.
+                    com.opencode.android.data.BackgroundSessionWatcher.applySettings()
+                },
             )
         }
         item {
@@ -213,7 +230,21 @@ internal fun GeneralTab() {
                 title = stringResource(R.string.settings_keep_alive),
                 subtitle = stringResource(R.string.settings_keep_alive_sub),
                 checked = settings.keepAliveService,
-                onCheckedChange = { AppSettingsStore.setKeepAliveService(it) },
+                onCheckedChange = { enabled ->
+                    AppSettingsStore.setKeepAliveService(enabled)
+                    // Apply immediately: start the foreground service or stop it (the
+                    // permanent notification disappears with it).
+                    if (enabled) {
+                        androidx.core.content.ContextCompat.startForegroundService(
+                            settingsContext,
+                            android.content.Intent(settingsContext, com.opencode.android.ConnectionService::class.java),
+                        )
+                    } else {
+                        settingsContext.stopService(
+                            android.content.Intent(settingsContext, com.opencode.android.ConnectionService::class.java),
+                        )
+                    }
+                },
             )
         }
         item {

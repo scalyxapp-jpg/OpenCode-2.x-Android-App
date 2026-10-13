@@ -5,7 +5,53 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.16] - 2026-10-14
+## [1.5.17] - 2026-10-14
+
+### Fixed
+
+Sechs echte Fehler im Debug-/Härtungsdurchgang über die zuletzt gebauten Features:
+
+- **„Send now" (Outbox) tat nichts, wenn der Auto-Versand ausgeschaltet war.** Der
+  Composer reichte `viewModel::flushOutbox` als Methodenreferenz durch — Kotlin setzte
+  dabei den Default `manual = false` ein, also hing der _ausdrückliche_ Knopf an dem
+  Schalter, den er umgehen soll. Jetzt ruft er explizit `flushOutbox(manual = true)`.
+- **Schalter wirkten erst nach einem Neustart.** „Keep connection alive", „Background
+  monitoring" und „Live status surfaces" wurden nur beim Start gelesen: Ausschalten ließ
+  einen _laufenden_ Watcher weiterarbeiten bzw. den Foreground-Service stehen. Jetzt
+  werden sie am Schalter angewandt — Service starten/stoppen (samt permanenter
+  Notification), Watcher sofort beenden, Glance-Fakten zurücksetzen.
+- **Ausgeschaltete Live-Oberflächen zeigten weiter den letzten Zustand.** Ein Widget mit
+  eingefrorenem „Step 7 · 42s" ist schlechter als ein statisches: `GlanceStore.reset()`
+  leert Faktensatz und persistierten Schnappschuss, wenn die Funktion abgeschaltet wird.
+- **Wettlauf- und Erklär-Sessions konnten ewig pollen.** Ein Member, dessen Turn nie endet
+  (Provider-Hänger, Server-Schluckauf), hielt den Controller für die Lebensdauer der App
+  am Laufen — Batterie plus eine Karte, die ewig „läuft" aussieht. Beide haben jetzt eine
+  Frist (Race 20 min, Explain 3 min) und melden danach sauber „failed"; ein Test pinnt es.
+- **Outbox-Flush teilte sich den Job-Slot mit dem normalen Senden.** Ein Session-Wechsel
+  während des Flushs brach ihn ab, und die Abschluss-Aktualisierung konnte die Queue der
+  _neu_ geöffneten Session mit den Resten der alten bemalen. Jetzt eigener Job-Slot und
+  Session-Fence beim Abschluss.
+- **Glance-Schreiblast:** Der Live-Zustand rief die Faktensammlung mehrere Male pro Sekunde
+  auf und schrieb jedes Mal (nur der Zeitstempel änderte sich) → unnötige StateFlow-Emissionen.
+  Ein reiner Zeitstempel-Wechsel wird jetzt übersprungen.
+
+Zusätzlich: Der Übergabe-Knopf im Entscheidungs-Journal ist sichtbar deaktiviert und
+beschriftet („Hand-over disabled in settings"), wenn die Einstellung aus ist — statt erst
+beim Antippen abzulehnen.
+
+### Changed
+
+- **Prozess:** Code-Änderungen laufen wieder ausschließlich über das `edit`-Werkzeug
+  (exakte Übereinstimmung, eine Fundstelle) bzw. `write` für neue Dateien; Shell nur noch
+  zum Lesen/Untersuchen. Die Python-Serien-Skripte hatten in 1.5.9 bereits einen echten
+  Fehler verursacht (verlorener Thinking-Schalter) und danach einen stillen
+  „nichts-passiert"-Lauf.
+
+### Added (tests)
+
+- `RaceControllerTest`: dritter Fall — ein hängender Wettlauf wird nach der Frist
+  aufgegeben, statt ewig zu pollen (Mitglieder werden als failed markiert). Gesamt im
+  betroffenen Satz: **485 Tests, 0 Fehler**.
 
 ### Added
 
@@ -50,16 +96,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Die Prompt-History startete leer — jetzt holt sie den Verlauf nach.** Sie zeichnet
   naturgemäß nur auf, was **diese App** sendet, also fehlten Prompts aus der Web-UI/TUI und
   alles, was vor dem Feature gesendet wurde. Jetzt:
-  - Beim Öffnen einer **leeren** History werden die User-Nachrichten der aktuellen Session
-    einmalig importiert (bereits geladene Nachrichten, kein Extra-Request).
-  - **„Import from all sessions"** liest die letzten Sessions des Projekts
-    (`GET /api/session/{id}/message`), begrenzt auf **20 Sessions × 60 Nachrichten** —
-    kein Request-Sturm auf einer Handyverbindung.
-  - Beide Schemas werden gelesen (`role`/`info.role` classic, `type` V2), Attachments-only-
-    Turns übersprungen, aufeinanderfolgende Wiederholungen zusammengefasst.
-  - Importierte Einträge behalten die **Server-Zeitstempel** und werden **nach Zeit**
-    gemischt — ein älterer Web-Prompt rutscht nie über einen neueren aus der App (vom
-    Unit-Test aufgedeckt: der erste Entwurf hat jeden Import oben eingefügt).
+    - Beim Öffnen einer **leeren** History werden die User-Nachrichten der aktuellen Session
+      einmalig importiert (bereits geladene Nachrichten, kein Extra-Request).
+    - **„Import from all sessions"** liest die letzten Sessions des Projekts
+      (`GET /api/session/{id}/message`), begrenzt auf **20 Sessions × 60 Nachrichten** —
+      kein Request-Sturm auf einer Handyverbindung.
+    - Beide Schemas werden gelesen (`role`/`info.role` classic, `type` V2), Attachments-only-
+      Turns übersprungen, aufeinanderfolgende Wiederholungen zusammengefasst.
+    - Importierte Einträge behalten die **Server-Zeitstempel** und werden **nach Zeit**
+      gemischt — ein älterer Web-Prompt rutscht nie über einen neueren aus der App (vom
+      Unit-Test aufgedeckt: der erste Entwurf hat jeden Import oben eingefügt).
 
 ### Added (tests)
 
@@ -75,17 +121,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **History-Button im Composer**, der erscheint, solange das Feld **leer** ist (also genau
   dann, wenn Zurückholen sinnvoll ist — und nie mit dem Queue-Button konkurriert, der beim
   Tippen auftaucht):
-  - Liste **neueste zuerst**, ein Eintrag pro verschiedenem Prompt, umschaltbar zwischen
-    **dieser Session** und **allen Sessions**, mit Suche (Groß-/Kleinschreibung egal).
-  - Auswahl **fügt in den Composer ein** (TUI-Verhalten: zurückholen, nicht senden) — der
-    Prompt kann also bearbeitet, eingereiht oder als Aufgabe eines **Model Race** genutzt
-    werden.
-  - Aufgezeichnet wird, wenn der Server einen Prompt akzeptiert: normaler Send, Queue-Send
-    und Outbox-Zustellung. **Cap 100**, persistent, und ein erneut gesendeter neuester
-    Prompt **rutscht nach oben statt sich zu duplizieren**.
-  - Regeln und Speicherformat sind pur und getestet (`PromptHistoryPolicy`,
-    `PromptHistoryCodec`): Blank wird ignoriert, gleicher Text in einer anderen Session ist
-    ein eigener Eintrag, die Anzeige ist dedupliziert und gefiltert.
+    - Liste **neueste zuerst**, ein Eintrag pro verschiedenem Prompt, umschaltbar zwischen
+      **dieser Session** und **allen Sessions**, mit Suche (Groß-/Kleinschreibung egal).
+    - Auswahl **fügt in den Composer ein** (TUI-Verhalten: zurückholen, nicht senden) — der
+      Prompt kann also bearbeitet, eingereiht oder als Aufgabe eines **Model Race** genutzt
+      werden.
+    - Aufgezeichnet wird, wenn der Server einen Prompt akzeptiert: normaler Send, Queue-Send
+      und Outbox-Zustellung. **Cap 100**, persistent, und ein erneut gesendeter neuester
+      Prompt **rutscht nach oben statt sich zu duplizieren**.
+    - Regeln und Speicherformat sind pur und getestet (`PromptHistoryPolicy`,
+      `PromptHistoryCodec`): Blank wird ignoriert, gleicher Text in einer anderen Session ist
+      ein eigener Eintrag, die Anzeige ist dedupliziert und gefiltert.
 
 ### Added (tests)
 
@@ -100,39 +146,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Model Race — ein Prompt, mehrere Modelle, direkter Vergleich (neues Feature).**
   Recherche in vergleichbaren Mobile-Clients (Vibenary/OpenChamber/opencode-mobile)
   zeigte Voice, Terminal, Git- und Worktree-Funktionen — aber **keine** Möglichkeit,
-  Modelle auf der *eigenen* Aufgabe zu vergleichen. Genau das baut der Race ein:
-  - Einstieg über **⋮ → „Race models…"**: der Prompt aus dem Composer wird zur Aufgabe,
-    man wählt **2–3 Modelle** (Mehrfachauswahl, mit Kostenhinweis).
-  - Jedes Modell läuft in einer **eigenen Session im selben Projekt** und wird per
-    `POST /api/session` **mit seinem Modell erzeugt** — kein Fenster, in dem ein Member
-    mit dem falschen Modell startet. Danach je ein `POST …/prompt`, Ergebnisse über
-    `GET …/{id}` (Kosten/Tokens/Status) und `GET …/{id}/message` (Antwort).
-  - Im Verlauf erscheint die **Vergleichskarte**: Antwort, Laufzeit, Kosten und Tokens
-    pro Modell, markiert als **cheapest**/**fastest**, plus **Stop all** und
-    **Dismiss**; ein Tipp öffnet die Session des Gewinners, um dort weiterzuarbeiten.
-  - Regeln pur und getestet (`RacePlan`): Prompt nötig, mindestens zwei **verschiedene**
-    Modelle, unbekannte Modelle werden abgelehnt (keine Phantom-Session), **Deckel bei
-    drei** Membern — jeder Member ist ein voller Turn auf dem eigenen Key.
-  - Live verifiziert: derselbe Prompt an `deepseek-flash` (0,0053 $) und
-    `deepseek-v4-pro` (0,0234 $), beide in ~3 s beantwortet.
+  Modelle auf der _eigenen_ Aufgabe zu vergleichen. Genau das baut der Race ein:
+    - Einstieg über **⋮ → „Race models…"**: der Prompt aus dem Composer wird zur Aufgabe,
+      man wählt **2–3 Modelle** (Mehrfachauswahl, mit Kostenhinweis).
+    - Jedes Modell läuft in einer **eigenen Session im selben Projekt** und wird per
+      `POST /api/session` **mit seinem Modell erzeugt** — kein Fenster, in dem ein Member
+      mit dem falschen Modell startet. Danach je ein `POST …/prompt`, Ergebnisse über
+      `GET …/{id}` (Kosten/Tokens/Status) und `GET …/{id}/message` (Antwort).
+    - Im Verlauf erscheint die **Vergleichskarte**: Antwort, Laufzeit, Kosten und Tokens
+      pro Modell, markiert als **cheapest**/**fastest**, plus **Stop all** und
+      **Dismiss**; ein Tipp öffnet die Session des Gewinners, um dort weiterzuarbeiten.
+    - Regeln pur und getestet (`RacePlan`): Prompt nötig, mindestens zwei **verschiedene**
+      Modelle, unbekannte Modelle werden abgelehnt (keine Phantom-Session), **Deckel bei
+      drei** Membern — jeder Member ist ein voller Turn auf dem eigenen Key.
+    - Live verifiziert: derselbe Prompt an `deepseek-flash` (0,0053 $) und
+      `deepseek-v4-pro` (0,0234 $), beide in ~3 s beantwortet.
 
 - **Offline-Outbox — Prompts überleben eine tote Verbindung (zweites neues Feature).**
   Auf dem Handy ist die Verbindung oft kurz weg (VPN-Handshake, Funkloch, Tunnel,
   Server-Neustart). Bisher wurde der Text in den Composer zurückgelegt und ein Fehler
   gezeigt — jetzt wird der Prompt **behalten und automatisch zugestellt**:
-  - Nur **Konnektivitätsfehler** landen in der Outbox (UnknownHost, Connection
-    refused/reset, Timeout, `HTTP 5xx`/429, Socket-Ausnahmen). Eine echte Ablehnung
-    (`HTTP 4xx`, Guard-Konflikt, fehlendes Modell) wird weiterhin gemeldet und **nie**
-    eingereiht — ein abgelehnter Prompt würde sonst ewig wiederholt.
-  - Zeile über dem Composer: „N waiting — sent automatically once the server is
-    reachable" mit **Send now** und **Discard all**.
-  - Zustellung erfolgt automatisch sobald Android wieder ein Netz meldet
-    (`NetworkMonitor`), beim Öffnen der Session und manuell — **in Reihenfolge**, mit
-    Stopp beim ersten Fehler (kein Überholen abhängiger Folge-Prompts), Backoff
-    2 s → 30 s, max. 5 Versuche, danach geparkt mit sichtbarem letzten Fehler.
-  - **Pro Session** (max. 10 Einträge, älteste fallen) und **persistiert** — ein
-    App-Neustart verliert nichts. Anhänge werden nicht eingereiht (URIs können später
-    weg sein); ein solcher Send schlägt wie bisher fehl.
+    - Nur **Konnektivitätsfehler** landen in der Outbox (UnknownHost, Connection
+      refused/reset, Timeout, `HTTP 5xx`/429, Socket-Ausnahmen). Eine echte Ablehnung
+      (`HTTP 4xx`, Guard-Konflikt, fehlendes Modell) wird weiterhin gemeldet und **nie**
+      eingereiht — ein abgelehnter Prompt würde sonst ewig wiederholt.
+    - Zeile über dem Composer: „N waiting — sent automatically once the server is
+      reachable" mit **Send now** und **Discard all**.
+    - Zustellung erfolgt automatisch sobald Android wieder ein Netz meldet
+      (`NetworkMonitor`), beim Öffnen der Session und manuell — **in Reihenfolge**, mit
+      Stopp beim ersten Fehler (kein Überholen abhängiger Folge-Prompts), Backoff
+      2 s → 30 s, max. 5 Versuche, danach geparkt mit sichtbarem letzten Fehler.
+    - **Pro Session** (max. 10 Einträge, älteste fallen) und **persistiert** — ein
+      App-Neustart verliert nichts. Anhänge werden nicht eingereiht (URIs können später
+      weg sein); ein solcher Send schlägt wie bisher fehl.
 
 ### Fixed
 
@@ -161,19 +207,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `{action:"skill-menu", display:"/skills", description:"browse available skills"}`,
   der den Composer leert und die Skill-Liste öffnet) und dann live gegen den Server
   verifiziert:
-  - Auswahl injiziert den Skill per **`POST /api/experimental/session/{id}/skill`**
-    mit `{"id":"<skill>"}` → **204**. Wichtig: der im TUI-SDK definierte Pfad
-    `/api/session/{id}/skill` antwortet auf 2.0.26 mit **404** — nur die
-    Experimental-Route injiziert.
-  - Der Server sendet `session.skill.activated`, legt eine **`skill`-Nachricht** an
-    und **startet einen Turn** mit dem Skill.
-  - Die App zeigt die Skill-Nachricht als eigenen **Skill-Block** (Name + injizierter
-    Text, eingeklappt mit „Show skill text"), lädt den Verlauf nach dem Event nach
-    und meldet „Skill „X" injected".
-  - Der Picker listet Skills aus `GET /api/skill` (Name, Id, Beschreibung
-    durchsuchbar — dieselben Felder, die die TUI-Palette indexiert) mit klarem
-    Leerzustand („No skills installed"). Der Eintrag wird nur angeboten, wenn die App
-    ihn auch ausführt; ein Server-Befehl namens `skills` hätte Vorrang (TUI-Regel).
+    - Auswahl injiziert den Skill per **`POST /api/experimental/session/{id}/skill`**
+      mit `{"id":"<skill>"}` → **204**. Wichtig: der im TUI-SDK definierte Pfad
+      `/api/session/{id}/skill` antwortet auf 2.0.26 mit **404** — nur die
+      Experimental-Route injiziert.
+    - Der Server sendet `session.skill.activated`, legt eine **`skill`-Nachricht** an
+      und **startet einen Turn** mit dem Skill.
+    - Die App zeigt die Skill-Nachricht als eigenen **Skill-Block** (Name + injizierter
+      Text, eingeklappt mit „Show skill text"), lädt den Verlauf nach dem Event nach
+      und meldet „Skill „X" injected".
+    - Der Picker listet Skills aus `GET /api/skill` (Name, Id, Beschreibung
+      durchsuchbar — dieselben Felder, die die TUI-Palette indexiert) mit klarem
+      Leerzustand („No skills installed"). Der Eintrag wird nur angeboten, wenn die App
+      ihn auch ausführt; ein Server-Befehl namens `skills` hätte Vorrang (TUI-Regel).
 
 ### Added (tests)
 
@@ -189,20 +235,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per Playwright analysiert (`/settings` mit Preferences/Appearance/Notifications/
   Shortcuts/Projects/Worktrees/Providers/Models/**Extensions**/Server/About) und die
   Extensions-Untertabs nachgebaut:
-  - **MCPs** — pro Server eine Zeile mit Status (Connected/Disabled/Failed/Needs
-    authentication/Starting…), Anzahl der Ressourcen und **Schalter**. Der Schalter
-    ruft genau einen Endpunkt auf (aus dem Web-Bundle gelesen und live verifiziert):
-    `POST /api/experimental/mcp/{name}/connect` bzw. `…/disconnect` (204), Liste über
-    `GET /api/mcp`. Optimistisch geschaltet und danach nachgelesen, damit eine
-    abgelehnte Änderung nicht wie Erfolg aussieht; Server mit Auth-Bedarf haben ihre
-    eigene Aktion.
-  - **Plugins** — `GET /api/plugin` (Id, Quelle, Status, Feature-Flags), bewusst
-    read-only wie im Web („Manage in opencode.json").
-  - **Skills** — `GET /api/skill` (Name, Beschreibung, durchsuchbar). Der alte dünne
-    Skills-Dialog im Server-Tab ist entfallen — Skills leben jetzt an einer Stelle.
-  - Ressourcen (`GET /api/mcp/resource`) stehen als Detail in der jeweiligen MCP-Zeile,
-    plus eine Zählerzeile („MCPs N/M connected · P plugins · S skills"), die „nichts
-    installiert" von „Laden fehlgeschlagen" unterscheidet.
+    - **MCPs** — pro Server eine Zeile mit Status (Connected/Disabled/Failed/Needs
+      authentication/Starting…), Anzahl der Ressourcen und **Schalter**. Der Schalter
+      ruft genau einen Endpunkt auf (aus dem Web-Bundle gelesen und live verifiziert):
+      `POST /api/experimental/mcp/{name}/connect` bzw. `…/disconnect` (204), Liste über
+      `GET /api/mcp`. Optimistisch geschaltet und danach nachgelesen, damit eine
+      abgelehnte Änderung nicht wie Erfolg aussieht; Server mit Auth-Bedarf haben ihre
+      eigene Aktion.
+    - **Plugins** — `GET /api/plugin` (Id, Quelle, Status, Feature-Flags), bewusst
+      read-only wie im Web („Manage in opencode.json").
+    - **Skills** — `GET /api/skill` (Name, Beschreibung, durchsuchbar). Der alte dünne
+      Skills-Dialog im Server-Tab ist entfallen — Skills leben jetzt an einer Stelle.
+    - Ressourcen (`GET /api/mcp/resource`) stehen als Detail in der jeweiligen MCP-Zeile,
+      plus eine Zählerzeile („MCPs N/M connected · P plugins · S skills"), die „nichts
+      installiert" von „Laden fehlgeschlagen" unterscheidet.
 - **Globaler Notifications-Schalter** („Enable notifications"): ein Master-Schalter
   über allen Benachrichtigungen und Tönen. Er wirkt zentral in `Notifier` (ein neuer
   Benachrichtigungspfad kann ihn nicht vergessen) und stoppt auch das Sammeln des
@@ -273,15 +319,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Message-Queue weiter ausgebaut.** Sie war funktional, aber ohne Rückmeldung:
-  - Die eingereihte Nachricht erscheint **sofort** als Queue-Karte (die Id der
-    Anfrage, damit der folgende Inbox-Read zusammenführt statt zu doppeln); schlägt
-    das Senden fehl, verschwindet die Karte wieder und der Text steht im Composer.
-  - **Zähler an zwei Stellen**: ein **Badge am Queue-Button** und eine Zeile
-    **„N queued“** im Composer (Wortlaut des Webs: „{{count}} queued“), plus ein
-    `N queued`-Kopf über den Queue-Karten im Verlauf — die Queue ist damit nie
-    unsichtbare Chrome.
-  - Die Deep-Link-Scrollrechnung berücksichtigt den neuen Kopf (Springen zur
-    Nachricht bleibt exakt).
+    - Die eingereihte Nachricht erscheint **sofort** als Queue-Karte (die Id der
+      Anfrage, damit der folgende Inbox-Read zusammenführt statt zu doppeln); schlägt
+      das Senden fehl, verschwindet die Karte wieder und der Text steht im Composer.
+    - **Zähler an zwei Stellen**: ein **Badge am Queue-Button** und eine Zeile
+      **„N queued“** im Composer (Wortlaut des Webs: „{{count}} queued“), plus ein
+      `N queued`-Kopf über den Queue-Karten im Verlauf — die Queue ist damit nie
+      unsichtbare Chrome.
+    - Die Deep-Link-Scrollrechnung berücksichtigt den neuen Kopf (Springen zur
+      Nachricht bleibt exakt).
 - **End-Summary nennt die Queue**: „… · 2 queued“, wenn nach dem Turn noch Prompts
   warten (`notif_finished_queued`) — die Benachrichtigung ist damit ein Hinweis mit
   nächstem Schritt statt einer Sackgasse.
@@ -315,27 +361,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.8] - 2026-10-13
 
 ### Added
+
 - **Message-Queue im Composer — 1:1 wie das Web (Ctrl+Enter).** Per Playwright gegen den laufenden
   Server analysiert: Ctrl+Enter sendet `POST /api/session/{id}/prompt` mit **`"delivery":"queue"`**
   (sonst identischer Body) und legt die Nachricht in die Session-**Inbox**, statt den laufenden Turn
   zu unterbrechen. Das ist jetzt in der App:
-  - **Zweiter Button links neben Senden/Stopp**, nur sichtbar solange im Composer Text steht
-    (animiert ein-/ausblendend) — Tipp darauf reiht die Nachricht ein, ohne den laufenden Turn
-    abzubrechen. Fehler geben den Text in den Composer zurück.
-  - **Queue-Anzeige im Verlauf:** die Inbox-Einträge werden als Karten mit dem Web-Wortlaut gezeigt —
-    Badge **„Queued“** (bzw. **„Steer“**, wenn schon freigegeben), Nachrichtentext und die beiden
-    Aktionen, die der Server anbietet: **„Steer“** (sofort ausliefern, `PATCH …/inbox/{id}`
-    `{delivery:"steer"}`) und **„Remove“** (`DELETE …/inbox/{id}`).
-  - **Auslieferung** macht der Server: sobald der laufende Turn endet, wandert der älteste Eintrag
-    als echte Nachricht in den Verlauf (live verifiziert: Enqueue → Inbox → Steer → Remove →
-    Auslieferung, Inbox danach leer). Bei idle Session wird sofort ausgeliefert.
-  - **Nachladen** der Queue bei `session.inbox.delivered/cancelled/delivery.changed`
-    (neuer `StreamEffect.RefreshInbox`), beim Session-Load, nach jedem Queue-Vorgang und am
-    Turn-Ende.
-  - Anhänge sind auf dem Queue-Pfad nicht möglich (der Inbox-Eintrag müsste die Base64-Teile
-    mitführen); statt die Dateien still zu verlieren, weist die App darauf hin, direkt zu senden.
+    - **Zweiter Button links neben Senden/Stopp**, nur sichtbar solange im Composer Text steht
+      (animiert ein-/ausblendend) — Tipp darauf reiht die Nachricht ein, ohne den laufenden Turn
+      abzubrechen. Fehler geben den Text in den Composer zurück.
+    - **Queue-Anzeige im Verlauf:** die Inbox-Einträge werden als Karten mit dem Web-Wortlaut gezeigt —
+      Badge **„Queued“** (bzw. **„Steer“**, wenn schon freigegeben), Nachrichtentext und die beiden
+      Aktionen, die der Server anbietet: **„Steer“** (sofort ausliefern, `PATCH …/inbox/{id}`
+      `{delivery:"steer"}`) und **„Remove“** (`DELETE …/inbox/{id}`).
+    - **Auslieferung** macht der Server: sobald der laufende Turn endet, wandert der älteste Eintrag
+      als echte Nachricht in den Verlauf (live verifiziert: Enqueue → Inbox → Steer → Remove →
+      Auslieferung, Inbox danach leer). Bei idle Session wird sofort ausgeliefert.
+    - **Nachladen** der Queue bei `session.inbox.delivered/cancelled/delivery.changed`
+      (neuer `StreamEffect.RefreshInbox`), beim Session-Load, nach jedem Queue-Vorgang und am
+      Turn-Ende.
+    - Anhänge sind auf dem Queue-Pfad nicht möglich (der Inbox-Eintrag müsste die Base64-Teile
+      mitführen); statt die Dateien still zu verlieren, weist die App darauf hin, direkt zu senden.
 
 ### Added (tests)
+
 - `InboxQueueTest` (Inbox lesen mit Verzeichnis-Header, DELETE-Pfad, PATCH-Body `{"delivery":"steer"}`,
   Fehler → `false` statt Exception), `PromptRequestBuilderTest` (+ Queue-/Direkt-Send-Fälle),
   `SseEventDecoderTest` (Inbox-Übergänge → `session.inbox.changed`), `StreamReducerTest`
@@ -344,37 +392,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.7] - 2026-10-13
 
 ### Added
+
 - **Hintergrund-Benachrichtigungen mit Deep-Link in die Session.** Läuft eine Session, während die App
-  nicht im Fokus ist, kommt jetzt *ab und zu* eine Zwischenschritt-Meldung und am Ende die
+  nicht im Fokus ist, kommt jetzt _ab und zu_ eine Zwischenschritt-Meldung und am Ende die
   Zusammenfassung — ein Tipp darauf öffnet **genau diese Session an genau dieser Stelle**:
-  - **Zwischenschritte (gedrosselt):** nach einem abgeschlossenen Schritt, höchstens alle 45 s und
-    höchstens 4× pro Turn, mit der Arbeit dieses Schritts in der Zeile („Step 2 · Shell · ls -la,
-    Read · ChatViewModel.kt“). Schritte ohne Werkzeug werden übersprungen, wenn schon etwas gemeldet
-    wurde — sonst gäbe es nichts Neues zu sagen.
-  - **End-Summary:** wenn der Turn endet, mit der Antwort selbst (erste Zeile, gekürzt) und dem
-    Fehlertext, falls der Turn mit einem Fehler endete. Die Summary ersetzt die letzte
-    Zwischenmeldung derselben Session, statt sich daneben zu stapeln; pro Turn genau eine Meldung
-    (mehrere Producer melden dasselbe Turn-Ende).
-  - **Nur im Hintergrund:** die Erkennung „App im Fokus?“ läuft über den Activity-Lebenszyklus
-    (Zähler der gestarteten Activities). Im Vordergrund ist alles still — dort sieht man die Antwort
-    ohnehin. Sobald die App in den Hintergrund geht, läuft der Sammler an, im Vordergrund wieder aus
-    (kein Dauer-Stream ohne Nutzen).
-  - **Tap → Session + Nachricht:** die Notification trägt Session- **und** Message-Id; der Chat
-    scrollt einmal zu genau dieser Nachricht (Indexberechnung für das reverse-Layout, rein und
-    getestet; ist die Nachricht nicht geladen, landet man trotzdem in der richtigen Session).
-  - **Eigener Kanal „Agent step progress“**, damit Zwischenmeldungen stumm geschaltet werden können,
-    ohne die fertige Antwort zu verlieren. Die End-Summary nutzt weiter den Agent-Kanal (mit Ton
-    nach Einstellung), Zwischenschritte sind absichtlich still.
-  - Der Tool-Name kommt jetzt aus einer einzigen Quelle (`ToolText`): Chat-Zeilen und
-    Benachrichtigungen zeigen dieselbe Schreibweise („Shell“, „Read“, „Edit“, …).
+    - **Zwischenschritte (gedrosselt):** nach einem abgeschlossenen Schritt, höchstens alle 45 s und
+      höchstens 4× pro Turn, mit der Arbeit dieses Schritts in der Zeile („Step 2 · Shell · ls -la,
+      Read · ChatViewModel.kt“). Schritte ohne Werkzeug werden übersprungen, wenn schon etwas gemeldet
+      wurde — sonst gäbe es nichts Neues zu sagen.
+    - **End-Summary:** wenn der Turn endet, mit der Antwort selbst (erste Zeile, gekürzt) und dem
+      Fehlertext, falls der Turn mit einem Fehler endete. Die Summary ersetzt die letzte
+      Zwischenmeldung derselben Session, statt sich daneben zu stapeln; pro Turn genau eine Meldung
+      (mehrere Producer melden dasselbe Turn-Ende).
+    - **Nur im Hintergrund:** die Erkennung „App im Fokus?“ läuft über den Activity-Lebenszyklus
+      (Zähler der gestarteten Activities). Im Vordergrund ist alles still — dort sieht man die Antwort
+      ohnehin. Sobald die App in den Hintergrund geht, läuft der Sammler an, im Vordergrund wieder aus
+      (kein Dauer-Stream ohne Nutzen).
+    - **Tap → Session + Nachricht:** die Notification trägt Session- **und** Message-Id; der Chat
+      scrollt einmal zu genau dieser Nachricht (Indexberechnung für das reverse-Layout, rein und
+      getestet; ist die Nachricht nicht geladen, landet man trotzdem in der richtigen Session).
+    - **Eigener Kanal „Agent step progress“**, damit Zwischenmeldungen stumm geschaltet werden können,
+      ohne die fertige Antwort zu verlieren. Die End-Summary nutzt weiter den Agent-Kanal (mit Ton
+      nach Einstellung), Zwischenschritte sind absichtlich still.
+    - Der Tool-Name kommt jetzt aus einer einzigen Quelle (`ToolText`): Chat-Zeilen und
+      Benachrichtigungen zeigen dieselbe Schreibweise („Shell“, „Read“, „Edit“, …).
 
 ### Notes
+
 - Ohne Weckdienst (kein Push) können Benachrichtigungen nur zugestellt werden, solange der Prozess
   lebt; dafür sorgt der bestehende `ConnectionService` (Foreground-Service, während die App offen
   ist). Wird die App vom System beendet, endet auch der Strom — beim nächsten Öffnen wird
   aufgeschlossen, nicht rückwirkend benachrichtigt.
 
 ### Added (tests)
+
 - `SessionAlertPolicyTest` (Drosselung, Deckel pro Turn, Werkzeugliste, Turn-Reset),
   `AppVisibilityTest` (Foreground-Übergänge inkl. Mehrfach-Activity), `DeepLinkScrollTest`
   (Scroll-Index im reverse-Layout), `ToolTextTest` (Titel-Schreibweise, Kürzung), plus
@@ -384,6 +435,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.6] - 2026-10-13
 
 ### Fixed
+
 - **Live-Status zeigt jetzt wirklich, was läuft.** Der Statustext blieb bei „Waiting for the model…“,
   obwohl Werkzeuge liefen. Ursache (mit einer echten Server-Spur belegt und als Test eingefroren):
   Der Server zerlegt einen Tool-Aufruf in mehrere Events; das spätere Event überschrieb das frühere,
@@ -405,6 +457,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   „interrupted“). Die Nutzungszeile rechnet Cache-Reads als Input und Reasoning als Output, wie das Web.
 
 ### Changed (10 kosmetische Verbesserungen)
+
 1. Modell-Wechsel im Chat nutzt dieselbe Trennlinien-Optik wie der Compaction-Block (vorher eine
    nackte zentrierte Zeile).
 2. Werkzeugtitel in allen Tool-Zeilen und im Detail-Dialog in Titel-Schreibweise wie im Web
@@ -420,6 +473,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 10. „Compacting“-Zeile nutzt dieselbe Typo-Skala wie die Live-Status-Zeile.
 
 ### Added
+
 - Tests: `LiveStatusTraceTest` (echte Wire-Spur eines kompletten Turns durch Normalizer + Filter +
   Reducer, inkl. Regression-Pins für Werkzeugname und Schrittzähler), `CompactionMessageTest`
   (Ergebnis-Wortlaut und Nutzungszeile), sowie ein neu geschriebener `CompactContractTest`
@@ -428,6 +482,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.5] - 2026-10-13
 
 ### Fixed
+
 - **Links im Chat sind jetzt überall antippbar und öffnen im Browser.** Bisher wurde nur die
   Markdown-Antwort des Assistenten verlinkt; **im eigenen Prompt** (und in Tool-Ausgaben) war eine
   URL reiner Text und ließ sich nicht öffnen. Jetzt werden URLs in allen Chat-Texten erkannt und
@@ -443,12 +498,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   kontrastreiches Blau).
 
 ### Added
+
 - Tests (`LinkTextTest`): nackte http(s)-URLs, `www.`-Präfix → https, Text vor/nach dem Link,
   mehrere URLs, abschließender Satzpunkt, und „normaler Text bleibt linkfrei".
 
 ## [1.5.4] - 2026-10-13
 
 ### Added
+
 - **Detaillierter Live-Status im Chat.** Die Statuszeile kannte bisher nur „waiting for the
   model…" und „generating…"; ein langer Turn las sich dadurch immer gleich, auch während Werkzeuge
   liefen und Dateien geändert wurden. Jetzt zeigt die Zeile, WAS gerade läuft:
@@ -465,6 +522,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.3] - 2026-10-13
 
 ### Removed
+
 - **Der Tab „Shortcuts" ist komplett entfernt.** Er listete nur die Desktop-/Web-Tastenkürzel,
   die in der Android-App keine Wirkung haben (`ShortcutsTab`, `SHORTCUT_GROUPS` und die zugehörigen
   Ressourcen sind gelöscht). Die Einstellungen haben jetzt vier Tabs: General · Servers ·
@@ -475,6 +533,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Namen und rot markiert, statt wie ein Shortcut-Reset zu wirken.
 
 ### Changed
+
 - Die Tab-Beschriftungen der Einstellungen sind jetzt Ressourcen (waren englische Literale),
   und ein veralteter gespeicherter Tab-Index (aus einer Version mit dem Shortcuts-Tab) fällt
   sauber auf „General" zurück, statt einen leeren Screen zu zeigen.
@@ -482,16 +541,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.2] - 2026-10-13
 
 ### Fixed
+
 - **Frage-Antworten (question tool) kommen jetzt wirklich beim Server an.** Zwei Ursachen,
   beide am laufenden Server verifiziert:
-  1. Der Server validiert die Antwort gegen den **JSON-Typ** des Feldes: `string` verlangt einen
-     **String**, `multiselect` ein **Array**, `number`/`integer` eine **Zahl**, `boolean` einen
-     **Boolean**. Die App hat **alles als Array** geschickt → `FormInvalidAnswerError`
-     ("Expected string for form field: …"), die Antwort erreichte den Server nie und die UI
-     meldete „die Frage ist abgelaufen". Jetzt wird pro Feldtyp der passende Typ gesendet.
-  2. Bei Auswahlfeldern müssen die **Option-Werte** gesendet werden, nicht die Labels
-     (`Invalid option for form field: …`). Die Auswahl liefert jetzt `value` (mit `label` als
-     Fallback, falls der Server keinen Wert liefert).
+    1. Der Server validiert die Antwort gegen den **JSON-Typ** des Feldes: `string` verlangt einen
+       **String**, `multiselect` ein **Array**, `number`/`integer` eine **Zahl**, `boolean` einen
+       **Boolean**. Die App hat **alles als Array** geschickt → `FormInvalidAnswerError`
+       ("Expected string for form field: …"), die Antwort erreichte den Server nie und die UI
+       meldete „die Frage ist abgelaufen". Jetzt wird pro Feldtyp der passende Typ gesendet.
+    2. Bei Auswahlfeldern müssen die **Option-Werte** gesendet werden, nicht die Labels
+       (`Invalid option for form field: …`). Die Auswahl liefert jetzt `value` (mit `label` als
+       Fallback, falls der Server keinen Wert liefert).
 - **Keine verlorene Antwort mehr:** Der Antwortdialog entfernte die Karte optimistisch. Schlug
   das Senden fehl, war sie weg und die Antwort musste von Hand nachgetippt werden. Die Karte
   wird jetzt bei einem Fehlschlag **wiederhergestellt** (nur bei „bereits beantwortet" bleibt
@@ -509,13 +569,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.5.1] - 2026-10-13
 
 ### Fixed
+
 - **Settings → Servers: die Server-Adresse ist wieder sichtbar.** Name, URL und Passwort-Status
   teilten sich EINE Zeile mit drei Aktions-Buttons. Mit dem zusätzlich hinzugekommenen „Copy URL"
   blieb dem Text kein Platz mehr, sodass die **URL verschwand** und „Remove" **vertikal umbrach**.
   Jetzt stehen die Identität (Name · Adresse · Passwort-Status) und „Active" in der ersten Zeile,
   die Buttons (Rename… · Copy URL · Remove) in einer eigenen Zeile darunter (`FlowRow`, damit sie
   auf schmalen Displays umbrechen statt gequetscht zu werden).
-- **Die Adresse wird immer angezeigt.** Vorher erschien sie *nur*, wenn ein Anzeigename gesetzt war;
+- **Die Adresse wird immer angezeigt.** Vorher erschien sie _nur_, wenn ein Anzeigename gesetzt war;
   bei einem Server ohne Namen stand dort stattdessen der Passwort-Status — die Adresse war also
   grundsätzlich nicht ablesbar, wenn man keinen Namen vergeben hatte.
 
@@ -524,6 +585,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Semantik, GUI, Workflows.
 
 ### Fixed (Auswahl)
+
 - **Sicherheit**: Der Verbindungs-Guard verglich nur den Hostnamen. Zwei Server auf demselben Host
   (der Normalfall lokaler `opencode serve`-Instanzen, z. B. `:4096` und `:3000`) teilten ihn, sodass
   ein noch laufender Request des alten Ports die Basic-Credentials und den Guard-Token des NEUEN
@@ -548,6 +610,7 @@ Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Seman
   statt Literalen.
 
 ### Changed / Added
+
 - **Semantik**: doppelter `statusError`-Banner entfernt (der Composer zeigt den Text vollständig),
   Archived-Markierung unabhängig vom Running-Status sichtbar, Todo-Plural richtet sich nach der
   Gesamtzahl, „Session info" bezieht Agent und Modell aus derselben Quelle, der wirkungslose
@@ -565,6 +628,7 @@ Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Seman
 ## [1.4.2] - 2026-10-11
 
 ### Fixed
+
 - **Die Projektliste ist jetzt genau die Liste, die du selbst festgelegt hast.** Es gibt eine
   persistente „Meine Projekte"-Auswahl: nur Verzeichnisse darin erscheinen auf dem Home-Screen.
   Gelöschte Projekte kommen nicht zurück (auch nicht nach einem App-Neustart) und der Server kann
@@ -589,6 +653,7 @@ Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Seman
 ## [1.4.1] - 2026-10-11
 
 ### Changed
+
 - **Fonts sind jetzt Auswahllisten statt Freitextfelder.** Interface- und Code-Font bieten eine
   kuratierte Liste von Schriftfamilien, die jedes Android-Gerät mitbringt (Auraas-
   Plattform-Aliase wie `sans-serif`, `sans-serif-light`, `sans-serif-condensed`, `serif`,
@@ -607,6 +672,7 @@ Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Seman
 Dritte Tiefenanalyse: Zustand/Streaming, IO/Daten, Plattform/Android-16, Semantik, GUI, Workflows.
 
 ### Fixed (Auswahl)
+
 - **Session-Wechsel**: sitzungsgebundene Listen (Fragen, Permissions, Todos, Diff, Kontext) werden
   jetzt geleert, und der laufende Refresh der alten Session wird gefenced (keine „A unter B"-Flackerei).
 - **Turn-Ende**: `session.status idle` räumt auch `isCompacting`; Home-Statusmengen werden mit dem
@@ -626,6 +692,7 @@ Dritte Tiefenanalyse: Zustand/Streaming, IO/Daten, Plattform/Android-16, Semanti
   Tag gegen APK-Version.
 
 ### Changed / Added
+
 - **Semantik**: „Restore messages" heißt korrekt „Bring back reverted messages" (es ist ein
   Server-Un-Revert, kein Cache-Restore), Nutzungsprozent nutzt überall dieselbe (overflow-sichere)
   Berechnung, Archiv-Zähler ist projektbezogen statt geräteglobal, veraltete Doku in AppLog/Pagination
@@ -643,6 +710,7 @@ Dritte Tiefenanalyse: Zustand/Streaming, IO/Daten, Plattform/Android-16, Semanti
 Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and workflows.
 
 ### Fixed (Auswahl)
+
 - **Session-Zustand**: `renameSession`/`compactSession`/Frage-Antworten schreiben nicht mehr in eine
   inzwischen gewechselte Session (Session-Guard).
 - **Live-Buffer**: `finalize()` faltet noch nicht geflushte Deltas, sodass der letzte Text nicht
@@ -672,6 +740,7 @@ Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and w
   sagt „Checking the server…"; Running/Retrying-Badges und Gruppen-Titel lokalisiert.
 
 ### Changed / Added
+
 - **Archivieren wirkt jetzt**: V2 hat keinen Server-Archiv-Schreibpfad, daher wird lokal
   archiviert (mit Undo-Aktion und „Archived"-Filter inkl. Anzahl); der alte Aufruf tat nichts.
 - **UX**: sichtbarer Aktions-Button (⋮) auch bei eigenen Nachrichten, Löschbestätigung für
@@ -683,6 +752,7 @@ Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and w
 ## [1.2.1] - 2026-10-11
 
 ### Fixed
+
 - **Home search field**: the two filter chips (Running / guarded) were squeezed into
   the same row as the search field, leaving it ~150 dp wide — the placeholder wrapped
   and the field read as an oversized card. The field now owns its row (compact 44 dp,
@@ -693,6 +763,7 @@ Second deep-analysis pass: state/IO/platform bugs, semantics, GUI logic/UX and w
 Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 
 ### Fixed (Auswahl)
+
 - **Paging ladder** no longer stops at the first oversized page (heavy sessions opened blank).
 - **Optimistic echo** is rolled back on every early failure (phantom message + lost prompt).
 - **HTTP error-body leaks** closed on all reply/rename/revert/message-list routes; `getFileContent` no longer shows error bodies as file content.

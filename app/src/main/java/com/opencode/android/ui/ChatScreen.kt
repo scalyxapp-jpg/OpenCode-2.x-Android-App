@@ -421,6 +421,7 @@ internal fun ChatScreen(
                         JournalDialog(
                             entries = uiState.journal,
                             openInSession = uiState.session != null,
+                            injectEnabled = appSettings.journalInjectEnabled,
                             onInject = viewModel::injectJournalEntry,
                             onDelete = viewModel::deleteJournalEntry,
                             onExport = {
@@ -951,7 +952,10 @@ internal fun ChatScreen(
                                             onQueue = viewModel::queueMessage,
                                             onSteer = viewModel::steerMessage,
                                             onHistory = viewModel::openHistory,
-                                            onFlushOutbox = viewModel::flushOutbox,
+                                            // Explicit "Send now" ignores the auto-flush
+                                            // setting (a method reference would have used the
+                                            // default `manual = false` and silently done nothing).
+                                            onFlushOutbox = { viewModel.flushOutbox(manual = true) },
                                             onExplain = { text ->
                                                 viewModel.explain(
                                                     com.opencode.android.ui.explain.ExplainPolicy.Kind.TEXT,

@@ -41,6 +41,9 @@ class ExplainController(
 ) {
     var pollIntervalMs: Long = 1_500L
 
+    /** A side question is short; after this the card reports failure instead of spinning. */
+    var maxDurationMs: Long = 3 * 60_000L
+
     @Volatile
     private var state: ExplainState? = null
 
@@ -107,9 +110,15 @@ class ExplainController(
                     update(run) { it.copy(running = false, failed = true) }
                     return@launch
                 }
+                val deadline = System.currentTimeMillis() + maxDurationMs
                 while (isCurrent(run)) {
                     delay(pollIntervalMs)
                     if (!isCurrent(run)) return@launch
+                    if (System.currentTimeMillis() > deadline) {
+                        AppLog.w(APP_LOG_TAG) { "explain: deadline reached" }
+                        update(run) { it.copy(running = false, failed = true) }
+                        return@launch
+                    }
                     val messages = runCatching { api.getMessages(sessionId, TAIL) }.getOrNull()
                     if (messages == null) continue
                     val answer = answerOf(messages)

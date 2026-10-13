@@ -80,7 +80,19 @@ object BackgroundSessionWatcher {
         this.api = api
         this.baseUrlProvider = baseUrl
         // Start/stop with the visibility transitions instead of polling the state.
-        AppVisibility.onVisibilityChanged = { visible -> if (visible) stop() else start() }
+        AppVisibility.onVisibilityChanged = { visible -> if (visible) stop() else applySettings() }
+        if (AppVisibility.isBackground) start()
+    }
+
+    /**
+     * Applies the monitoring setting: on = watch while the app is not in focus, off = stop
+     * immediately (not only on the next start).
+     */
+    fun applySettings() {
+        if (!AppSettingsStore.state.value.backgroundMonitoring) {
+            stop()
+            return
+        }
         if (AppVisibility.isBackground) start()
     }
 

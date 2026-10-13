@@ -44,6 +44,15 @@ class RaceController(
     /** Poll interval while at least one member is still running. */
     var pollIntervalMs: Long = 2_500L
 
+    /**
+     * Give up on a race after this long.
+     *
+     * Without a deadline a member whose turn never ends (server hiccup, provider stall) kept
+     * the controller polling for the lifetime of the app: battery plus a card that looks
+     * alive forever.
+     */
+    var maxDurationMs: Long = 20 * 60_000L
+
     @Volatile
     private var state: RaceState? = null
 
@@ -134,6 +143,14 @@ class RaceController(
             while (isCurrent(run) && state?.finished == false) {
                 delay(pollIntervalMs)
                 if (!isCurrent(run)) return@launch
+                val current = state ?: return@launch
+                if (System.currentTimeMillis() - current.startedAt > maxDurationMs) {
+                    AppLog.w(APP_LOG_TAG) { "race: deadline reached, marking members failed" }
+                    current.members.forEach { member ->
+                        updateMember(run, member.member.modelRef) { it.copy(running = false, failed = true) }
+                    }
+                    return@launch
+                }
                 refresh()
             }
         }

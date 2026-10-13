@@ -967,6 +967,8 @@ internal fun PromptHistoryDialog(
 internal fun JournalDialog(
     entries: List<JournalEntry>,
     openInSession: Boolean,
+    /** Setting "Hand decisions to the agent" — the button says so when off. */
+    injectEnabled: Boolean = true,
     onInject: (String) -> Unit,
     onDelete: (String) -> Unit,
     onExport: () -> Unit,
@@ -1011,9 +1013,19 @@ internal fun JournalDialog(
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                             ) {
-                                TextButton(onClick = { onInject(entry.id) }) {
+                                TextButton(
+                                    onClick = { onInject(entry.id) },
+                                    enabled = injectEnabled && openInSession,
+                                ) {
                                     Text(
-                                        text = stringResource(R.string.journal_inject),
+                                        text =
+                                            stringResource(
+                                                if (injectEnabled) {
+                                                    R.string.journal_inject
+                                                } else {
+                                                    R.string.journal_inject_off
+                                                },
+                                            ),
                                         style = MaterialTheme.typography.labelSmall,
                                     )
                                 }

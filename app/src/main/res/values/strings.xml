@@ -549,6 +549,7 @@
     <string name="journal_text_hint" formatted="false">Decision</string>
     <string name="journal_description_hint" formatted="false">Where/when (optional)</string>
     <string name="journal_save" formatted="false">Save</string>
+    <string name="journal_inject_off" formatted="false">Hand-over disabled in settings</string>
     <string name="journal_inject" formatted="false">Hand to agent</string>
     <string name="journal_inject_warning" formatted="false">Handing a decision over starts a turn with your current model (it costs tokens and the agent may act on it).</string>
     <string name="journal_injected" formatted="false">Decision handed over (%1$d)</string>

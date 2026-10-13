@@ -6,10 +6,19 @@ import com.opencode.android.R
 import com.opencode.android.data.AppSettingsStore
 import com.opencode.android.data.BackendSession
 import com.opencode.android.data.ChatRepository
+import com.opencode.android.data.DecisionJournalStore
+import com.opencode.android.data.JournalEntry
+import com.opencode.android.data.JournalPolicy
 import com.opencode.android.data.LastSessionStore
 import com.opencode.android.data.MessagePage
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.OpenCodeApi
+import com.opencode.android.data.OutboxItem
+import com.opencode.android.data.OutboxPolicy
+import com.opencode.android.data.OutboxStore
+import com.opencode.android.data.PromptHistoryEntry
+import com.opencode.android.data.PromptHistoryImport
+import com.opencode.android.data.PromptHistoryStore
 import com.opencode.android.data.SseClient
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.BUILTIN_COMMANDS
@@ -18,8 +27,11 @@ import com.opencode.android.domain.ContextUsage
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.IMPLEMENTED_BUILTIN_COMMANDS
+import com.opencode.android.domain.InboxItem
+import com.opencode.android.domain.InboxPayload
 import com.opencode.android.domain.McpEntry
 import com.opencode.android.domain.Message
+import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Model
 import com.opencode.android.domain.ModelRef
 import com.opencode.android.domain.ModelRefRequest
@@ -32,32 +44,20 @@ import com.opencode.android.domain.PromptRequest
 import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.QuestionReplyRequest
 import com.opencode.android.domain.RevertRequest
-import com.opencode.android.domain.InboxItem
-import com.opencode.android.domain.InboxPayload
-import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
-import com.opencode.android.domain.SkillEntry
-import com.opencode.android.data.DecisionJournalStore
-import com.opencode.android.data.JournalEntry
-import com.opencode.android.data.JournalPolicy
-import com.opencode.android.data.OutboxItem
-import com.opencode.android.data.PromptHistoryEntry
-import com.opencode.android.data.PromptHistoryImport
-import com.opencode.android.data.PromptHistoryStore
-import com.opencode.android.data.OutboxPolicy
-import com.opencode.android.data.OutboxStore
-import com.opencode.android.ui.race.RaceController
-import com.opencode.android.ui.race.RaceMember
-import com.opencode.android.ui.race.RacePlan
-import com.opencode.android.ui.race.RaceState
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
 import com.opencode.android.domain.SessionTimeUpdate
 import com.opencode.android.domain.SessionUpdateRequest
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SummarizeRequest
 import com.opencode.android.domain.TodoItem
 import com.opencode.android.domain.UploadResponse
 import com.opencode.android.domain.VcsDiffFile
+import com.opencode.android.ui.race.RaceController
+import com.opencode.android.ui.race.RaceMember
+import com.opencode.android.ui.race.RacePlan
+import com.opencode.android.ui.race.RaceState
 import com.opencode.android.ui.session.ConversationPort
 import com.opencode.android.ui.session.PromptSendResult
 import com.opencode.android.ui.session.PromptSender
@@ -298,7 +298,8 @@ class ChatViewModel
             // flow is edge-triggered (no replay), which is exactly right here — the
             // manual "Send now" and the flush on session open cover the rest.
             viewModelScope.launch {
-                com.opencode.android.data.NetworkMonitor.available.collect { flushOutbox() }
+                com.opencode.android.data.NetworkMonitor.available
+                    .collect { flushOutbox() }
             }
             // Always-on glance: the open session's live state feeds the widget,
             // notification and tile (step, elapsed, tool, run state).
@@ -321,9 +322,14 @@ class ChatViewModel
                         elapsedMs = runningSince?.let { System.currentTimeMillis() - it } ?: 0L,
                         toolName =
                             live.parts.lastOrNull()?.let { part ->
-                                com.opencode.android.ui.toolRowTitle(part.tool ?: part.name)
+                                com.opencode.android.ui
+                                    .toolRowTitle(part.tool ?: part.name)
                             },
-                        failures = live.parts.count { com.opencode.android.ui.toolStatus(it) == "error" },
+                        failures =
+                            live.parts.count {
+                                com.opencode.android.ui
+                                    .toolStatus(it) == "error"
+                            },
                         clearRunning = !state.isGenerating,
                     )
                 }
@@ -337,14 +343,17 @@ class ChatViewModel
         /** Reads "today so far" from the stats hub; silent when unavailable. */
         suspend fun refreshGlanceCost() {
             val start =
-                java.util.Calendar.getInstance().apply {
-                    set(java.util.Calendar.HOUR_OF_DAY, 0)
-                    set(java.util.Calendar.MINUTE, 0)
-                    set(java.util.Calendar.SECOND, 0)
-                    set(java.util.Calendar.MILLISECOND, 0)
-                }.timeInMillis
+                java.util.Calendar
+                    .getInstance()
+                    .apply {
+                        set(java.util.Calendar.HOUR_OF_DAY, 0)
+                        set(java.util.Calendar.MINUTE, 0)
+                        set(java.util.Calendar.SECOND, 0)
+                        set(java.util.Calendar.MILLISECOND, 0)
+                    }.timeInMillis
             api.getStats(fromMs = start)?.cost?.let {
-                com.opencode.android.data.GlanceStore.update(costTodayUsd = it)
+                com.opencode.android.data.GlanceStore
+                    .update(costTodayUsd = it)
             }
         }
 
@@ -552,6 +561,9 @@ class ChatViewModel
         // several suspending steps. It is cancelled on a session switch so a
         // mid-send switch cannot write the old session's state onto the new one.
         private var sendJob: Job? = null
+
+        /** Dedicated slot for the outbox flush (see `flushOutbox`). */
+        private var outboxJob: Job? = null
 
         fun loadSession(sessionId: String) {
             // Opening a different session starts from the small default tail again;
@@ -1107,7 +1119,8 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     val server =
-                        api.getCommands(directory)
+                        api
+                            .getCommands(directory)
                             // A server command that shares a name with a CLIENT
                             // built-in is dropped: otherwise the same typed
                             // "/compact" ran locally or was forwarded to the server
@@ -1193,7 +1206,10 @@ class ChatViewModel
         /** Picks a skill: inject it into the session and close the picker. */
         fun activateSkill(skillId: String) {
             val session = _uiState.value.session ?: return
-            val name = _uiState.value.skills.firstOrNull { it.id == skillId }?.name ?: skillId
+            val name =
+                _uiState.value.skills
+                    .firstOrNull { it.id == skillId }
+                    ?.name ?: skillId
             _uiState.update { it.copy(skillsDialogVisible = false) }
             viewModelScope.launch {
                 try {
@@ -1292,7 +1308,8 @@ class ChatViewModel
         private fun resolveRaceModel(ref: String): Triple<String, String, String>? {
             val entry =
                 _uiState.value.models.firstOrNull {
-                    com.opencode.android.util.sessionModelRef(it.id, it.providerId) == ref
+                    com.opencode.android.util
+                        .sessionModelRef(it.id, it.providerId) == ref
                 } ?: return null
             val providerId = entry.providerId ?: return null
             return Triple(entry.name?.takeIf { it.isNotBlank() } ?: entry.id, providerId, entry.id)
@@ -1441,8 +1458,7 @@ class ChatViewModel
         }
 
         /** True when this session already received the decision (row badge). */
-        fun journalInjectedHere(entry: JournalEntry): Boolean =
-            entry.sessionIdHint().isNotEmpty()
+        fun journalInjectedHere(entry: JournalEntry): Boolean = entry.sessionIdHint().isNotEmpty()
 
         // --- prompt history -------------------------------------------------
 
@@ -1601,8 +1617,11 @@ class ChatViewModel
             val items = OutboxStore.forSession(session.id)
             if (items.isEmpty()) return
             val (providerId, modelId) = parseModelRef(_uiState.value.selectedModel)
+            val flushSessionId = session.id
             _uiState.update { it.copy(outboxFlushing = true) }
-            sendJob =
+            // Own job slot: sharing `sendJob` meant a session switch cancelled the flush
+            // mid-way (and the "already flushing" flag could outlive the job).
+            outboxJob =
                 viewModelScope.launch {
                     var sent = 0
                     try {
@@ -1646,7 +1665,11 @@ class ChatViewModel
                             }
                         }
                     } finally {
-                        refreshOutbox()
+                        // Fenced by session: a switch during the flush must not repaint the
+                        // queue of the newly opened session with the old one's leftovers.
+                        if (_uiState.value.session?.id == flushSessionId) {
+                            refreshOutbox()
+                        }
                         _uiState.update { it.copy(outboxFlushing = false) }
                     }
                     if (sent > 0) {
@@ -2125,7 +2148,8 @@ class ChatViewModel
                     // Same symmetry as the permission path: without this the actionable
                     // notification stayed in the shade until a `question.resolved` event
                     // (which the server does not always emit).
-                    com.opencode.android.data.Notifier.clearQuestion(requestId)
+                    com.opencode.android.data.Notifier
+                        .clearQuestion(requestId)
                     loadPendingQuestions()
                     refreshMessages(session.id)
                     onDone(true)
@@ -2136,7 +2160,8 @@ class ChatViewModel
                 UserMessages.post(R.string.action_failed, message)
                 if (failure.tag == "FormAlreadySettledError") {
                     // The card is genuinely obsolete: keep it removed and re-sync.
-                    com.opencode.android.data.Notifier.clearQuestion(requestId)
+                    com.opencode.android.data.Notifier
+                        .clearQuestion(requestId)
                 } else if (asked != null) {
                     // Restore the card so the answer can be retried instead of being
                     // retyped from scratch.
@@ -2185,7 +2210,8 @@ class ChatViewModel
                 } catch (e: com.opencode.android.data.FormReplyException) {
                     e
                 } catch (e: Exception) {
-                    com.opencode.android.data.FormReplyException(null, e.message ?: "reply failed")
+                    com.opencode.android.data
+                        .FormReplyException(null, e.message ?: "reply failed")
                 }
             if (first?.tag == "FormAlreadySettledError") return first
             // Resolve the real pending form and retry ONCE.
@@ -2206,7 +2232,8 @@ class ChatViewModel
                     } catch (e: com.opencode.android.data.FormReplyException) {
                         e
                     } catch (e: Exception) {
-                        com.opencode.android.data.FormReplyException(null, e.message ?: "reply failed")
+                        com.opencode.android.data
+                            .FormReplyException(null, e.message ?: "reply failed")
                     }
             }
             return first
@@ -2553,8 +2580,12 @@ class ChatViewModel
                     (it.role ?: it.info?.role) == "assistant"
                 }
             val snippet =
-                (last?.let { com.opencode.android.util.MessageEcho.firstText(it) } ?: "")
-                    .lineSequence()
+                (
+                    last?.let {
+                        com.opencode.android.util.MessageEcho
+                            .firstText(it)
+                    } ?: ""
+                ).lineSequence()
                     .firstOrNull { it.isNotBlank() }
                     .orEmpty()
                     .take(180)
@@ -3263,6 +3294,7 @@ class ChatViewModel
 
         // Client IDs in web format: {prefix}_{12 hex of time*4096+counter}{14 random base62}.
         private var idCounter = 0
+
         /**
          * `delivery` value that asks the server to QUEUE the prompt instead of
          * running it immediately (verified against the live server: Ctrl+Enter in
@@ -4268,11 +4300,15 @@ class ChatViewModel
          */
         fun archiveSession(onDone: () -> Unit) {
             val session = _uiState.value.session ?: return
-            com.opencode.android.data.ArchivedSessionsStore.archive(session.id)
+            com.opencode.android.data.ArchivedSessionsStore
+                .archive(session.id)
             UserMessages.postWithAction(
                 R.string.session_archived,
                 actionLabel = "Undo",
-                onAction = { com.opencode.android.data.ArchivedSessionsStore.unarchive(session.id) },
+                onAction = {
+                    com.opencode.android.data.ArchivedSessionsStore
+                        .unarchive(session.id)
+                },
             )
             onDone()
         }

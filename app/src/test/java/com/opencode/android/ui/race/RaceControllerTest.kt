@@ -116,7 +116,12 @@ class RaceControllerTest {
             val state = latest
             assertTrue("race never finished: $state", state?.finished == true)
             assertEquals(2, state?.members?.size)
-            val distinct = state?.members?.mapNotNull { it.sessionId }?.distinct().orEmpty()
+            val distinct =
+                state
+                    ?.members
+                    ?.mapNotNull { it.sessionId }
+                    ?.distinct()
+                    .orEmpty()
             assertEquals("one session per member (traffic: $requests)", 2, distinct.size)
             state?.members?.forEach { member ->
                 assertTrue("member without session: $member", member.sessionId != null)
@@ -127,6 +132,33 @@ class RaceControllerTest {
             }
             // Two prompts, one per member session.
             assertEquals(2, requests.count { it.contains("POST") && it.contains("/prompt") })
+        }
+    }
+
+    @Test
+    fun `a stalled race is given up after the deadline instead of polling forever`() {
+        runBlocking {
+            // The mock never reports an answer for this path, so only the watchdog can
+            // end the race: without it the controller polled for the app's lifetime.
+            var latest: RaceState? = null
+            val controller =
+                RaceController(
+                    api = session.api,
+                    scope = CoroutineScope(Dispatchers.IO),
+                    onState = { latest = it },
+                )
+            controller.pollIntervalMs = 5
+            controller.maxDurationMs = 0L
+            controller.start("compare this", null, "build", members)
+
+            withTimeoutOrNull(8_000) {
+                while (latest?.finished != true) delay(5)
+            }
+            assertTrue("the watchdog never fired: $latest", latest?.finished == true)
+            assertTrue(
+                "members must be marked failed, not running",
+                latest?.members?.all { !it.running && it.failed } == true,
+            )
         }
     }
 
