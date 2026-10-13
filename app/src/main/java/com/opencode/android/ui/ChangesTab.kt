@@ -318,6 +318,20 @@ internal fun ChangesTab(
                             )
                         }
                     }
+                    // Files without a patch (binary, pure rename) used to expand into
+                    // nothing at all, which looked like a broken row.
+                    if (isOpen && changed.patch.isNullOrBlank()) {
+                        Text(
+                            text = stringResource(R.string.no_diff_available),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(
+                                start = MaterialTheme.spacing.cardPadding,
+                                top = MaterialTheme.spacing.extraSmall,
+                                bottom = MaterialTheme.spacing.small,
+                            ),
+                        )
+                    }
                     if (isOpen && !changed.patch.isNullOrBlank()) {
                         // Web parity: "Previous file" / "Next file" step through
                         // the changed files without collapsing back to the list,

@@ -163,7 +163,16 @@ internal fun MessageBubble(
     // no tool parts, and returning early there rendered NOTHING — the user saw
     // neither "Interrupted" nor the error.
     val errorText = remember(message) { messageErrorText(message.error ?: message.info?.error) }
-    if (text.isBlank() && reasoningText.isBlank() && toolParts.isEmpty() && errorText == null) return
+    // `showReasoning` matters: with the reasoning block hidden, a reasoning-only
+    // message used to render nothing but its meta line (an empty bubble).
+    val reasoningVisible = showReasoning && reasoningText.isNotBlank()
+    if (text.isBlank() &&
+        !reasoningVisible &&
+        toolParts.isEmpty() &&
+        errorText == null
+    ) {
+        return
+    }
     val meta = remember(message, errorText) {
         val agent = message.agent ?: message.info?.agent
         val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model

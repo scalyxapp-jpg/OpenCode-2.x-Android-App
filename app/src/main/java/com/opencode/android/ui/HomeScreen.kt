@@ -189,9 +189,14 @@ internal fun HomeScreen(
     val todayLabel = stringResource(R.string.group_sessions_today)
     val yesterdayLabel = stringResource(R.string.group_sessions_yesterday)
     val olderLabel = stringResource(R.string.group_sessions_older)
-    // Day key: `groupSessions` uses calendar day boundaries, so an app left open over
-    // midnight kept yesterday's sessions in "Today" (the row's relative time disagreed).
-    val dayKey = System.currentTimeMillis() / 86_400_000L
+    // Day key from the SAME local calendar the grouping uses: a UTC-based key
+    // (`millis / 86_400_000`) rolled over hours away from the local midnight, so the
+    // list could stay on yesterday's buckets for a long time.
+    val dayKey =
+        remember {
+            val now = java.util.Calendar.getInstance()
+            now.get(java.util.Calendar.YEAR) * 1000 + now.get(java.util.Calendar.DAY_OF_YEAR)
+        }
     val grouped =
         remember(
             filteredSessions,
@@ -414,6 +419,17 @@ internal fun HomeScreen(
                                         onSelect = { viewModel.selectProject(it) },
                                         onAdd = { showAddProject = true },
                                         onDelete = { viewModel.deleteProject(it) },
+                                        onCopyPath = { path ->
+                                            copyToClipboard(
+                                                context,
+                                                context.getString(R.string.copy_project_path),
+                                                path,
+                                            )
+                                            toast(
+                                                context,
+                                                context.getString(R.string.copied),
+                                            )
+                                        },
                                     )
                                 }
 
@@ -711,6 +727,7 @@ private fun ProjectChipRow(
     onSelect: (HomeProject) -> Unit,
     onAdd: () -> Unit,
     onDelete: (HomeProject) -> Unit,
+    onCopyPath: (String) -> Unit = {},
 ) {
     Row(
         modifier =
@@ -727,6 +744,7 @@ private fun ProjectChipRow(
                 selected = project.directory == selected?.directory,
                 onSelect = { onSelect(project) },
                 onDelete = { onDelete(project) },
+                onCopyPath = onCopyPath,
             )
         }
         AssistChip(
@@ -758,6 +776,7 @@ private fun ProjectChip(
     selected: Boolean,
     onSelect: () -> Unit,
     onDelete: () -> Unit,
+    onCopyPath: (String) -> Unit = {},
 ) {
     var showMenu by remember { mutableStateOf(false) }
     // The project menu deleted immediately (no confirmation), unlike the session
@@ -831,6 +850,13 @@ private fun ProjectChip(
                 onClick = {
                     showMenu = false
                     showDeleteConfirm = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.copy_project_path)) },
+                onClick = {
+                    showMenu = false
+                    onCopyPath(project.directory)
                 },
             )
         }
@@ -1378,6 +1404,7 @@ private fun SessionRow(
     onRename: (String) -> Unit,
     onArchive: () -> Unit,
     onUnarchive: () -> Unit = {},
+    onCopyPath: (String) -> Unit = {},
     /** True when this session is in the local archived set. */
     isArchived: Boolean = false,
     onDelete: () -> Unit,
@@ -1500,17 +1527,18 @@ private fun SessionRow(
                             fontWeight = FontWeight.SemiBold,
                             color = badgeColor,
                         )
-                        // The archived view explains itself: every row here is hidden
-                        // from the normal list.
-                        if (isArchived) {
-                            Text(
-                                text = stringResource(R.string.archived),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
                         Text(
                             text = "·",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // The archived view explains itself — INDEPENDENT of the running
+                    // state: inside the "running" branch an idle archived session had no
+                    // marker at all.
+                    if (isArchived) {
+                        Text(
+                            text = stringResource(R.string.archived),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

@@ -151,7 +151,12 @@ object Notifier {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
         val context = appContext ?: return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        createChannel(manager, CH_CONNECTION, "Connection", NotificationManager.IMPORTANCE_MIN)
+        createChannel(
+            manager,
+            CH_CONNECTION,
+            appContext?.getString(R.string.connection_active) ?: "OpenCode",
+            NotificationManager.IMPORTANCE_MIN,
+        )
     }
 
     /** The ongoing notification that keeps the foreground service alive. */
@@ -208,10 +213,15 @@ object Notifier {
             val requestId = request.id ?: return@forEach
             if (!notificationsEnabled) return@forEach
             if (!markNotified(notifiedPermissions, requestId)) return@forEach
-            val title = request.title?.ifBlank { null } ?: "Permission required"
+            val title =
+                request.title?.ifBlank { null }
+                    ?: context.getString(R.string.notif_permission_required)
             val text =
                 request.description?.ifBlank { null }
-                    ?: "${request.permission ?: "A tool"} needs your approval"
+                    ?: context.getString(
+                        R.string.notif_permission_needs_approval,
+                        request.permission ?: context.getString(R.string.notif_a_tool),
+                    )
             val open = openAppIntent(context, sessionId, requestId.hashCode())
             val notification =
                 NotificationCompat
@@ -226,9 +236,23 @@ object Notifier {
                     // Tool/permission text can include paths and commands; keep
                     // it off the lock screen by default.
                     .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-                    .addAction(0, "Allow once", permissionAction(context, sessionId, requestId, REPLY_ONCE))
-                    .addAction(0, "Always", permissionAction(context, sessionId, requestId, REPLY_ALWAYS))
-                    .addAction(0, "Deny", permissionAction(context, sessionId, requestId, REPLY_REJECT))
+                    .addAction(
+                        0,
+                        context.getString(R.string.permission_allow_once),
+                        permissionAction(context, sessionId, requestId, REPLY_ONCE),
+                    )
+                    .addAction(
+                        0,
+                        // Matches the in-app dialog wording ("Allow always"), instead of
+                        // the shorter "Always".
+                        context.getString(R.string.permission_allow_always),
+                        permissionAction(context, sessionId, requestId, REPLY_ALWAYS),
+                    )
+                    .addAction(
+                        0,
+                        context.getString(R.string.permission_deny),
+                        permissionAction(context, sessionId, requestId, REPLY_REJECT),
+                    )
                     .build()
             try {
                 NotificationManagerCompat
@@ -278,13 +302,13 @@ object Notifier {
                 .firstOrNull()
                 ?.question
                 ?.ifBlank { null }
-                ?: "The agent needs an answer to continue"
+                ?: context.getString(R.string.notif_question_needs_answer)
         val title =
             question.questions
                 .firstOrNull()
                 ?.header
                 ?.ifBlank { null }
-                ?: "Question from the agent"
+                ?: context.getString(R.string.notif_question_title)
         val open = openAppIntent(context, sessionId ?: question.sessionId, question.id.hashCode())
         val notification =
             NotificationCompat
@@ -297,7 +321,7 @@ object Notifier {
                 .setContentIntent(open)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setVisibility(NotificationCompat.VISIBILITY_SECRET)
-                .addAction(0, "Answer", open)
+                .addAction(0, context.getString(R.string.notif_answer), open)
                 .build()
         try {
             NotificationManagerCompat

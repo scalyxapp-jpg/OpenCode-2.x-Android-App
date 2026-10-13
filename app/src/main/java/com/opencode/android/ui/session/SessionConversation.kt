@@ -1,6 +1,8 @@
 package com.opencode.android.ui.session
 
 import com.opencode.android.data.SessionTransport
+import com.opencode.android.util.APP_LOG_TAG
+import com.opencode.android.util.AppLog
 import com.opencode.android.domain.Model
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.TodoItem
@@ -203,10 +205,13 @@ class SessionConversation(
         val sessionId = _state.value.sessionId ?: return
         scope.launch {
             try {
-                // Web stop action: POST /session/{id}/abort -> 200 "true".
+                // Web stop action: POST /session/{id}/abort -> 200 "true". Both
+                // transport calls hit the SAME server route (V2 has no separate
+                // fallback endpoint), so the second attempt only duplicated the request
+                // while looking like a fallback.
                 val response = transport.abort(sessionId)
                 if (!response.isSuccessful) {
-                    transport.interrupt(sessionId)
+                    AppLog.e(APP_LOG_TAG, "abort HTTP ${response.code()}")
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

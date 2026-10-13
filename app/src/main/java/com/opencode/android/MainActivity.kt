@@ -108,6 +108,17 @@ class MainActivity : ComponentActivity() {
                         permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }
+                // Android 16+ (API 36) gates LOCAL network access behind a runtime
+                // permission, and talking to `opencode serve` on the LAN is this app's
+                // whole purpose — without the grant every LAN socket fails with EPERM.
+                // The literal name keeps the app buildable against older SDKs.
+                val localNetwork = "android.permission.ACCESS_LOCAL_NETWORK"
+                if (Build.VERSION.SDK_INT >= 36) {
+                    val granted =
+                        ContextCompat.checkSelfPermission(this@MainActivity, localNetwork) ==
+                            PackageManager.PERMISSION_GRANTED
+                    if (!granted) permissionLauncher.launch(localNetwork)
+                }
             }
             // Theme/mode switches apply via full activity recreate: a plain
             // recompose left stale colours on screen (stored value changed,
@@ -204,7 +215,14 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) {
                     sourceUris.mapNotNull { copySharedToCache(it) }
                 }
-            if (text.isNullOrBlank() && cached.isEmpty()) return@launch
+            if (text.isNullOrBlank() && cached.isEmpty()) {
+                // Nothing shareable arrived: an image whose copy failed (invalid URI or
+                // no read grant) used to disappear without a word.
+                if (sourceUris.isNotEmpty()) {
+                    com.opencode.android.util.UserMessages.post(R.string.share_failed_images)
+                }
+                return@launch
+            }
             PendingShare.set(text, cached)
             shareSignal.value = shareSignal.value + 1
         }

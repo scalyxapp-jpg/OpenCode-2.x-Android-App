@@ -90,6 +90,14 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match the APK versionName $APK_VERSION. Bump versionName/versionCode in app/build.gradle.kts before tagging."
             exit 1
           fi
+          # versionCode is what Android uses to decide whether an update may be
+          # installed: if it did not grow, the release cannot be installed over an
+          # older one (the tag check above would not catch that).
+          PREV_CODE="$(git show HEAD~1:app/build.gradle.kts 2>/dev/null | grep -oE 'versionCode = [0-9]+' | grep -oE '[0-9]+' | head -1 || true)"
+          if [ -n "$PREV_CODE" ] && [ "$APK_CODE" -le "$PREV_CODE" ]; then
+            echo "::error::versionCode $APK_CODE is not greater than the previous $PREV_CODE — the release would not install as an update."
+            exit 1
+          fi
 
       - name: Prepare release assets
         if: steps.signing.outputs.available == 'true'

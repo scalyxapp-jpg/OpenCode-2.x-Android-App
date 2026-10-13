@@ -322,6 +322,7 @@
     <string name="could_not_save_selection" formatted="false">Could not save the selection: %1$s</string>
     <string name="could_not_answer_permission" formatted="false">Could not answer the permission request: %1$s</string>
     <string name="no_session_open" formatted="false">No session is open</string>
+    <string name="reset_all_settings" formatted="false">Reset all settings</string>
     <string name="reset_all_settings_warning" formatted="false">This resets ALL app settings to their defaults (appearance, notifications, sounds, server settings and the guard token). This cannot be undone.</string>
     <string name="guarded_only" formatted="false">Only sessions with a session guard</string>
     <string name="revert_message_confirm" formatted="false">Discard this message and everything after it? The server keeps the data, but the conversation continues from this point.</string>
@@ -386,4 +387,22 @@
     <string name="font_pick_title_ui" formatted="false">Interface font</string>
     <string name="font_pick_title_code" formatted="false">Code font</string>
     <string name="server_projects_available" formatted="false">On the server, not in your list</string>
+    <string name="notif_permission_required" formatted="false">Permission required</string>
+    <string name="notif_permission_needs_approval" formatted="false">%1$s needs your approval</string>
+    <string name="notif_a_tool" formatted="false">A tool</string>
+    <string name="notif_question_title" formatted="false">Question from the agent</string>
+    <string name="notif_question_needs_answer" formatted="false">The agent needs an answer to continue</string>
+    <string name="notif_answer" formatted="false">Answer</string>
+    <string name="widget_working" formatted="false">Working…</string>
+    <string name="widget_idle" formatted="false">Idle</string>
+    <string name="widget_no_session" formatted="false">No session yet</string>
+    <string name="widget_new_session" formatted="false">＋ New session</string>
+    <string name="no_diff_available" formatted="false">No text diff available for this file (binary or renamed)</string>
+    <string name="copy_session_dir" formatted="false">Copy session directory</string>
+    <string name="copy_project_path" formatted="false">Copy project path</string>
+    <string name="copy_error" formatted="false">Copy error</string>
+    <string name="copy_server_url" formatted="false">Copy URL</string>
+    <string name="could_not_load_subagents" formatted="false">Could not load subagents: %1$s</string>
+    <string name="fork_created_unknown_id" formatted="false">Forked — the new session id could not be read; pull to refresh the list</string>
+    <string name="share_failed_images" formatted="false">The shared image could not be taken over</string>
 </resources>

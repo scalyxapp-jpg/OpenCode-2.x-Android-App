@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
@@ -575,7 +576,14 @@ internal fun Composer(
                                         // desktop chat clients.
                                         event.key == Key.Enter &&
                                             (!event.isShiftPressed) -> {
-                                            if (!isUploading && (inputText.isNotBlank() || attachments.isNotEmpty())) {
+                                            // While a turn runs the button becomes "Stop", so
+                                            // the keyboard must do the same: sending would
+                                            // interrupt and throw away the running answer.
+                                            if (isGenerating) {
+                                                onInterrupt()
+                                            } else if (!isUploading &&
+                                                (inputText.isNotBlank() || attachments.isNotEmpty())
+                                            ) {
                                                 onSend()
                                             }
                                             true
@@ -797,6 +805,30 @@ internal fun Composer(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                             )
                         }
+                        // Attachment summary: count + total size, so a heavy draft is
+                        // noticed BEFORE sending (the chips show names only).
+                        if (attachments.isNotEmpty()) {
+                            val totalBytes = attachments.mapNotNull { it.size }.sum()
+                            val summary =
+                                if (totalBytes > 0) {
+                                    // Locale-independent formatting is fine here: this is
+                                    // a size, not user prose.
+                                    java.lang.String.format(
+                                        java.util.Locale.ENGLISH,
+                                        "%d file(s) · %.1f MB",
+                                        attachments.size,
+                                        totalBytes / (1024.0 * 1024.0),
+                                    )
+                                } else {
+                                    "%d file(s)".format(attachments.size)
+                                }
+                            Text(
+                                text = summary,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                modifier = Modifier.padding(horizontal = MaterialTheme.spacing.small),
+                            )
+                        }
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !statusError.isNullOrBlank(),
                             enter =
@@ -810,6 +842,25 @@ internal fun Composer(
                             // with account links) were hard-clipped at 2
                             // lines. Tap toggles the full text.
                             var errorExpanded by remember(statusError) { mutableStateOf(false) }
+                            // Copy affordance: a provider error is exactly what ends up
+                            // in a bug report, and it was not selectable before.
+                            androidx.compose.material3.IconButton(
+                                onClick = {
+                                    val clipboard =
+                                        context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                            as android.content.ClipboardManager
+                                    clipboard.setPrimaryClip(
+                                        android.content.ClipData.newPlainText("error", statusError ?: ""),
+                                    )
+                                },
+                                modifier = Modifier.size(24.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = stringResource(R.string.copy_error),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
                             Text(
                                 text = statusError ?: "",
                                 style = MaterialTheme.typography.labelSmall,

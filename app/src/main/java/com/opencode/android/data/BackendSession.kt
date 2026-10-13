@@ -68,7 +68,8 @@ class BackendSession(
                 // backend's Basic credentials. One atomic snapshot read closes
                 // the TOCTOU the config lock alone did not.
                 val current = config
-                if (current.host != null && request.url.host == current.host) {
+                val requestHostPort = "${request.url.host}:${request.url.port}"
+                if (current.host != null && requestHostPort == current.host) {
                     current.authHeader?.let { builder.header("Authorization", it) }
                     val guardToken = guardTokenSource()
                     if (guardToken.isNotBlank()) {
@@ -97,9 +98,20 @@ class BackendSession(
         guardTokenSource = provider
     }
 
+    /**
+     * `host:port` of a configured backend.
+     *
+     * The PORT matters: two servers on the same host (the normal case for local
+     * `opencode serve` instances, e.g. :4096 and :3000) share a hostname, so a
+     * hostname-only check sent the NEW backend's Basic credentials and guard token to
+     * a still-in-flight request of the old one.
+     */
     private fun hostOf(url: String): String? =
         try {
-            java.net.URI(url).host
+            val uri = java.net.URI(url)
+            val host = uri.host ?: return null
+            val port = if (uri.port > 0) uri.port else if (uri.scheme == "https") 443 else 80
+            "$host:$port"
         } catch (_: Exception) {
             null
         }

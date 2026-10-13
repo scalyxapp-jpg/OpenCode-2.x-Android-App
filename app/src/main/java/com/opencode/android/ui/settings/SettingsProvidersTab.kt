@@ -498,19 +498,19 @@ internal fun ConnectProviderDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                if (apiMethod != null) {
-                    // Shown only when the provider really has a key-based method: it
-                    // used to be visible for OAuth-only providers too, and "Continue"
-                    // then sent a bogus type="api" write.
-                    OutlinedTextField(
-                        value = key,
-                        onValueChange = { key = it },
-                        label = { Text("${provider.name ?: provider.id} API key") },
-                        placeholder = { Text(stringResource(R.string.api_key)) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                // The key field is always offered: when the provider is not listed in
+                // `GET /provider/auth` (e.g. a "custom" entry) there is no method, and
+                // hiding the field made "Continue" permanently disabled — the provider
+                // could not be connected at all. Writing a key with the default type is
+                // what the server expects for a plain API-key provider.
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    label = { Text("${provider.name ?: provider.id} API key") },
+                    placeholder = { Text(stringResource(R.string.api_key)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 error?.let {
                     Text(
                         text = it,
@@ -524,8 +524,7 @@ internal fun ConnectProviderDialog(
             Button(
                 enabled =
                     !busy &&
-                        (key.isNotBlank() || visiblePrompts.any { !prompts[it.key].isNullOrBlank() }) &&
-                        (apiMethod != null || visiblePrompts.isNotEmpty()),
+                        (key.isNotBlank() || visiblePrompts.any { !prompts[it.key].isNullOrBlank() }),
                 onClick = {
                     busy = true
                     error = null
@@ -535,9 +534,10 @@ internal fun ConnectProviderDialog(
                                 backendSession.api.setProviderAuth(
                                     provider.id,
                                     AuthSetRequest(
-                                        // Never invent a type: no method means the
-                                        // caller must not be here at all.
-                                        type = apiMethod?.type ?: error("no authentication method available"),
+                                        // Default to a key-based write when the provider
+                                        // reports no method (custom providers); OAuth
+                                        // providers always have their method here.
+                                        type = apiMethod?.type ?: "api",
                                         key = key.ifBlank { null },
                                         prompts = prompts.filterValues { it.isNotBlank() },
                                     ),

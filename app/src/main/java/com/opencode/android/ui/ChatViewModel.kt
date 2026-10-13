@@ -479,6 +479,10 @@ class ChatViewModel
                                 pendingPersist = false,
                                 messages = emptyList(),
                                 canLoadOlder = false,
+                                isUploading = false,
+                                uploadDone = 0,
+                                uploadTotal = 0,
+                                uploadingUris = emptySet(),
                                 // Session-scoped collections: the loaders below only
                                 // write NON-empty results, so the previous session's
                                 // question cards / todos / diff stayed on screen under
@@ -1093,7 +1097,10 @@ class ChatViewModel
             // cancelled an unconfirmed connect/disconnect still in flight for A, so
             // A's optimistic status silently flipped back with no request ever landing.
             mcpToggleJobs.remove(name)?.cancel()
-            mcpToggleJob =
+            // `var` (not `val`): a local val cannot be referenced inside its own
+            // initializer, and the finally block needs to identify its own job.
+            var started: Job? = null
+            started =
                 viewModelScope.launch {
                     try {
                         if (enable) {
@@ -1134,13 +1141,22 @@ class ChatViewModel
                         AppLog.e(APP_LOG_TAG, "toggleMcp failed: ${e.message}")
                         UserMessages.post(R.string.mcp_toggle_failed, "${e.message}")
                         loadMcp()
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        // A newer toggle cancelled this one: stay cancellable.
+                        throw e
                     } finally {
-                        // Drop this server's entry so the map cannot grow and a later
-                        // toggle of the same server starts fresh.
-                        mcpToggleJobs.remove(name)
+                        // Remove only THIS job: the unconditional `remove(name)` deleted a
+                        // newer toggle's entry (the finally of the cancelled job runs
+                        // after the new one registered), so the next toggle found nothing
+                        // to cancel and two poll loops wrote `mcpServers` at once.
+                        started?.let { mine ->
+                            mcpToggleJobs.remove(name, mine)
+                            if (mcpToggleJob === mine) mcpToggleJob = null
+                        }
                     }
                 }
-            mcpToggleJob?.let { mcpToggleJobs[name] = it }
+            mcpToggleJob = started
+            mcpToggleJobs[name] = started
         }
 
         fun authenticateMcp(name: String) {
@@ -1405,6 +1421,10 @@ class ChatViewModel
                         }
                     }
                 if (ok) {
+                    // Same symmetry as the permission path: without this the actionable
+                    // notification stayed in the shade until a `question.resolved` event
+                    // (which the server does not always emit).
+                    com.opencode.android.data.Notifier.clearQuestion(requestId)
                     loadPendingQuestions()
                     refreshMessages(session.id)
                     onDone(true)
@@ -1689,15 +1709,14 @@ class ChatViewModel
                             // aborts the session.
                             if (_uiState.value.isGenerating) {
                                 loadPendingQuestions(notifyOnError = false)
-                                // Watchdog: a `session.idle` lost during a reconnect
-                                // gap must not leave the composer stuck on "stop".
-                                // Only while the stream is DOWN — with SSE connected
-                                // the idle event arrives normally and the connect
-                                // resync already ran, so this stays a retry rather
-                                // than a status request on every poll tick.
-                                if (!_uiState.value.sseConnected) {
-                                    conversationPort.resyncSessionStatus()
-                                }
+                                // Watchdog: a terminal `session.idle` can also be
+                                // LOST while the stream looks connected — it is a data
+                                // event and the bounded SSE buffer drops the oldest
+                                // under a tool storm. The old guard only re-synced while
+                                // the stream was down, so the composer stayed on "stop".
+                                // One small status request per poll tick while a turn is
+                                // running is cheap insurance against that.
+                                conversationPort.resyncSessionStatus()
                             }
                             val updated = repo.session(sessionId).time?.updated
                             if (updated != null && updated != lastPollUpdated) {
@@ -2988,7 +3007,20 @@ class ChatViewModel
                                         PromptRequest(
                                             prompt = PromptInput(text = finalText),
                                             agent = effectiveAgent,
-                                            model = modelId.takeIf { it.isNotBlank() },
+                                            // QUALIFIED ref: the adapter parses "provider/model"
+                                            // to call setModel; a bare catalog id parsed to
+                                            // null, so the legacy fallback silently kept the
+                                            // PREVIOUS model.
+                                            model =
+                                                modelId
+                                                    .takeIf { it.isNotBlank() }
+                                                    ?.let { id ->
+                                                        if (providerId.isBlank()) {
+                                                            id
+                                                        } else {
+                                                            "$providerId/$id"
+                                                        }
+                                                    },
                                         ),
                                     )
                                 } catch (fallbackError: Exception) {
@@ -3007,6 +3039,17 @@ class ChatViewModel
                         // set and the prompt text the composer already cleared was
                         // lost. The echo row itself is dropped with the conversation.
                         optimisticEchoIds.remove(messageId)
+                        // The upload flags too: a switch during an attachment upload
+                        // left `isUploading` true, which keeps the send button disabled
+                        // (and the spinner spinning) for good.
+                        _uiState.update {
+                            it.copy(
+                                isUploading = false,
+                                uploadDone = 0,
+                                uploadTotal = 0,
+                                uploadingUris = emptySet(),
+                            )
+                        }
                         throw e
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "sendMessage ERROR: ${e.message}", e)
@@ -3348,6 +3391,15 @@ class ChatViewModel
                             ?: data?.get("id").idString()
                             ?: result["sessionID"].idString()
                             ?: data?.get("sessionID").idString()
+                    if (newId == null) {
+                        // The server DID fork (HTTP success) but the id is in a shape we
+                        // do not parse: reporting "Fork failed" claimed the opposite of
+                        // what happened and left the new session unfindable.
+                        AppLog.w(APP_LOG_TAG) { "forkFromMessage: no id in the response" }
+                        UserMessages.post(R.string.fork_created_unknown_id)
+                        // Refresh the lists so the new session shows up somewhere.
+                        refreshMessages(session.id)
+                    }
                     onDone(newId)
                 } catch (e: Exception) {
                     AppLog.e(APP_LOG_TAG, "forkFromMessage failed: ${e.message}")
@@ -3368,12 +3420,18 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     val content = api.getFileContent(path)
+                    // Fenced: a slower earlier fetch must not overwrite the file the
+                    // user opened last, and must not resurrect a closed viewer.
+                    if (_uiState.value.fileViewer?.path != path) return@launch
                     _uiState.update {
                         it.copy(
                             fileViewer = FileViewerState(path = path, content = content.content, isLoading = false),
                         )
                     }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
+                    if (_uiState.value.fileViewer?.path != path) return@launch
                     AppLog.e(APP_LOG_TAG, "openFileViewer failed: ${e.message}")
                     UserMessages.post(R.string.could_not_load_files, "${e.message}")
                     _uiState.update {
@@ -3408,13 +3466,24 @@ class ChatViewModel
 
         /** Child sessions (subagents spawned by this session). */
         fun loadChildSessions(onLoaded: (List<Session>) -> Unit) {
-            val sessionId = _uiState.value.session?.id ?: return
+            val sessionId = _uiState.value.session?.id
+            if (sessionId == null) {
+                // Without a session the callback used to never fire, so the menu item
+                // did nothing at all.
+                onLoaded(emptyList())
+                return
+            }
             viewModelScope.launch {
                 val children =
                     try {
                         api.getSessionChildren(sessionId)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
+                        // A failed load looked identical to "this session has no
+                        // subagents".
                         AppLog.e(APP_LOG_TAG, "getSessionChildren failed: ${e.message}")
+                        UserMessages.post(R.string.could_not_load_subagents, "${e.message}")
                         emptyList()
                     }
                 onLoaded(children)

@@ -153,8 +153,11 @@ class SessionConversationTest {
         }
 
     @Test
-    fun `interrupt falls back to the legacy endpoint when abort is not successful`() =
+    fun `interrupt does not duplicate the abort request on failure`() =
         runTest {
+            // Both transport calls hit the SAME server route (V2 has no separate
+            // fallback endpoint), so a second attempt was a pointless duplicate that
+            // made the code look like it had an alternative path.
             val port = FakePort()
             val transport = FakeTransport().apply { abortSuccessful = false }
             val conversation =
@@ -170,7 +173,7 @@ class SessionConversationTest {
             conversation.dispatch(SessionCommand.Interrupt)
             advanceUntilIdle()
             assertEquals(1, transport.aborts)
-            assertEquals(1, transport.interrupts)
+            assertEquals(0, transport.interrupts)
             assertEquals(1, port.refreshes)
         }
 

@@ -48,31 +48,37 @@ class NotificationActionReceiver : BroadcastReceiver() {
         val reply = intent.getStringExtra(Notifier.EXTRA_REPLY) ?: return
         val sessionId = intent.getStringExtra(Notifier.EXTRA_SESSION_ID)
 
-        // A broadcast can START the process with the app gone: the stores are then
-        // not initialised yet (AppStartup runs asynchronously) and BackendSession
-        // still points at its unconfigured 127.0.0.1 stand-in, so the reply went
-        // nowhere. Initialise the stores and aim the session at the SAVED backend.
         val app = context.applicationContext
-        BackendStore.init(app)
-        AppSettingsStore.init(app)
-        runCatching {
-            BackendStore.mostRecent()?.let { saved ->
-                if (saved.password != null) {
-                    // Atomic triple update (url + credentials + api instance).
-                    backendSession.setBackend(saved.url, saved.username, saved.password)
-                } else {
-                    backendSession.setBaseUrl(saved.url)
-                }
-            }
-        }.onFailure { error ->
-            AppLog.e(APP_LOG_TAG, "notification reply: could not apply saved backend: ${error.message}")
-        }
-
         val pending = goAsync()
         CoroutineScope(
             SupervisorJob() + Dispatchers.IO + com.opencode.android.util.LogAndSwallow,
         ).launch {
             try {
+                // A broadcast can START the process with the app gone: the stores are
+                // then uninitialised (AppStartup runs asynchronously) and BackendSession
+                // still points at its unconfigured 127.0.0.1 stand-in, so the reply went
+                // nowhere. Done HERE (IO) instead of in onReceive: the store init reads
+                // SharedPreferences and decrypts the guard token through the Keystore —
+                // exactly the main-thread work AppStartup deliberately avoids.
+                kotlinx.coroutines.withContext(Dispatchers.IO) {
+                    BackendStore.init(app)
+                    AppSettingsStore.init(app)
+                    runCatching {
+                        BackendStore.mostRecent()?.let { saved ->
+                            if (saved.password != null) {
+                                // Atomic triple update (url + credentials + api instance).
+                                backendSession.setBackend(saved.url, saved.username, saved.password)
+                            } else {
+                                backendSession.setBaseUrl(saved.url)
+                            }
+                        }
+                    }.onFailure { error ->
+                        AppLog.e(
+                            APP_LOG_TAG,
+                            "notification reply: could not apply saved backend: ${error.message}",
+                        )
+                    }
+                }
                 // The BroadcastReceiver has a ~10 s budget; bound the call so a
                 // hung request cannot outlive it and leak the PendingResult.
                 val ok =

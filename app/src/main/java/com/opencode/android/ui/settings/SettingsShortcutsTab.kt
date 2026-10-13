@@ -116,8 +116,11 @@ internal fun ShortcutsTab() {
             SectionHeader(
                 title = stringResource(R.string.keyboard_shortcuts),
                 trailing = {
+                    // The action resets EVERY setting (theme, fonts, notifications,
+                    // sounds, guard token), not just shortcuts, so it says so here
+                    // instead of reading like a shortcut-scoped reset.
                     OutlinedButton(onClick = { showReset = true }) {
-                        Text(stringResource(R.string.reset_to_defaults))
+                        Text(stringResource(R.string.reset_all_settings))
                     }
                 },
             )

@@ -20,6 +20,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.0] - 2026-10-13
+
+Vierte Tiefenanalyse: Zustand/Streaming, Daten/Netz, Plattform/Android 16, Semantik, GUI, Workflows.
+
+### Fixed (Auswahl)
+- **Sicherheit**: Der Verbindungs-Guard verglich nur den Hostnamen. Zwei Server auf demselben Host
+  (der Normalfall lokaler `opencode serve`-Instanzen, z. B. `:4096` und `:3000`) teilten ihn, sodass
+  ein noch laufender Request des alten Ports die Basic-Credentials und den Guard-Token des NEUEN
+  Backends bekam. Der Vergleich schließt jetzt den Port ein.
+- **Prompt-Pfade melden Fehler**: Der Legacy-Fallback (`sendPrompt`) meldete Erfolg auch bei einem
+  HTTP-Fehler (Prompt still verloren), und `sendPromptAsync` ignorierte ein abgelehntes
+  `setModel`/`setAgent` (Prompt lief auf dem vorherigen Modell weiter). Beide prüfen jetzt den Status;
+  der Fallback übergibt außerdem einen provider-qualifizierten Model-Ref (eine nackte ID wurde nicht
+  geparst und das Modell stillschweigend nicht gesetzt).
+- **Zustand**: Ein Session-Wechsel während eines Uploads ließ den Spinner und den deaktivierten
+  Senden-Button hängen (`isUploading` wurde nicht zurückgesetzt). Der MCP-Toggle entfernte im
+  `finally` den Eintrag eines NEUEREN Jobs (zwei parallele Poll-Loops). Der Datei-Viewer ist jetzt
+  gegen verspätete Antworten gefenced.
+- **Verpasste Turn-Enden**: Ein terminales `session.idle` kann im begrenzten SSE-Puffer verworfen
+  werden; der Watchdog lief aber nur bei getrennter Verbindung. Er resynct jetzt immer, solange ein
+  Turn läuft.
+- **Android 16**: `ACCESS_LOCAL_NETWORK` deklariert und zur Laufzeit angefragt (ohne die Freigabe
+  scheitert jede LAN-Verbindung zum Server), Notification-Reply initialisiert die Stores auf IO statt
+  auf dem Main-Thread (Keystore-Entschlüsselung), CI prüft jetzt auch den `versionCode` gegen die
+  vorherige Version (ein nicht erhöhter Code blockiert Updates).
+- **Lokalisierung**: Benachrichtigungs-Aktionen/-Titel/-Kanalname und Widget-Texte nutzen Ressourcen
+  statt Literalen.
+
+### Changed / Added
+- **Semantik**: doppelter `statusError`-Banner entfernt (der Composer zeigt den Text vollständig),
+  Archived-Markierung unabhängig vom Running-Status sichtbar, Todo-Plural richtet sich nach der
+  Gesamtzahl, „Session info" bezieht Agent und Modell aus derselben Quelle, der wirkungslose
+  zweite Abort-Aufruf entfällt, „Reset to defaults" heißt jetzt „Reset all settings" (es setzt alles
+  zurück, nicht nur Shortcuts).
+- **GUI**: Ein Provider ohne gemeldete Auth-Methode (z. B. ein „custom"-Eintrag) war nicht
+  verbindbar — das Key-Feld fehlte und „Continue" blieb dauerhaft deaktiviert. Enter/Ctrl+Enter
+  stoppt jetzt einen laufenden Turn (wie der Stop-Button, statt den Turn zu verwerfen). Dateien
+  ohne Text-Diff zeigen einen Hinweis statt ins Leere zu expandieren. Tagesgruppierung nutzt
+  lokale Kalendergrenzen. Eine Nur-Reasoning-Nachricht rendert keine leere Bubble mehr.
+- **Vergoldung**: „Copy session directory", „Copy project path", „Copy server URL" und „Copy error"
+  überall dort, wo der Text sonst nicht kopierbar war; kompakte Anhangs-Zusammenfassung
+  (Anzahl + Gesamtgröße) im Composer.
+
 ## [1.4.2] - 2026-10-11
 
 ### Fixed
@@ -299,7 +342,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.3.0...v1.4.0

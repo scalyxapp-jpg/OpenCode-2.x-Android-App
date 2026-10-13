@@ -66,12 +66,12 @@ private fun SessionWidgetContent() {
     val context = LocalContext.current
     val snapshot = WidgetStateStore.snapshot()
     val sessionId = LastSessionStore.sessionId()
-    val title = LastSessionStore.title() ?: "OpenCode"
+    val title = LastSessionStore.title() ?: context.getString(com.opencode.android.R.string.app_name)
     val status =
         when {
-            snapshot.generating -> snapshot.status ?: "Working…"
-            sessionId != null -> snapshot.status ?: "Idle"
-            else -> "No session yet"
+            snapshot.generating -> snapshot.status ?: context.getString(com.opencode.android.R.string.widget_working)
+            sessionId != null -> snapshot.status ?: context.getString(com.opencode.android.R.string.widget_idle)
+            else -> context.getString(com.opencode.android.R.string.widget_no_session)
         }
     val model = snapshot.model
 
@@ -85,7 +85,7 @@ private fun SessionWidgetContent() {
         verticalAlignment = Alignment.Top,
     ) {
         Text(
-            text = "OpenCode",
+            text = context.getString(com.opencode.android.R.string.app_name),
             style =
                 TextStyle(
                     color = ColorProvider(Color(0xFFC9D2DA)),
@@ -107,7 +107,7 @@ private fun SessionWidgetContent() {
         )
         Spacer(GlanceModifier.height(12.dp))
         Text(
-            text = "＋ New session",
+            text = context.getString(com.opencode.android.R.string.widget_new_session),
             modifier = GlanceModifier.clickable(actionStartActivity(newSessionIntent(context))),
             style =
                 TextStyle(

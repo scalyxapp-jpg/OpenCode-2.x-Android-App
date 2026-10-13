@@ -535,6 +535,26 @@ internal fun ChatScreen(
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_session_dir)) },
+                                onClick = {
+                                    showMore = false
+                                    val dir =
+                                        uiState.session?.directory
+                                            ?: uiState.session?.location?.directory
+                                            ?: uiState.session?.path
+                                    if (dir.isNullOrBlank()) {
+                                        toast(resources.getString(R.string.no_session_open))
+                                    } else {
+                                        copyToClipboard(
+                                            context,
+                                            resources.getString(R.string.copy_session_dir),
+                                            dir,
+                                        )
+                                        toast(resources.getString(R.string.copied))
+                                    }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.copy_session_id)) },
                                 onClick = {
                                     showMore = false
@@ -1744,68 +1764,11 @@ internal fun SessionTab(
             }
         }
 
-        // Provider/usage error banner (web shows "Free usage exceeded…" in the
-        // stream). Stays visible while the provider keeps retrying.
-        //
-        // Only when the composer does NOT already show it: `statusError` was rendered
-        // in both places, so a long provider error appeared twice at once.
-        androidx.compose.animation.AnimatedVisibility(
-            visible = !uiState.statusError.isNullOrBlank() && uiState.error != null,
-            enter =
-                androidx.compose.animation.expandVertically() +
-                    androidx.compose.animation.fadeIn(),
-            exit =
-                androidx.compose.animation.shrinkVertically() +
-                    androidx.compose.animation.fadeOut(),
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                shape = MaterialTheme.shapes.medium,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = MaterialTheme.spacing.cardPadding, vertical = 2.dp),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = MaterialTheme.spacing.cardPadding, vertical = MaterialTheme.spacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    // Long provider errors collapse to 2 lines; tap reveals
-                    // the full text (same pattern as the composer status).
-                    var bannerExpanded by remember(uiState.statusError) { mutableStateOf(false) }
-                    Text(
-                        text = uiState.statusError ?: "",
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = if (bannerExpanded) Int.MAX_VALUE else 2,
-                        overflow = if (bannerExpanded) TextOverflow.Visible else TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .pointerInput(uiState.statusError) {
-                                    detectTapGestures(
-                                        onTap = { bannerExpanded = !bannerExpanded },
-                                        onLongPress = {
-                                            val textToCopy = uiState.statusError.orEmpty()
-                                            if (textToCopy.isNotBlank()) {
-                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                                clipboard.setPrimaryClip(ClipData.newPlainText("error_text", textToCopy))
-                                                toast(context, copiedMsg)
-                                            }
-                                        },
-                                    )
-                                },
-                    )
-                }
-            }
-        }
+        // NOTE: the separate provider/usage error banner was removed here. It
+        // rendered `statusError` a second time while the composer's status row
+        // already shows the full (expandable) text, and its visibility condition
+        // (`statusError != blank && error != null`) was wrong: the message appeared
+        // twice on a load error and not at all in the normal case.
 
         // "/compact" progress (the server summarizes the session).
         androidx.compose.animation.AnimatedVisibility(
@@ -1929,7 +1892,17 @@ internal fun ReviewTab(
     ) {
         item { SectionHeader(stringResource(R.string.session)) }
         item { ContextRow("Title", uiState.session?.title ?: "—") }
-        item { ContextRow("Agent", uiState.selectedAgent) }
+        item {
+            // Same SOURCE as the model line below: `selectedAgent` is the composer's
+            // current pick and can differ from the agent the session actually runs
+            // (e.g. a session started in the TUI), so the panel told two stories.
+            ContextRow(
+                "Agent",
+                // Server/session source first (like the model line), fallback to the
+                // composer pick.
+                uiState.session?.agent?.takeIf { it.isNotBlank() } ?: uiState.selectedAgent,
+            )
+        }
         item {
             ContextRow(
                 "Model",
@@ -2050,7 +2023,9 @@ internal fun TodoPanel(todos: List<TodoItem>) {
             ) {
                 // Count glides on progress instead of hard-swapping digits.
                 androidx.compose.animation.Crossfade(
-                    targetState = pluralStringResource(R.plurals.todos_completed, done, done, todos.size),
+                    // Quantity from the TOTAL: the counted noun is "todos".
+                    targetState =
+                        pluralStringResource(R.plurals.todos_completed, todos.size, done, todos.size),
                     animationSpec =
                         com.opencode.android.ui.theme.Motion
                             .effects(),

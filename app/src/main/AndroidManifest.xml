@@ -3,6 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Android 16+ gates LOCAL network access behind a runtime permission. This app's
+         entire purpose is talking to `opencode serve` on the LAN (RFC1918 addresses),
+         so without it every LAN socket fails with EPERM once the platform enforces the
+         local-network protection. Harmless on older releases (unknown permissions are
+         ignored). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Keeps the process (and the session SSE connection) alive while the app

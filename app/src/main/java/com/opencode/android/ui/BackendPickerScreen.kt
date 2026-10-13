@@ -132,7 +132,17 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                     backendSession.setAuth(null, null)
                 }
                 // Verify the connection (health must be reachable).
-                val health = backendSession.api.health()
+                var authFailed = false
+                val health =
+                    try {
+                        backendSession.api.health()
+                    } catch (authError: Exception) {
+                        authFailed =
+                            (authError as? retrofit2.HttpException)?.let {
+                                it.code() == 401 || it.code() == 403
+                            } == true
+                        throw authError
+                    }
                 if (!health.healthy) {
                     // Roll back like the exception path: leaving the session pointed at
                     // an unverified server sent every later request (and the auto-resume)
@@ -140,8 +150,13 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                     // dead backend stayed in the list and could be auto-selected on the
                     // next start.
                     backendSession.setBaseUrl(previousUrl)
-                    if (previousUrl.isBlank()) BackendStore.remove(backend.url)
-                    backends = BackendStore.backends()
+                    // The address answered but did not pass the health check. When it
+                    // was AUTH that failed (wrong password) the URL is fine, so the
+                    // entry must stay — only a genuinely unreachable server is dropped.
+                    if (previousUrl.isBlank() && !authFailed) {
+                        BackendStore.remove(backend.url)
+                        backends = BackendStore.backends()
+                    }
                     errorText = serverUnhealthyMsg
                     connectingUrl = null
                     return@launch
@@ -169,9 +184,11 @@ internal fun BackendPickerScreen(onConnected: () -> Unit) {
                 // Roll back to the previously configured backend so a failed
                 // attempt cannot leave the app pointed at an unverified server.
                 backendSession.setBaseUrl(previousUrl)
-                // A backend that was just added and never verified is not kept: it
-                // would be auto-selected on the next start and fail there.
-                if (previousUrl.isBlank()) {
+                // Same distinction as above: a rejected credential means the ADDRESS is
+                // valid, so keep the entry (the user can retry the password).
+                val unauthorized =
+                    (e as? retrofit2.HttpException)?.let { it.code() == 401 || it.code() == 403 } == true
+                if (previousUrl.isBlank() && !unauthorized) {
                     BackendStore.remove(backend.url)
                     backends = BackendStore.backends()
                 }

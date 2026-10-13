@@ -218,7 +218,14 @@ class OpenCodeApiAdapter(
         // PREVIOUS model/agent, so the user's picker choice appeared to be used
         // while a different model answered.
         val promptResponse = v2.prompt(sessionId, PromptBody(text = request.prompt.text))
-        promptResponse.body()?.close() ?: promptResponse.errorBody()?.close()
+        if (!promptResponse.isSuccessful) {
+            // Reporting success for a rejected prompt told the app "sent" while the
+            // server never generated anything (only the body was closed).
+            val code = promptResponse.code()
+            promptResponse.errorBody()?.close()
+            throw IOException("prompt HTTP $code")
+        }
+        promptResponse.body()?.close()
         return PromptResponse(data = PromptResult(sessionId = sessionId))
     }
 
@@ -238,10 +245,14 @@ class OpenCodeApiAdapter(
                     sessionId,
                     ModelRefRequest(ModelRef(id = m.modelID, providerId = m.providerID, variant = request.variant)),
                 )
+            // A rejected selection used to be swallowed: the prompt then ran on the
+            // PREVIOUS model/agent while the UI showed the new one.
+            requireSuccess(response, "set model")
             revision = guardRevisionOf(response) ?: revision
         }
         request.agent?.takeIf { it.isNotBlank() }?.let {
             val response = setAgent(sessionId, mapOf("agent" to it))
+            requireSuccess(response, "set agent")
             revision = guardRevisionOf(response) ?: revision
         }
 

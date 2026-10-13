@@ -40,6 +40,7 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
     // Shows the real persisted backends instead of a hardcoded placeholder.
     // Connecting/sign-in still happens on the start screen, which owns the
     // password prompt, so this tab only manages the saved list.
+    val context = androidx.compose.ui.platform.LocalContext.current
     var backends by remember { mutableStateOf(BackendStore.backends()) }
     // Hoisted out of the LazyColumn item: a `remember` inside a lazy item is
     // disposed when it scrolls out of view, which silently discarded a half-typed
@@ -121,6 +122,19 @@ internal fun ServersTab(onSwitchBackend: () -> Unit) {
                         renameFor = backend
                         renameText = backend.name ?: ""
                     }) { Text(stringResource(R.string.rename)) }
+                    OutlinedButton(onClick = {
+                        // The URL is what you paste into a browser or a bug report; the
+                        // server list showed it but offered no way to copy it.
+                        val clipboard =
+                            context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(
+                            android.content.ClipData.newPlainText("backend", backend.url),
+                        )
+                        android.widget.Toast
+                            .makeText(context, R.string.copied, android.widget.Toast.LENGTH_SHORT)
+                            .show()
+                    }) { Text(stringResource(R.string.copy_server_url)) }
                     OutlinedButton(
                         // Confirmation, like the start screen: this also deletes the
                         // saved credentials.
