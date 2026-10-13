@@ -5,20 +5,31 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-- **The "/" picker lists every command, and they actually run.** It was capped at
-  six matches (`take(6)`) and matched with `contains`, so most of the server's
-  commands were hidden and which ones appeared changed with the catalog order.
-  It now lists all matches (prefix first, like the TUI) in a scrollable list, and
-  a "/name args" line runs through the server's `POST /api/session/{id}/command`
-  endpoint — the same path the TUI uses, where the command template is expanded —
-  instead of being posted as literal text.
+## [Unreleased]
 
-- **The picker only offers commands that actually run.** Client built-ins are now
-  filtered against the set the app implements (`IMPLEMENTED_BUILTIN_COMMANDS`) and
-  run through one dispatch, so a command can no longer be listed and then silently
-  do nothing — the failure mode the TUI's own client-side commands (/sessions,
-  /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
-  test keeps the advertised list and the handlers in lockstep.
+### Documentation
+
+- **Detailed feature documentation (`docs/FEATURES.md`).** 22 sections covering every
+  user-visible capability — chat/streaming, the composer, the message queue, slash
+  commands, attachments/share/files, session info, Changes, permissions & questions,
+  models/agents/variants, providers/credentials, MCP & skills, notifications
+  (channels, background step progress, finished summary, deep links), widget/tile,
+  appearance, a full settings reference, the optional session guard, privacy, the
+  web/TUI parity table (what was verified against a running server) and a
+  feature → endpoint map — plus honest limits (no push service, `dataSync` budget,
+  locally stored archive, queue without attachments, paged messages).
+- **README** — the Features section now leads with the concrete behaviours users ask
+  about (detailed live status, tappable links, fine-grained selection, the queue and
+  its Steer/Remove actions, compaction output) and links to the detailed document.
+- **`docs/OPENCODE-API.md`** — new section with the verified prompt/queue/compaction
+  and form contract (`delivery: steer|queue`, the inbox endpoints and semantics,
+  `POST /compact` with a client-generated id, typed form answers), the inbox events,
+  the full compaction-message shape, and the OpenAPI version re-checked against
+  2.0.26.
+- **`docs/ARCHITECTURE.md`** — cross-links the feature documentation.
+- **`CHANGELOG.md`** — two entries about the "/" picker had lost their version
+  heading and sat orphaned above the newest release; they are back inside
+  [1.1.1] where they shipped.
 
 ## [1.5.8] - 2026-10-13
 
@@ -502,6 +513,21 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
   refreshed session. The server names a session from its first turn, so that title
   is now copied too (as is `directory`), and the placeholder reads "New session"
   until the name arrives.
+
+- **The "/" picker lists every command, and they actually run.** It was capped at
+  six matches (`take(6)`) and matched with `contains`, so most of the server's
+  commands were hidden and which ones appeared changed with the catalog order.
+  It now lists all matches (prefix first, like the TUI) in a scrollable list, and
+  a "/name args" line runs through the server's `POST /api/session/{id}/command`
+  endpoint — the same path the TUI uses, where the command template is expanded —
+  instead of being posted as literal text.
+
+- **The picker only offers commands that actually run.** Client built-ins are now
+  filtered against the set the app implements (`IMPLEMENTED_BUILTIN_COMMANDS`) and
+  run through one dispatch, so a command can no longer be listed and then silently
+  do nothing — the failure mode the TUI's own client-side commands (/sessions,
+  /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
+  test keeps the advertised list and the handlers in lockstep.
 
 ## [1.0.0] - 2026-10-07
 

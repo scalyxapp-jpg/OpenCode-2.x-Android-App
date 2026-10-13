@@ -6,7 +6,7 @@ The single V1→V2 shape bridge lives in
 `app/src/main/java/com/opencode/android/data/OpenCodeApiAdapter.kt`.
 
 Source of truth for this contract: the live server OpenAPI
-(`GET /openapi.json`, version 2.0.23), the shipped v2 SDK types
+(`GET /openapi.json`, re-verified against **2.0.26** on 2026-10-13), the shipped v2 SDK types
 (`@opencode-ai/sdk/dist/v2/gen/types.gen.d.ts`), and payloads captured from the
 running server. Every claim below was verified against the live server.
 
@@ -126,11 +126,19 @@ cost?, tokens?, error?}`
         - `{type:"tool", id, name, provider?:{executed}, state:{status:"pending"|"running"|"completed"|"error",
   input, content:[{type:"text",text}|{type:"file",...}], structured?, result?, attachments?, error?}, time:{created,ran?,completed?}}`
 - **shell**: `{id, type:"shell", command, output, callID, time}`
-- **compaction**: `{id, type:"compaction", reason, summary, recent}`
+- **compaction**: `{id, type:"compaction", status:"running"|"completed"|"failed", reason:"auto"|"manual",
+  model?, providerState?, providerContext?, summary, recent?, cost?, tokens?, error?}`
+  — the summary streams through `session.compaction.delta` and ends up here; the web
+  renders a divider notice ("Session compaction started"), the summary as Markdown,
+  "Compacting" while running and "Session compacted · <in> in · <out> out" afterwards
+  (usage = `tokens.input + cache.read + cache.write` in, `tokens.output + reasoning` out).
 - Paging: `cursor` param replaces `before`; the cursor comes from
   `cursor.previous`/`cursor.next`. No `x-next-cursor` header.
 
 ## SSE event types (wire `type`, payload under `data`)
+
+Inbox (queued prompts — see the section below): `session.inbox.enqueued`,
+`session.inbox.delivered`, `session.inbox.cancelled`, `session.inbox.delivery.changed`.
 
 Sessions: `session.created`, `session.updated`, `session.renamed`,
 `session.deleted`, `session.moved`, `session.idle`, `session.error`,
@@ -154,6 +162,88 @@ Misc: `server.connected`, `project.updated`, `file.edited`, `lsp.updated`,
 Assistant stream events carry `{sessionID, assistantMessageID, ...}`; text/reasoning
 deltas carry `{textID|reasoningID, delta}`; tool events carry `{callID, tool|name,
 input|content|structured|error, provider}`.
+
+## Prompt, message queue (inbox) and compaction
+
+Verified against the live server (request bodies captured with browser automation
+and replayed with `curl`/Python; the app's unit tests pin the same shapes).
+
+### Sending a prompt
+
+```
+POST /api/session/{id}/prompt
+{
+  "id": "msg_…",                  # client-generated, echoed on the message (dedupe key)
+  "text": "…",
+  "files": [], "agents": [], "skills": [],
+  "metadata": { … },              # optional, web sends displayText/agent/model here
+  "delivery": "steer" | "queue"   # optional; omit for the server default (steer)
+}
+-> 200 {"data": <inbox item>}
+```
+
+The response is the **inbox item** (`Session.Inbox.User`), not the message: it
+carries `delivery`, which is how the client knows whether the prompt ran now or was
+queued. A prompt sent while a turn is running **without** `delivery:"queue"` steers
+(interrupts) the turn — the app's send button does exactly that, and its queue
+button sends `"queue"` (web parity: Ctrl+Enter).
+
+### The queue
+
+```
+GET    /api/session/{id}/inbox            -> {data:[Session.Inbox.Info]}
+DELETE /api/session/{id}/inbox/{inboxID}  -> 204          # web: "Remove"
+PATCH  /api/session/{id}/inbox/{inboxID}  -> 204          # body {"delivery":"steer"}
+                                                          # web: "Steer" (deliver now)
+```
+
+`Session.Inbox.Info` is one of `user | synthetic | compaction | move`:
+
+```
+{ "id":"msg_…", "sessionID":"ses_…", "time":{"created":…},
+  "type":"user", "payload":{"text":"…","files":[],"agents":[],"skills":[],"metadata":{}},
+  "delivery":"queue" }
+```
+
+Behaviour worth knowing:
+
+- Delivery is **server-side**: the oldest queued prompt becomes a real message when
+  the running turn ends. While the session is idle, `delivery:"queue"` is delivered
+  immediately (verified: the inbox is empty right after the call).
+- A `PATCH` to `steer` keeps the item in the inbox for a moment but marks it for
+  immediate delivery; it leaves the inbox once delivered.
+- `DELETE` removes it without running it.
+- There is **no reorder field** (the API has no order attribute), so the client must
+  not pretend to reorder.
+- Attachments in a queued prompt would have to travel as base64 file parts inside the
+  inbox payload; the app refuses to queue attachments instead of dropping them.
+
+### Compaction
+
+```
+POST /api/session/{id}/compact     body {"id":"msg_…"}      # client-generated id, nothing else
+-> 200 {"data": <inbox item, type:"compaction", delivery:"steer">}
+```
+
+The client-generated id is echoed on the compaction **message**
+(`type:"compaction"`, `status:"running"|"completed"|"failed"`, `summary`, `tokens`),
+which is what the transcript renders. Sending an empty body makes the server mint an
+id the client cannot follow, and a URL-encoded `x-opencode-directory` header makes the
+server look for a location literally named `%2F…` — both were real bugs here.
+
+### Forms (agent questions)
+
+```
+POST /api/session/{id}/form/{formID}/reply     body {"answer":{<key>:<typed value>}}
+```
+
+The server validates the **JSON type per field**: `string` → string,
+`multiselect` → array of the option **values** (not labels), `number`/`integer` →
+number, `boolean` → boolean. Sending labels produced `FormInvalidAnswerError`; the
+typed value is what the server accepts. Errors: `FormNotFoundError`,
+`FormAlreadySettledError`, `FormInvalidAnswerError`. Form ids match `^frm_…`; an SSE-built
+question card can carry a non-form id, so the reply is retried once with the server's
+pending form id.
 
 ## Model / provider
 

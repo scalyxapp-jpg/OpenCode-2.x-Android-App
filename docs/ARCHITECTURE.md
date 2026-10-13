@@ -3,7 +3,8 @@
 This document is the map of the codebase: its layers, the core concepts
 (`StreamReducer`, `ConversationState`, `BackendSession`, …) and the streaming
 pipeline. For the server API contract the client depends on, see
-[OPENCODE-API.md](OPENCODE-API.md).
+[OPENCODE-API.md](OPENCODE-API.md); for what the app can do feature by feature, see
+[FEATURES.md](FEATURES.md).
 
 ## At a glance
 

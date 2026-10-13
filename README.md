@@ -51,6 +51,7 @@ After installing, open the app and enter your OpenCode server address — see
 
 - [Download](#download)
 - [Features](#features)
+- [Feature documentation (detailed)](docs/FEATURES.md)
 - [Requirements](#requirements)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
@@ -63,28 +64,76 @@ After installing, open the app and enter your OpenCode server address — see
 
 ## Features
 
+> Every feature is described in depth — behaviour, wire contract and limits — in
+> **[docs/FEATURES.md](docs/FEATURES.md)**. This is the short version.
+
+**Chat & streaming**
+
 - **Live streaming chat** — answers arrive token by token over SSE, with a
-  streaming caret, progressive Markdown (headings, lists, tables, task lists,
-  fenced code with syntax highlighting) and a stable "running" indicator that
-  follows the whole turn, not just one step.
-- **Tool calls, inline** — shell, read, edit and diff tool calls render as
-  expandable rows with their input/output; consecutive identical calls collapse
-  into a `×N` row.
-- **Permission prompts & questions** — approve/deny tool permissions and answer
-  agent questions from a dock, or straight from a notification action.
-- **Model, agent & variant selection** — per-session provider/model/variant/agent
-  pickers, synced with the server so your choice carries over to web/TUI.
-- **Provider management** — browse the server's provider catalog, connect or
-  disconnect credentials, and manage model visibility.
-- **Review / Changes tab** — branch badge and working-tree diff, loaded on demand.
-- **Sessions & history** — project-grouped session list, offline message cache,
-  older-message paging, and a searchable history.
+  streaming caret and progressive Markdown (headings, lists, tables, task lists,
+  fenced code with syntax highlighting).
+- **A live status row that says what is happening** — `Running Shell · ls -la
+  (3 tools)`, `Thinking · step 2`, `Writing the answer · 1,240 chars`,
+  `Waiting for V4 Flash… · step 2`, `Compacting`, `Reconnecting…` — instead of a
+  generic "waiting".
+- **Tool calls inline** — shell, read, write, edit, patch, search, subagent,
+  question and MCP calls as expandable rows with input/output; consecutive
+  identical calls collapse into `×N`, long output is capped with a clear note.
+- **Tappable links everywhere** — Markdown anchors *and* bare URLs in your own
+  prompt, in answers and in tool output open in the browser.
+- **Fine-grained text selection** — select single words and phrases in messages,
+  the live answer, reasoning and tool output; copy/revert/fork stay in the message
+  menu.
+- **Compaction like the web** — `/compact` renders the divider notice, the
+  generated summary, "Compacting" while it runs and the token usage line.
+
+**Composer & sending**
+
+- **Message queue (Ctrl+Enter)** — a second button next to send/stop, shown while
+  you type, queues a follow-up instead of interrupting the running turn. Queued
+  prompts appear with a **Queued** badge and the web's **Steer** / **Remove**
+  actions; the server delivers them when the turn ends.
+- **Slash commands** — every server command (`/api/command`) runs through the
+  command endpoint exactly as in the TUI, plus the built-ins the client really
+  implements (`/compact`, `/mcp`). Only working commands are listed.
+- **Attachments** — images and files as base64 `file` parts (no helper needed), a
+  share target for text/images from other apps, and a file tree + viewer.
+- **Model, agent & variant selection** — per session, synced with the server so
+  your choice carries to the web UI and TUI; same-named models stay selectable per
+  provider, and model visibility is managed in one place.
+
+**Sessions & work**
+
+- **Sessions & history** — project-grouped list with running/retrying badges (for
+  turns started anywhere), offline message cache, cursor paging, full-text search
+  over cached text, rename/delete/archive, fork and revert.
+- **Review / Changes tab** — branch badge, on-demand working-tree diff, file tree
+  and file viewer.
+- **Permissions & questions** — approve/deny tool permissions (or auto-accept),
+  answer agent questions with the server's own field types, and answer a blocked
+  permission straight from the notification.
+- **Provider management** — browse the catalog, connect/disconnect credentials,
+  manage model visibility; "connected" means exactly what the server reports.
+- **MCP & skills** — per-server MCP toggles, OAuth auth, resources and the
+  server's skills list.
+
+**Staying informed**
+
+- **Background notifications** — while the app is not in focus: occasional step
+  progress (`Step 2 · Shell · ls -la`) and a finished summary **with the answer**.
+  A tap opens that session **at that message**.
 - **Background continuity** — a foreground service keeps the session connected
   while the app is open; a home-screen widget and a Quick Settings tile give you
   status and a one-tap new session.
-- **Share target** — send text or images from any app into a prompt.
-- **Themes** — default, Matrix, Aqua, Metal and Hello Kitty looks, light/dark,
-  custom fonts.
+
+**Look & feel**
+
+- **Themes** — Default, Matrix, Aqua, Metal and Hello Kitty, light/dark/follow
+  system, animated ambience.
+- **Fonts** — separate UI and code font pickers from predefined families with live
+  preview.
+- **Settings** — sound effects, tool-row expansion, reasoning visibility, file
+  tree, command palette, Session Guard, plus JSON export/import.
 
 ## Requirements
 
