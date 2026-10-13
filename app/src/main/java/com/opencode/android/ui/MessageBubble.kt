@@ -243,15 +243,17 @@ internal fun MessageBubble(
                         shape = bubbleShape,
                     ),
             ) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(
-                        horizontal = MaterialTheme.spacing.medium,
-                        vertical = MaterialTheme.spacing.medium,
-                    ),
-                )
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(
+                            horizontal = MaterialTheme.spacing.medium,
+                            vertical = MaterialTheme.spacing.medium,
+                        ),
+                    )
+                }
             }
             // Also reachable on OWN messages: "Revert message" only exists for user
             // messages, and that is exactly where the visible button was missing.
@@ -262,11 +264,15 @@ internal fun MessageBubble(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
             ) {
                 if (text.isNotBlank()) {
-                    // Markdown formatting (headings, lists, code, tables, inline styles).
-                    MarkdownText(
-                        text = text,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    // Selectable: fine-grained selection (a word, a phrase) was not
+                    // possible at all — only the whole message via the menu.
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        // Markdown formatting (headings, lists, code, tables, inline styles).
+                        MarkdownText(
+                            text = text,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 // "Show reasoning summaries" setting (hoisted from the caller).
                 if (showReasoning && reasoningText.isNotBlank()) {

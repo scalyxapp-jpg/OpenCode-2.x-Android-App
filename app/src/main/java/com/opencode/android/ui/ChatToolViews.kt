@@ -168,9 +168,11 @@ internal fun DiffBlock(
                 .padding(vertical = MaterialTheme.spacing.small),
     ) {
         val viewWidth = maxWidth
-        Column(
-            modifier = Modifier.horizontalScroll(contentScroll),
-        ) {
+        // Selectable so a single diff line can be copied (the copy button grabs it all).
+        androidx.compose.foundation.text.selection.SelectionContainer {
+            Column(
+                modifier = Modifier.horizontalScroll(contentScroll),
+            ) {
             rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
                 // Full-width tint like the TUI: added rows green, removed red.
                 // Tinted from primary/error (not the container): containers sit
@@ -274,6 +276,7 @@ internal fun DiffBlock(
                         modifier = Modifier.padding(end = MaterialTheme.spacing.small),
                     )
                 }
+            }
             }
         }
     }
@@ -631,20 +634,24 @@ internal fun ToolCallRow(
                             )
                             Spacer(Modifier.height(MaterialTheme.spacing.small))
                         }
-                        Text(
-                            text =
-                                cappedForDisplay(
-                                    buildString {
-                                        command?.let { append("$ ").append(it).append('\n') }
-                                        append(output ?: "")
-                                    },
-                                ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
-                            style = MaterialTheme.typography.bodySmall,
-                            fontFamily =
-                                com.opencode.android.ui.theme
-                                    .codeFont(),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
+                        // Selectable: copying just one line of a tool output was
+                        // impossible before (only the copy button, which takes all).
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            Text(
+                                text =
+                                    cappedForDisplay(
+                                        buildString {
+                                            command?.let { append("$ ").append(it).append('\n') }
+                                            append(output ?: "")
+                                        },
+                                    ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily =
+                                    com.opencode.android.ui.theme
+                                        .codeFont(),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 }
             }

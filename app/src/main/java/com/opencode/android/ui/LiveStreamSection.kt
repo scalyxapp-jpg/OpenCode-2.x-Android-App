@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.R
@@ -41,16 +42,20 @@ internal fun LiveStatusItem(
     LiveStatusIndicator(
         agent = live.agent,
         model = live.model,
-        thinking = live.thinking,
-        connected = connected,
-        compacting = compacting,
-        // Nothing has arrived yet: the request is out but the model has not
-        // started producing. Without this the row read "build · deepseek…" and
-        // looked like it was already working.
-        waiting =
-            live.response.isBlank() &&
-                live.reasoning.isBlank() &&
-                live.parts.isEmpty(),
+        // Detailed activity: which tool is running, on what, and how much has been
+        // written — instead of only "waiting"/"generating".
+        status =
+            liveStatus(
+                connected = connected,
+                compacting = compacting,
+                thinking = live.thinking,
+                waiting =
+                    live.response.isBlank() &&
+                        live.reasoning.isBlank() &&
+                        live.parts.isEmpty(),
+                parts = live.parts,
+                streamingChars = live.response.length,
+            ),
     )
 }
 
@@ -156,10 +161,7 @@ internal fun LiveToolsItem(
 internal fun LiveStatusIndicator(
     agent: String?,
     model: String?,
-    thinking: Boolean = false,
-    connected: Boolean = true,
-    waiting: Boolean = false,
-    compacting: Boolean = false,
+    status: LiveStatus,
 ) {
     Row(
         modifier =
@@ -170,85 +172,79 @@ internal fun LiveStatusIndicator(
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
     ) {
         InlineSpinner()
-        // One Crossfade across the status phases: the label used to
-        // hard-swap on every phase change (waiting → thinking → tools).
-        // `!connected` FIRST: with the stream dead, `thinking`/`compacting` keep
-        // their last value (no further events arrive), so the row said "thinking…"
-        // forever instead of showing that the connection is gone.
-        val phase =
-            when {
-                !connected -> 2
-                compacting -> 0
-                thinking -> 1
-                waiting -> 3
-                else -> 4
-            }
-        androidx.compose.animation.Crossfade(
-            targetState = phase,
-            animationSpec = tween(durationMillis = 180),
-            label = "livePhase",
-        ) { p ->
+        Column(modifier = Modifier.weight(1f)) {
+            // Line 1: WHAT is running right now.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
             ) {
-                when (p) {
-                    0 -> {
-                        // "/compact" runs a long server-side summarization; without this the
-                        // thread looked idle for up to a minute. Same animated-dots treatment
-                        // as "Thinking".
-                        Text(
-                            text = stringResource(R.string.compacting),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        DotsPulse()
-                    }
-
-                    1 -> {
-                        // Web shows a "Thinking" label with animated dots while reasoning.
-                        Text(
-                            text = stringResource(R.string.thinking),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        DotsPulse()
-                    }
-
-                    2 -> {
-                        // Stream dropped mid-generation — the client auto-reconnects with
-                        // backoff, so surface it instead of looking frozen. Animated dots
-                        // like "Thinking" so the row reads alive, not stuck.
-                        Text(
-                            text = stringResource(R.string.reconnecting),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        DotsPulse()
-                    }
-
-                    3 -> {
-                        Text(
-                            text = stringResource(R.string.waiting_for_model),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        DotsPulse()
-                    }
-
-                    else -> {
-                        val generatingLabel = stringResource(R.string.generating)
-                        Text(
-                            text = listOfNotNull(agent, model).joinToString(" · ").ifEmpty { generatingLabel },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                Text(
+                    text = liveStatusText(status),
+                    style = MaterialTheme.typography.bodySmall,
+                    color =
+                        if (status.kind == LiveStatusKind.DISCONNECTED) {
+                            MaterialTheme.colorScheme.error
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (status.animated) DotsPulse()
+            }
+            // Line 2: who is doing it (kept, so the row still identifies the model).
+            val who = listOfNotNull(agent, model).filter { it.isNotBlank() }.joinToString(" · ")
+            if (who.isNotBlank()) {
+                Text(
+                    text = who,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
 }
+
+/**
+ * The concrete activity label, e.g. "Running read · ChatViewModel.kt (3 tools)" or
+ * "Writing the answer · 1,240 chars". Falls back to the generic phases.
+ */
+@Composable
+private fun liveStatusText(status: LiveStatus): String =
+    when (status.kind) {
+        LiveStatusKind.DISCONNECTED -> stringResource(R.string.reconnecting)
+        LiveStatusKind.COMPACTING -> stringResource(R.string.compacting)
+        LiveStatusKind.THINKING -> stringResource(R.string.thinking)
+        LiveStatusKind.WAITING -> stringResource(R.string.waiting_for_model)
+        LiveStatusKind.TOOL -> {
+            val tool = status.tool?.takeIf { it.isNotBlank() } ?: stringResource(R.string.tool)
+            val base =
+                status.detail?.takeIf { it.isNotBlank() }?.let { detail ->
+                    // Long paths/commands: keep the row readable.
+                    stringResource(R.string.status_running_tool_detail, tool, detail.take(60))
+                } ?: stringResource(R.string.status_running_tool, tool)
+            if (status.toolCount > 1) {
+                base + " " + stringResource(R.string.status_tool_count, status.toolCount)
+            } else {
+                base
+            }
+        }
+        LiveStatusKind.WRITING -> {
+            val base = stringResource(R.string.status_writing_answer)
+            if (status.streamingChars > 0) {
+                base + " · " +
+                    stringResource(
+                        R.string.status_streamed_chars,
+                        com.opencode.android.util.formatCount(status.streamingChars),
+                    )
+            } else {
+                base
+            }
+        }
+    }
 
 /** Shared animated dots ("…") for the live status row. */
 @Composable
@@ -317,10 +313,12 @@ internal fun LiveResponseBubble(
                 // re-parsed), so the live bubble can always use the SAME renderer
                 // as the persisted one — no style jump when the text is persisted
                 // and no full re-parse per flush.
-                MarkdownText(
-                    text = text,
-                    modifier = Modifier.animateContentSize(),
-                )
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    MarkdownText(
+                        text = text,
+                        modifier = Modifier.animateContentSize(),
+                    )
+                }
                 if (streaming) StreamingCaret()
             }
         }
@@ -366,10 +364,12 @@ internal fun LiveReasoningBubble(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                MarkdownText(
-                    text = text,
-                    modifier = Modifier.animateContentSize(),
-                )
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    MarkdownText(
+                        text = text,
+                        modifier = Modifier.animateContentSize(),
+                    )
+                }
                 if (streaming) StreamingCaret()
             }
         }

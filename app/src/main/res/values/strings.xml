@@ -406,4 +406,9 @@
     <string name="settings_tab_servers" formatted="false">Servers</string>
     <string name="settings_tab_providers" formatted="false">Providers</string>
     <string name="settings_tab_models" formatted="false">Models</string>
+    <string name="status_running_tool" formatted="false">Running %1$s</string>
+    <string name="status_running_tool_detail" formatted="false">Running %1$s · %2$s</string>
+    <string name="status_tool_count" formatted="false">(%1$d tools)</string>
+    <string name="status_writing_answer" formatted="false">Writing the answer</string>
+    <string name="status_streamed_chars" formatted="false">%1$s chars</string>
 </resources>

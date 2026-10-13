@@ -20,6 +20,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.4] - 2026-10-13
+
+### Added
+- **Detaillierter Live-Status im Chat.** Die Statuszeile kannte bisher nur „waiting for the
+  model…" und „generating…"; ein langer Turn las sich dadurch immer gleich, auch während Werkzeuge
+  liefen und Dateien geändert wurden. Jetzt zeigt die Zeile, WAS gerade läuft:
+  `Running bash · npm test (3 tools)`, `Writing the answer · 1,240 chars`, `Thinking…`,
+  `Compacting the session…`, `Waiting for the model…` bzw. `Reconnecting…` — und darunter weiterhin
+  Agent · Modell. Die Reihenfolge ist fest priorisiert (tote Verbindung > Compaction > laufendes
+  Werkzeug > Reasoning > Warten > Schreiben) und als reine Funktion (`liveStatus`) mit Tests
+  abgesichert.
+- **Feine Textauswahl im Chat.** Alles war nur als ganzer Block kopierbar (per „Copy"). Jetzt lassen
+  sich einzelne **Wörter und Satzteile** markieren und kopieren: Assistenten-Antworten (Markdown),
+  eigene Nachrichten, die live streamende Antwort und das Reasoning, Tool-Ausgaben sowie einzelne
+  Diff-Zeilen sind selektierbar (`SelectionContainer`).
+
 ## [1.5.3] - 2026-10-13
 
 ### Removed
@@ -399,7 +415,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.4...HEAD
+[1.5.4]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...v1.5.1
