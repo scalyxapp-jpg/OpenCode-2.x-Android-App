@@ -49,6 +49,18 @@ object AppSettingsStore {
         val showReasoningSummaries: Boolean = true,
         val shellToolPartsExpanded: Boolean = false,
         val editToolPartsExpanded: Boolean = false,
+        /**
+         * Whether the model's thinking starts EXPANDED in the timeline. Default
+         * false: "Thinking…" starts collapsed (the same shape as the shell/edit
+         * tool switches, only inverted by name).
+         */
+        val expandThinkingBlocks: Boolean = false,
+        /**
+         * Hide the Session Guard's status row and actions in the chat. Meaningful
+         * only when a guard was detected; the guard itself keeps working (the
+         * proxy still pins the selection), only the chrome disappears.
+         */
+        val hideSessionGuardInChat: Boolean = false,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -90,6 +102,8 @@ object AppSettingsStore {
             showReasoningSummaries = prefs.getBoolean("showReasoningSummaries", true),
             shellToolPartsExpanded = prefs.getBoolean("shellToolPartsExpanded", false),
             editToolPartsExpanded = prefs.getBoolean("editToolPartsExpanded", false),
+            expandThinkingBlocks = prefs.getBoolean("expandThinkingBlocks", false),
+            hideSessionGuardInChat = prefs.getBoolean("hideSessionGuardInChat", false),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -143,6 +157,10 @@ object AppSettingsStore {
     fun setShellToolPartsExpanded(v: Boolean) = update { it.putBoolean("shellToolPartsExpanded", v) }
 
     fun setEditToolPartsExpanded(v: Boolean) = update { it.putBoolean("editToolPartsExpanded", v) }
+
+    fun setExpandThinkingBlocks(v: Boolean) = update { it.putBoolean("expandThinkingBlocks", v) }
+
+    fun setHideSessionGuardInChat(v: Boolean) = update { it.putBoolean("hideSessionGuardInChat", v) }
 
     fun setColorScheme(v: String) = update { it.putString("colorScheme", v) }
 
@@ -257,6 +275,8 @@ object AppSettingsStore {
                 putBoolean("showReasoningSummaries", parsed.showReasoningSummaries)
                 putBoolean("shellToolPartsExpanded", parsed.shellToolPartsExpanded)
                 putBoolean("editToolPartsExpanded", parsed.editToolPartsExpanded)
+                putBoolean("expandThinkingBlocks", parsed.expandThinkingBlocks)
+                putBoolean("hideSessionGuardInChat", parsed.hideSessionGuardInChat)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

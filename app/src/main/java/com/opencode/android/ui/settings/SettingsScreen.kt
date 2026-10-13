@@ -552,6 +552,22 @@ private fun SessionGuardSection() {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
         )
+        // Only offered when the probe actually found a guard: without one the
+        // switch would hide nothing and just be a dead control.
+        SettingSwitch(
+            title = stringResource(R.string.settings_hide_session_guard),
+            subtitle =
+                if (health != null) {
+                    stringResource(R.string.settings_hide_session_guard_sub)
+                } else {
+                    stringResource(R.string.settings_hide_session_guard_unavailable)
+                },
+            checked = AppSettingsStore.state.value.hideSessionGuardInChat,
+            // Enabled with a detected guard — and also when the switch is already
+            // ON, so a guard that disappears cannot leave a stuck setting.
+            enabled = health != null || AppSettingsStore.state.value.hideSessionGuardInChat,
+            onCheckedChange = { AppSettingsStore.setHideSessionGuardInChat(it) },
+        )
         health?.metrics?.let { metrics ->
             Text(
                 text =

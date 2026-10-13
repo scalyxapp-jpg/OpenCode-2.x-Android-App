@@ -63,6 +63,8 @@ internal fun MessageBubble(
     onRejectQuestion: (requestId: String) -> Unit = {},
     // Hoisted so each bubble doesn't subscribe to settings (perf).
     showReasoning: Boolean = false,
+    /** Start the thinking block expanded (setting "Expand thinking blocks"). */
+    thinkingExpandedByDefault: Boolean = false,
     // "Expand shell/edit tool parts" settings (web parity).
     shellToolPartsExpanded: Boolean = false,
     editToolPartsExpanded: Boolean = false,
@@ -190,7 +192,9 @@ internal fun MessageBubble(
     }
     val messageId = message.id ?: message.info?.id
 
-    var reasoningExpanded by remember(messageId, reasoningText.length) { mutableStateOf(false) }
+    var reasoningExpanded by remember(messageId, reasoningText.length) {
+        mutableStateOf(thinkingExpandedByDefault)
+    }
     // Long-press context menu (right-click equivalent) for per-message actions
     // like "Fork to new session" — no longer shown as buttons under every message.
     var showContextMenu by remember { mutableStateOf(false) }

@@ -1104,7 +1104,9 @@ internal fun SessionTab(
                 )
             }
         }
-        if (uiState.guardEnabled) {
+        // The guard chrome is optional: the switch in Settings → Session Guard hides
+        // this row (and its dialog) while the guard itself keeps working.
+        if (uiState.guardEnabled && !appSettings.hideSessionGuardInChat) {
             val guard = uiState.session?.sessionGuard
             // Remembered: the screen recomposes on every message/stream update;
             // this label only changes when the guard selection does.
@@ -1202,7 +1204,7 @@ internal fun SessionTab(
                 }
             }
         }
-        if (showGuardDialog) {
+        if (showGuardDialog && !appSettings.hideSessionGuardInChat) {
             val guard = uiState.session?.sessionGuard
             val detailLines =
                 listOfNotNull(
@@ -1534,7 +1536,10 @@ internal fun SessionTab(
                                         }
                                     }
                                     item(key = "live-reasoning") {
-                                        LiveReasoningItem(liveState = liveState)
+                                        LiveReasoningItem(
+                                            liveState = liveState,
+                                            thinkingExpandedByDefault = appSettings.expandThinkingBlocks,
+                                        )
                                     }
                                     item(key = "live-response") {
                                         LiveResponseItem(liveState = liveState)
@@ -1603,6 +1608,7 @@ internal fun SessionTab(
                                     Box(modifier = itemModifier) {
                                         MessageBubble(
                                             message = message,
+                                            thinkingExpandedByDefault = appSettings.expandThinkingBlocks,
                                             pendingQuestions = uiState.pendingQuestions,
                                             onCopyMessage = onCopyMessage,
                                             onRevertMessage = onRevertMessage,

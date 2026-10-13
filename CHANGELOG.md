@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Neue Einstellung „Expand thinking blocks"** (Settings → General, direkt bei den
+  Tool-Schaltern): steuert, ob „Thinking…" standardmässig **ausgeklappt** (an) oder
+  **eingeklappt** (aus, Default) startet — für den laufenden Stream und für die
+  Historie. Bisher war der Live-Thinking-Block immer aufgeklappt und nicht
+  einklappbar; jetzt hat er dieselbe Kopfzeile mit „Thinking ▲/▼" wie der
+  historische Block (inkl. Streaming-Caret in der Kopfzeile, solange Tokens
+  laufen), und ein Tipp schaltet für diesen Turn um.
+- **Neue Einstellung „Hide Session Guard in chat"** (Settings → Session Guard):
+  blendet die Guard-Zeile und ihren Dialog im Chat komplett aus, **ohne** die
+  Funktion abzuschalten (der Proxy pinnt weiter). Der Schalter ist **nur aktiv,
+  wenn ein Session Guard erkannt wurde** (die Health-Probe antwortet) und bleibt
+  bedienbar, solange er an ist, damit ein verschwundener Guard keine Einstellung
+  blockiert. Beide Einstellungen sind im JSON-Export/-Import enthalten.
+
 ### Changed
 
 - **Session-Namen im Home bleiben einzeilig und sliden durch.** Die zweizeilige

@@ -128,8 +128,11 @@ Changes tab keeps the full working-tree diff.
 "Session compaction started", the generated summary as Markdown, a "Compacting"
 line while it runs and "Session compacted · 34,997 in · 140 out" afterwards
 (also `by provider`, `failed`, `cancelled`, `interrupted`).
-**Reasoning** — reasoning summaries appear as a collapsed block; a setting hides
-them everywhere (live and history).
+**Reasoning** — reasoning summaries appear as a block you can expand/collapse; the
+setting "Expand thinking blocks" decides whether "Thinking…" starts **expanded**
+or **collapsed** (default: collapsed), both for the live stream — where the header
+keeps a streaming caret while collapsed — and in history. A separate setting hides
+reasoning summaries entirely.
 **Reconnect banner** — a dropped stream surfaces as a state, and the app resyncs
 status, messages and the todo list after reconnecting.
 
@@ -334,11 +337,20 @@ focused app stays quiet):
 Four tabs:
 
 **General** — theme, colour scheme, UI font, code font, show reasoning summaries,
+**expand thinking blocks** (whether "Thinking…" starts expanded or collapsed),
 expand shell tool parts, expand edit tool parts, file tree panel, command-palette
 button, server-status button, show agent picker, auto-accept permissions,
 notifications (agent / permissions / errors), sound effects (agent / permissions /
-errors), Session Guard (token, auto-adopt drift, metrics), skills list, settings
-**export/import** as JSON (for moving to a new device), and **reset all settings**.
+errors), Session Guard (status + metrics, **hide the guard in the chat**, token,
+auto-adopt drift), skills list, settings **export/import** as JSON (for moving to a
+new device), and **reset all settings**.
+
+The two per-part switches and the thinking switch share one rule: they decide the
+**default** state, and tapping the block's header always toggles it for that
+message/turn. "Hide Session Guard in chat" is offered **only when a guard was
+detected** (the health probe answered); turning it on removes the guard's status
+row and its dialog from the chat while the guard keeps pinning the selection —
+only the chrome disappears.
 
 **Servers** — the stored backends, the active one, switching (clears caches), the
 guard's live metrics, and the guard token field (shown in full width so it is not

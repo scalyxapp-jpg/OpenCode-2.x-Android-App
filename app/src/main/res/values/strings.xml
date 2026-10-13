@@ -440,4 +440,9 @@
     <string name="queued_message_added" formatted="false">Added to the queue</string>
     <string name="queue_action_failed" formatted="false">Could not change the queue</string>
     <string name="queue_attachments_unsupported" formatted="false">Attachments cannot be queued — send the message directly</string>
+    <string name="settings_expand_thinking" formatted="false">Expand thinking blocks</string>
+    <string name="settings_expand_thinking_sub" formatted="false">Show the model\'s thinking (reasoning) expanded by default in the timeline</string>
+    <string name="settings_hide_session_guard" formatted="false">Hide Session Guard in chat</string>
+    <string name="settings_hide_session_guard_sub" formatted="false">Hide the guard\'s status row and actions in the chat. The guard keeps working — only the chrome disappears.</string>
+    <string name="settings_hide_session_guard_unavailable" formatted="false">Only available when a Session Guard is detected</string>
 </resources>

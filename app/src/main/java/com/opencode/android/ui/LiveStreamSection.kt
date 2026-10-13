@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,7 +65,11 @@ internal fun LiveStatusItem(
 }
 
 @Composable
-internal fun LiveReasoningItem(liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>) {
+internal fun LiveReasoningItem(
+    liveState: kotlinx.coroutines.flow.StateFlow<LiveStreamState>,
+    /** Setting "Expand thinking blocks": thinking starts expanded. */
+    thinkingExpandedByDefault: Boolean = false,
+) {
     val live by liveState.collectAsStateWithLifecycle()
     // The setting controls reasoning summaries everywhere; the LIVE block ignored it,
     // so reasoning appeared even with the toggle off.
@@ -74,6 +82,7 @@ internal fun LiveReasoningItem(liveState: kotlinx.coroutines.flow.StateFlow<Live
             // The live section also stays mounted for a short `pendingPersist`
             // window after a step ends; the caret must not keep blinking then.
             streaming = live.streaming,
+            expandedByDefault = thinkingExpandedByDefault,
         )
     }
 }
@@ -356,7 +365,13 @@ internal fun LiveReasoningBubble(
     agent: String?,
     model: String?,
     streaming: Boolean = true,
+    /** Start expanded; false collapses the streamed thinking to its header. */
+    expandedByDefault: Boolean = false,
 ) {
+    // Collapsible like the historical thinking block, so a long reasoning stream
+    // does not push the answer off screen. The setting only decides the DEFAULT;
+    // tapping the header toggles it for this turn.
+    var expanded by remember(expandedByDefault) { mutableStateOf(expandedByDefault) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start,
@@ -382,20 +397,50 @@ internal fun LiveReasoningBubble(
                         // bubble grow smoothly instead of jumping a line at a time.
                         .animateContentSize(),
             ) {
-                (agent ?: model)?.let {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                ) {
+                    (agent ?: model)?.let {
+                        Text(
+                            text = listOfNotNull(agent, model).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (streaming && !expanded) StreamingCaret()
                     Text(
-                        text = listOfNotNull(agent, model).joinToString(" · "),
+                        text =
+                            stringResource(
+                                if (expanded) R.string.thinking_expanded else R.string.thinking_collapsed,
+                            ),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier.clickable { expanded = !expanded }.padding(horizontal = 4.dp),
                     )
                 }
-                androidx.compose.foundation.text.selection.SelectionContainer {
-                    MarkdownText(
-                        text = text,
-                        modifier = Modifier.animateContentSize(),
+                if (expanded) {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        MarkdownText(
+                            text = text,
+                            modifier = Modifier.animateContentSize(),
+                        )
+                    }
+                    if (streaming) StreamingCaret()
+                } else {
+                    // Collapsed: still show the "Thinking" label so the row is not
+                    // mistaken for an empty card.
+                    Text(
+                        text = stringResource(R.string.thinking),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                if (streaming) StreamingCaret()
             }
         }
     }
