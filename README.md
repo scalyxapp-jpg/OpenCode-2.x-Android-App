@@ -113,6 +113,8 @@ After installing, open the app and enter your OpenCode server address — see
   compare answer, time and cost side by side, then continue in the winner.
 - **Offline outbox** — a prompt typed while the server is unreachable is kept and
   delivered automatically when it comes back (per session, ordered, with backoff).
+- **Prompt history** — recall what you sent before (this session or all), insert it into
+  the composer and edit, queue or race it.
 - **Permissions & questions** — approve/deny tool permissions (or auto-accept),
   answer agent questions with the server's own field types, and answer a blocked
   permission straight from the notification.

@@ -514,4 +514,11 @@
     <string name="outbox_discard" formatted="false">Discard all</string>
     <string name="outbox_hint" formatted="false">%1$d waiting — sent automatically once the server is reachable</string>
     <string name="outbox_gave_up" formatted="false">Giving up after %1$d attempts: %2$s</string>
+    <!-- Prompt history (TUI parity: recall what was sent before) -->
+    <string name="history_title" formatted="false">Prompt history</string>
+    <string name="history_empty" formatted="false">No prompts sent yet</string>
+    <string name="history_search" formatted="false">Search prompts</string>
+    <string name="history_scope_session" formatted="false">This session</string>
+    <string name="history_scope_all" formatted="false">All sessions</string>
+    <string name="history_open" formatted="false">Prompt history</string>
 </resources>

@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.14] - 2026-10-13
+
+### Added
+
+- **Prompt-History (TUI-Parität).** Die TUI merkt sich gesendete Prompts und holt sie mit
+  den Pfeiltasten zurück; auf einem Touchgerät gibt es dafür jetzt einen
+  **History-Button im Composer**, der erscheint, solange das Feld **leer** ist (also genau
+  dann, wenn Zurückholen sinnvoll ist — und nie mit dem Queue-Button konkurriert, der beim
+  Tippen auftaucht):
+  - Liste **neueste zuerst**, ein Eintrag pro verschiedenem Prompt, umschaltbar zwischen
+    **dieser Session** und **allen Sessions**, mit Suche (Groß-/Kleinschreibung egal).
+  - Auswahl **fügt in den Composer ein** (TUI-Verhalten: zurückholen, nicht senden) — der
+    Prompt kann also bearbeitet, eingereiht oder als Aufgabe eines **Model Race** genutzt
+    werden.
+  - Aufgezeichnet wird, wenn der Server einen Prompt akzeptiert: normaler Send, Queue-Send
+    und Outbox-Zustellung. **Cap 100**, persistent, und ein erneut gesendeter neuester
+    Prompt **rutscht nach oben statt sich zu duplizieren**.
+  - Regeln und Speicherformat sind pur und getestet (`PromptHistoryPolicy`,
+    `PromptHistoryCodec`): Blank wird ignoriert, gleicher Text in einer anderen Session ist
+    ein eigener Eintrag, die Anzeige ist dedupliziert und gefiltert.
+
+### Added (tests)
+
+- `PromptHistoryPolicyTest` (7 Fälle: Aufnehmen, Dedupe des neuesten, session-übergreifend,
+  Blank, Cap, Sichtbarkeit/Scope, Suche) und `PromptHistoryCodecTest` (Round-trip;
+  kaputtes JSON → leere History).
+
 ## [1.5.13] - 2026-10-13
 
 ### Added
@@ -768,7 +795,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.13...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.14...HEAD
+[1.5.14]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.13...v1.5.14
 [1.5.13]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...v1.5.13
 [1.5.12]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...v1.5.12
 [1.5.11]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...v1.5.11

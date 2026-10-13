@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.ContentCopy
@@ -182,6 +183,8 @@ internal class ComposerActions(
      * (POST /prompt with `delivery:"queue"`).
      */
     val onQueue: () -> Unit = {},
+    /** Opens the prompt history (TUI parity). */
+    val onHistory: () -> Unit = {},
     /** Offline outbox: try to deliver the waiting prompts now. */
     val onFlushOutbox: () -> Unit = {},
     /** Offline outbox: drop them. */
@@ -235,6 +238,7 @@ internal fun Composer(
     val onSend = actions.onSend
     val onQueue = actions.onQueue
     val onSteer = actions.onSteer
+    val onHistory = actions.onHistory
     val onFlushOutbox = actions.onFlushOutbox
     val onClearOutbox = actions.onClearOutbox
     val onInterrupt = actions.onInterrupt
@@ -705,6 +709,31 @@ internal fun Composer(
                                     tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
+                        }
+                    }
+                    // Prompt history: offered while the field is EMPTY, which is when
+                    // recalling something makes sense (and it never competes with the
+                    // queue button, which appears while typing).
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !composerHasText && !isUploading,
+                        enter =
+                            androidx.compose.animation.fadeIn(
+                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                            ),
+                        exit =
+                            androidx.compose.animation.fadeOut(
+                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                            ),
+                    ) {
+                        IconButton(
+                            onClick = onHistory,
+                            modifier = Modifier.size(40.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = stringResource(R.string.history_open),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
                     val actionActive = composerHasText || isGenerating

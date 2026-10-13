@@ -150,6 +150,14 @@ One calm row: attachments, input, pickers, then the action buttons.
 - **`/` command picker** — lists the server's commands and the locally implemented
   built-ins; picking one inserts its template (see §6).
 - **`@` context picker** — insert file paths as context.
+- **Prompt history** (TUI parity) — the composer's history button appears while the field
+  is **empty** (the TUI's arrow-key recall) and opens what was sent before: newest first,
+  one row per distinct prompt, scoped to **this session** or **all sessions**, searchable.
+  Picking one **inserts** it into the composer — so it can be edited, queued, or used as
+  the task of a model race — instead of sending it immediately, exactly like the TUI.
+  History is recorded when the server accepts a prompt (normal send, queued send and the
+  offline outbox flush), capped at 100 entries, persisted, and re-sending the newest
+  prompt moves it up rather than duplicating it.
 - **IME aware** — the keyboard inset is consumed once, so the composer does not
   jump; the send key is wired to send.
 

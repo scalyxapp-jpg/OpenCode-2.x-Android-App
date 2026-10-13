@@ -23,12 +23,15 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
+import com.opencode.android.data.PromptHistoryEntry
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -824,6 +827,97 @@ internal fun SkillsDialog(
             androidx.compose.material3.TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.close))
             }
+        },
+    )
+}
+
+/**
+ * Prompt history (TUI parity: the TUI recalls previous prompts with the arrow keys).
+ *
+ * Lists what was sent before — newest first, one row per distinct prompt — scoped to
+ * this session or across all of them, searchable. Picking one inserts it into the
+ * composer (so it can be edited or raced) instead of sending it immediately, which is
+ * what the TUI does.
+ */
+@Composable
+internal fun PromptHistoryDialog(
+    entries: List<PromptHistoryEntry>,
+    sessionId: String?,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    var allSessions by remember { mutableStateOf(false) }
+    val visible =
+        remember(entries, query, allSessions, sessionId) {
+            com.opencode.android.data.PromptHistoryPolicy.visible(
+                entries = entries,
+                sessionId = if (allSessions) null else sessionId,
+                query = query,
+            )
+        }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.history_title)) },
+        text = {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp),
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall)) {
+                    FilterChip(
+                        selected = !allSessions,
+                        onClick = { allSessions = false },
+                        label = { Text(stringResource(R.string.history_scope_session)) },
+                    )
+                    FilterChip(
+                        selected = allSessions,
+                        onClick = { allSessions = true },
+                        label = { Text(stringResource(R.string.history_scope_all)) },
+                    )
+                }
+                if (entries.isEmpty()) {
+                    EmptyState(title = stringResource(R.string.history_empty), compact = true)
+                    return@Column
+                }
+                PickerSearchField(
+                    query = query,
+                    onQueryChange = { query = it },
+                    placeholder = stringResource(R.string.history_search),
+                    modifier = Modifier.padding(vertical = MaterialTheme.spacing.small),
+                )
+                LazyColumn {
+                    itemsIndexed(visible, key = { index, entry -> "${entry.at}#$index" }) { _, entry ->
+                        Column(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onPick(entry.text) }
+                                    .padding(vertical = MaterialTheme.spacing.small),
+                        ) {
+                            Text(
+                                text = entry.text,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text =
+                                    com.opencode.android.util
+                                        .RelativeTime.label(entry.at, System.currentTimeMillis())
+                                        ?: "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
     )
 }

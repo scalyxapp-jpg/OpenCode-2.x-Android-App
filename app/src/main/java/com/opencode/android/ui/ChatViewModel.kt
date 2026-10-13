@@ -38,6 +38,8 @@ import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SkillEntry
 import com.opencode.android.data.OutboxItem
+import com.opencode.android.data.PromptHistoryEntry
+import com.opencode.android.data.PromptHistoryStore
 import com.opencode.android.data.OutboxPolicy
 import com.opencode.android.data.OutboxStore
 import com.opencode.android.ui.race.RaceController
@@ -179,6 +181,9 @@ data class ChatUiState(
     // "/mcp": configured MCP servers (name + status), alphabetical.
     val mcpServers: List<McpEntry> = emptyList(),
     val mcpDialogVisible: Boolean = false,
+    /** Prompt history (TUI parity): the composer can recall what was sent before. */
+    val historyDialogVisible: Boolean = false,
+    val history: List<PromptHistoryEntry> = emptyList(),
     /**
      * Prompts that could not be sent because the server was unreachable; they are
      * delivered automatically once it is back (offline outbox).
@@ -1236,6 +1241,42 @@ class ChatViewModel
 
         fun refreshRace() = raceController.refresh()
 
+        // --- prompt history -------------------------------------------------
+
+        /** Opens the history list (newest first, filterable by session). */
+        fun openHistory() {
+            _uiState.update {
+                it.copy(historyDialogVisible = true, history = PromptHistoryStore.state.value)
+            }
+        }
+
+        fun closeHistory() {
+            _uiState.update { it.copy(historyDialogVisible = false) }
+        }
+
+        /** Inserts a recalled prompt into the composer (the TUI recalls, it does not send). */
+        fun useHistoryPrompt(text: String) {
+            _uiState.update {
+                it.copy(
+                    historyDialogVisible = false,
+                    inputText = text,
+                    statusError = null,
+                )
+            }
+        }
+
+        /** Records a prompt that the server accepted. */
+        private fun recordHistory(
+            sessionId: String,
+            text: String,
+        ) {
+            if (text.isBlank()) return
+            PromptHistoryStore.record(text = text, sessionId = sessionId)
+            if (_uiState.value.historyDialogVisible) {
+                _uiState.update { it.copy(history = PromptHistoryStore.state.value) }
+            }
+        }
+
         // --- offline outbox -------------------------------------------------
 
         private fun enqueueOutbox(
@@ -1305,6 +1346,7 @@ class ChatViewModel
                             when (result) {
                                 PromptSendResult.Ok -> {
                                     OutboxStore.remove(item.id)
+                                    recordHistory(session.id, item.text)
                                     sent++
                                 }
 
@@ -3234,6 +3276,7 @@ class ChatViewModel
                             )
                         when (val result = promptSender.send(session.id, body)) {
                             PromptSendResult.Ok -> {
+                                recordHistory(session.id, rawText)
                                 UserMessages.post(R.string.queued_message_added)
                             }
 
@@ -3636,6 +3679,7 @@ class ChatViewModel
                         lastFailureWasSend = false
                         _uiState.update { it.copy(guardConflict = false) }
                         AppLog.d(APP_LOG_TAG) { "sendMessage: API ok" }
+                        recordHistory(session.id, rawText)
                         refreshMessages(session.id)
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         // A session switch cancels this job. The rollback must still

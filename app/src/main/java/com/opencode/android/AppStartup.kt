@@ -9,6 +9,7 @@ import com.opencode.android.data.LastSessionStore
 import com.opencode.android.data.MessageCache
 import com.opencode.android.data.ModelVisibilityStore
 import com.opencode.android.data.OutboxStore
+import com.opencode.android.data.PromptHistoryStore
 import com.opencode.android.data.RecentModelsStore
 import com.opencode.android.data.WidgetStateStore
 import com.opencode.android.util.APP_LOG_TAG
@@ -79,6 +80,7 @@ object AppStartup {
                 WidgetStateStore.init(app)
                 // Offline outbox: prompts typed while the server was unreachable.
                 OutboxStore.init(app)
+                PromptHistoryStore.init(app)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "AppStartup init failed: ${e.message}")
                 _lastError.value = e.message ?: e::class.java.simpleName

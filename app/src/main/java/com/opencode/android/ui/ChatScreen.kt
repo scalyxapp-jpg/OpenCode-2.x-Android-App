@@ -415,6 +415,14 @@ internal fun ChatScreen(
                     }
                     // "/mcp" dialog (web parity: title "MCPs", "N of M enabled",
                     // search, per-server switch, auth for needs-auth servers).
+                    if (uiState.historyDialogVisible) {
+                        PromptHistoryDialog(
+                            entries = uiState.history,
+                            sessionId = uiState.session?.id,
+                            onPick = viewModel::useHistoryPrompt,
+                            onDismiss = viewModel::closeHistory,
+                        )
+                    }
                     if (uiState.raceDialogVisible) {
                         RaceDialog(
                             models = uiState.models,
@@ -898,6 +906,7 @@ internal fun ChatScreen(
                                             onSend = viewModel::sendMessage,
                                             onQueue = viewModel::queueMessage,
                                             onSteer = viewModel::steerMessage,
+                                            onHistory = viewModel::openHistory,
                                             onFlushOutbox = viewModel::flushOutbox,
                                             onClearOutbox = viewModel::clearOutbox,
                                             onStopRace = viewModel::stopRace,
@@ -1033,6 +1042,8 @@ internal class ChatActions(
     val onQueue: () -> Unit = {},
     /** Steers the running turn with the composer's text (web: Steer). */
     val onSteer: () -> Unit = {},
+    /** Opens the prompt history (TUI parity). */
+    val onHistory: () -> Unit = {},
     /** Offline outbox: deliver the waiting prompts now. */
     val onFlushOutbox: () -> Unit = {},
     /** Offline outbox: drop them. */
@@ -1971,6 +1982,7 @@ internal fun SessionTab(
                         onSend = onSend,
                         onQueue = actions.onQueue,
                         onSteer = actions.onSteer,
+                        onHistory = actions.onHistory,
                         onFlushOutbox = actions.onFlushOutbox,
                         onClearOutbox = actions.onClearOutbox,
                         onInterrupt = onInterrupt,
