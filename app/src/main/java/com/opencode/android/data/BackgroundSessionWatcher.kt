@@ -174,11 +174,20 @@ object BackgroundSessionWatcher {
         val context = context ?: return
         val title = sessionTitle(sessionId) ?: context.getString(R.string.app_name)
         val answer = lastAssistantAnswer(sessionId)
-        val body =
+        val base =
             when {
                 turnFailed -> context.getString(R.string.notif_failed_text)
                 answer.isNotBlank() -> answer
                 else -> context.getString(R.string.notif_finished_text)
+            }
+        // A prompt may still be waiting in the queue; saying so turns the summary
+        // into an actionable heads-up ("2 queued") instead of a dead end.
+        val queued = queuedCount(sessionId)
+        val body =
+            if (queued > 0) {
+                base + " · " + context.getString(R.string.notif_finished_queued, queued)
+            } else {
+                base
             }
         Notifier.agentFinished(
             sessionId = sessionId,
@@ -194,6 +203,14 @@ object BackgroundSessionWatcher {
             turnKey = "$sessionId:$lastMessageId",
         )
     }
+
+    /** How many user prompts are still waiting in the queue (best effort). */
+    private suspend fun queuedCount(sessionId: String): Int =
+        try {
+            api?.getInbox(sessionId)?.count { it.type == "user" } ?: 0
+        } catch (e: Exception) {
+            0
+        }
 
     /** Heading of the notification: the session's own title, never the raw id. */
     private suspend fun sessionTitle(sessionId: String): String? =

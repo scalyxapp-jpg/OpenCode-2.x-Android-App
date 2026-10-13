@@ -207,6 +207,8 @@ internal fun Composer(
     uploadTotal: Int = 0,
     uploadingUris: Set<String> = emptySet(),
     statusError: String? = null,
+    /** Prompts waiting in the session queue (web shows "{{count}} queued"). */
+    queuedCount: Int = 0,
     showAgent: Boolean = true,
     agents: List<Agent>,
     models: List<Model>,
@@ -651,20 +653,30 @@ internal fun Composer(
                                 animationSpec = com.opencode.android.ui.theme.Motion.effects(),
                             ),
                     ) {
-                        IconButton(
-                            onClick = {
-                                haptics.performHapticFeedback(
-                                    androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                )
-                                onQueue()
+                        androidx.compose.material3.BadgedBox(
+                            badge = {
+                                if (queuedCount > 0) {
+                                    androidx.compose.material3.Badge {
+                                        Text("$queuedCount")
+                                    }
+                                }
                             },
-                            modifier = Modifier.size(40.dp),
                         ) {
-                            Icon(
-                                Icons.Default.PlaylistAdd,
-                                contentDescription = stringResource(R.string.queue_send),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
+                            IconButton(
+                                onClick = {
+                                    haptics.performHapticFeedback(
+                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                                    )
+                                    onQueue()
+                                },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.PlaylistAdd,
+                                    contentDescription = stringResource(R.string.queue_send),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
                         }
                     }
                     val actionActive = composerHasText || isGenerating
@@ -745,6 +757,17 @@ internal fun Composer(
                             }
                         }
                     }
+                }
+                // Queue status line: the queued prompts live in the transcript, but
+                // the count belongs next to the composer (the web shows
+                // "{{count}} queued" the same way).
+                if (queuedCount > 0) {
+                    Text(
+                        text = stringResource(R.string.queue_count, queuedCount),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = MaterialTheme.spacing.small),
+                    )
                 }
                 // One centered selector row; widths are bounded so the chips
                 // never wrap or overlap on a phone.

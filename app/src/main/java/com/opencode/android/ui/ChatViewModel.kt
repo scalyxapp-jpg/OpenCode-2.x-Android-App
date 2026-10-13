@@ -33,6 +33,8 @@ import com.opencode.android.domain.ProviderEntry
 import com.opencode.android.domain.QuestionReplyRequest
 import com.opencode.android.domain.RevertRequest
 import com.opencode.android.domain.InboxItem
+import com.opencode.android.domain.InboxPayload
+import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
@@ -2881,15 +2883,33 @@ class ChatViewModel
             rawText: String,
         ) {
             val (providerId, modelId) = parseModelRef(_uiState.value.selectedModel)
+            val messageId = generateOpenCodeId("msg")
+            // Optimistic queue card: the round trip for the inbox reload would
+            // otherwise leave the composer empty with nothing visible. The reload
+            // afterwards reconciles by id (same id: the server echoes it).
+            val optimistic =
+                InboxItem(
+                    id = messageId,
+                    sessionId = session.id,
+                    type = "user",
+                    time = MessageTime(created = System.currentTimeMillis()),
+                    payload = InboxPayload(text = rawText),
+                    delivery = QUEUE_DELIVERY,
+                )
             _uiState.update {
-                it.copy(inputText = "", attachments = emptyList(), statusError = null)
+                it.copy(
+                    inputText = "",
+                    attachments = emptyList(),
+                    statusError = null,
+                    queuedMessages = it.queuedMessages.filterNot { item -> item.id == messageId } + optimistic,
+                )
             }
             sendJob =
                 viewModelScope.launch {
                     try {
                         val body =
                             buildPromptAsyncRequest(
-                                messageId = generateOpenCodeId("msg"),
+                                messageId = messageId,
                                 partId = generateOpenCodeId("prt"),
                                 agent = _uiState.value.selectedAgent,
                                 providerId = providerId,
@@ -2905,12 +2925,14 @@ class ChatViewModel
 
                             PromptSendResult.Conflict -> {
                                 UserMessages.post(R.string.queue_action_failed)
+                                dropOptimisticQueued(messageId)
                                 restoreQueuedInput(rawText)
                             }
 
                             is PromptSendResult.Failed -> {
                                 AppLog.e(APP_LOG_TAG, "queueMessage failed: ${result.message}")
                                 UserMessages.post(R.string.could_not_send, result.message)
+                                dropOptimisticQueued(messageId)
                                 restoreQueuedInput(rawText)
                             }
                         }
@@ -2919,6 +2941,7 @@ class ChatViewModel
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "queueMessage failed: ${e.message}")
                         UserMessages.post(R.string.could_not_send, "${e.message}")
+                        dropOptimisticQueued(messageId)
                         restoreQueuedInput(rawText)
                     } finally {
                         // The server owns the queue: read it back (delivery may keep
@@ -2926,6 +2949,13 @@ class ChatViewModel
                         loadInbox(session.id)
                     }
                 }
+        }
+
+        /** Removes the optimistic queue card of a send that did not reach the server. */
+        private fun dropOptimisticQueued(messageId: String) {
+            _uiState.update { current ->
+                current.copy(queuedMessages = current.queuedMessages.filterNot { it.id == messageId })
+            }
         }
 
         /** Gives the text back to the composer when queueing failed. */

@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -372,6 +374,8 @@ internal fun LiveReasoningBubble(
     // does not push the answer off screen. The setting only decides the DEFAULT;
     // tapping the header toggles it for this turn.
     var expanded by remember(expandedByDefault) { mutableStateOf(expandedByDefault) }
+    val expandedLabel = stringResource(R.string.thinking_expanded)
+    val collapsedLabel = stringResource(R.string.thinking_collapsed)
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.Start,
@@ -421,7 +425,15 @@ internal fun LiveReasoningBubble(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier =
-                            Modifier.clickable { expanded = !expanded }.padding(horizontal = 4.dp),
+                            Modifier
+                                .clickable { expanded = !expanded }
+                                .padding(horizontal = 4.dp)
+                                .semantics {
+                                    // Same announcement as the historical block, so
+                                    // screen readers can tell open from closed.
+                                    stateDescription =
+                                        if (expanded) expandedLabel else collapsedLabel
+                                },
                     )
                 }
                 if (expanded) {

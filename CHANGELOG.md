@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.5.9] - 2026-10-13
 
 ### Added
 
@@ -31,6 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Überlänge **animiert durch** (`basicMarquee`, unendlich mit kurzer Start- und
   Wiederholungspause, 24 dp Abstand zwischen den Durchläufen). Kurze Titel bleiben
   stehen — animiert wird nur, was wirklich überläuft.
+
+### Changed
+
+- **Message-Queue weiter ausgebaut.** Sie war funktional, aber ohne Rückmeldung:
+  - Die eingereihte Nachricht erscheint **sofort** als Queue-Karte (die Id der
+    Anfrage, damit der folgende Inbox-Read zusammenführt statt zu doppeln); schlägt
+    das Senden fehl, verschwindet die Karte wieder und der Text steht im Composer.
+  - **Zähler an zwei Stellen**: ein **Badge am Queue-Button** und eine Zeile
+    **„N queued“** im Composer (Wortlaut des Webs: „{{count}} queued“), plus ein
+    `N queued`-Kopf über den Queue-Karten im Verlauf — die Queue ist damit nie
+    unsichtbare Chrome.
+  - Die Deep-Link-Scrollrechnung berücksichtigt den neuen Kopf (Springen zur
+    Nachricht bleibt exakt).
+- **End-Summary nennt die Queue**: „… · 2 queued“, wenn nach dem Turn noch Prompts
+  warten (`notif_finished_queued`) — die Benachrichtigung ist damit ein Hinweis mit
+  nächstem Schritt statt einer Sackgasse.
+- **Live-„Thinking…" meldet seinen Zustand** an Screenreader (`stateDescription`
+  wie beim historischen Block).
 
 ### Documentation
 
@@ -600,7 +618,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...HEAD
+[1.5.9]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.5...v1.5.6

@@ -159,12 +159,17 @@ The web composer queues a follow-up with **Ctrl+Enter** instead of interrupting
 the running turn. The app mirrors that exactly (verified against the live server):
 
 - **Queue button** — visible only while you have typed something, sitting left of
-  send/stop. It posts `/api/session/{id}/prompt` with `"delivery":"queue"` and
-  **does not interrupt** the running turn. If the request fails, your text comes
-  back into the composer instead of being lost.
-- **Queued cards** — queued prompts render in the transcript with the web's
-  wording: a **Queued** badge (or **Steer** once released), the prompt text, and
-  the two actions the server supports:
+  send/stop, with a **count badge** as soon as prompts are waiting. It posts
+  `/api/session/{id}/prompt` with `"delivery":"queue"` and **does not interrupt**
+  the running turn. If the request fails, the optimistic card disappears and your
+  text comes back into the composer instead of being lost.
+- **Immediate feedback** — the queued prompt is shown the moment the server accepts
+  it (the request's own id, so the following inbox read reconciles instead of
+  duplicating), and the composer carries a **`N queued`** line next to the pickers
+  so the queue is never invisible.
+- **Queued cards** — queued prompts render in the transcript under an `N queued`
+  header with the web's wording: a **Queued** badge (or **Steer** once released),
+  the prompt text, and the two actions the server supports:
     - **Steer** — deliver it now (`PATCH …/inbox/{id}` `{"delivery":"steer"}`).
     - **Remove** — drop it (`DELETE …/inbox/{id}`).
 - **Delivery** is server-side: when the running turn ends the oldest queued prompt
@@ -299,9 +304,10 @@ focused app stays quiet):
   (`Step 2 · Shell · ls -la, Read · ChatViewModel.kt`). Steps without any tool are
   skipped once something was already reported.
 - **Finished summary** — when the turn ends, with the answer itself (first line,
-  capped) or the error text. It replaces that session's last progress line instead
-  of stacking next to it, and exactly one summary per turn is posted even though
-  several producers report the same turn end.
+  capped) or the error text, plus **`· N queued`** when prompts are still waiting.
+  It replaces that session's last progress line instead of stacking next to it, and
+  exactly one summary per turn is posted even though several producers report the
+  same turn end.
 - **Tap → session _and_ message.** Notifications carry the session id and the
   message id; the chat scrolls once to that message (older, not-loaded messages
   simply leave you at the right session).

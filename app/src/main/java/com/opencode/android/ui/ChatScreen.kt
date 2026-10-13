@@ -1482,7 +1482,8 @@ internal fun SessionTab(
                                 (if (uiState.isGenerating || uiState.isCompacting) 1 else 0) + 3
                             } else {
                                 0
-                            }) + uiState.queuedMessages.size
+                            }) +
+                                (if (uiState.queuedMessages.isNotEmpty()) uiState.queuedMessages.size + 1 else 0)
                         // A tapped background notification names the message it
                         // describes. Scroll there once the list contains it; a
                         // message outside the loaded page simply stays put (the
@@ -1560,6 +1561,23 @@ internal fun SessionTab(
                                 // the live items, so in the reversed layout they sit
                                 // just above them: the newest thing that has not run
                                 // yet. The server delivers them when the turn ends.
+                                if (uiState.queuedMessages.isNotEmpty()) {
+                                    item(key = "queue-header") {
+                                        Text(
+                                            text =
+                                                stringResource(
+                                                    R.string.queue_count,
+                                                    uiState.queuedMessages.size,
+                                                ),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier =
+                                                Modifier.padding(
+                                                    start = MaterialTheme.spacing.extraSmall,
+                                                ),
+                                        )
+                                    }
+                                }
                                 itemsIndexed(
                                     items = uiState.queuedMessages,
                                     key = { _, item -> "queue-${item.id ?: item.hashCode()}" },
@@ -1922,6 +1940,7 @@ internal fun SessionTab(
             uploadTotal = uiState.uploadTotal,
             uploadingUris = uiState.uploadingUris,
             statusError = uiState.statusError,
+            queuedCount = uiState.queuedMessages.size,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,
             models = uiState.models,

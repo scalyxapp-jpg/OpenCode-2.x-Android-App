@@ -445,4 +445,6 @@
     <string name="settings_hide_session_guard" formatted="false">Hide Session Guard in chat</string>
     <string name="settings_hide_session_guard_sub" formatted="false">Hide the guard\'s status row and actions in the chat. The guard keeps working — only the chrome disappears.</string>
     <string name="settings_hide_session_guard_unavailable" formatted="false">Only available when a Session Guard is detected</string>
+    <string name="queue_count" formatted="false">%1$d queued</string>
+    <string name="notif_finished_queued" formatted="false">%1$d queued</string>
 </resources>
