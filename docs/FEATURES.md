@@ -353,10 +353,14 @@ new device), and **reset all settings**.
 
 The two per-part switches and the thinking switch share one rule: they decide the
 **default** state, and tapping the block's header always toggles it for that
-message/turn. "Hide Session Guard in chat" is offered **only when a guard was
-detected** (the health probe answered); turning it on removes the guard's status
-row and its dialog from the chat while the guard keeps pinning the selection —
-only the chrome disappears.
+message/turn (the thinking switch needs "Show reasoning summaries" for thinking to
+appear at all — the subtitle says so).
+
+"Hide Session Guard in chat" is always operable, and its guard-only effect holds by
+construction: the chat renders guard chrome only when a guard actually exists, so
+switching it on without a guard hides nothing (the subtitle then says "No Session
+Guard detected right now"). With a guard it removes the status row and its dialog
+while the guard keeps pinning the selection — only the chrome disappears.
 
 **Servers** — the stored backends, the active one, switching (clears caches), the
 guard's live metrics, and the guard token field (shown in full width so it is not

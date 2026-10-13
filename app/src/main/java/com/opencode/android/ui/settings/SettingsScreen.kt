@@ -176,6 +176,16 @@ internal fun GeneralTab() {
                 onCheckedChange = { AppSettingsStore.setEditToolPartsExpanded(it) },
             )
         }
+        item {
+            // Same shape as the two tool switches above: decides whether
+            // "Thinking…" starts expanded, for the live stream and for history.
+            SettingSwitch(
+                title = stringResource(R.string.settings_expand_thinking),
+                subtitle = stringResource(R.string.settings_expand_thinking_sub),
+                checked = settings.expandThinkingBlocks,
+                onCheckedChange = { AppSettingsStore.setExpandThinkingBlocks(it) },
+            )
+        }
 
         item { SectionHeader(stringResource(R.string.settings_appearance)) }
         item {
@@ -293,7 +303,10 @@ internal fun GeneralTab() {
         }
 
         item { SectionHeader(stringResource(R.string.settings_session_guard)) }
-        item { SessionGuardSection() }
+        // The collected settings are forwarded: reading `AppSettingsStore.state.value`
+        // inside the section never recomposed, so the switch below could not be
+        // toggled (it wrote the preference but stayed visually off).
+        item { SessionGuardSection(settings) }
         item {
             SettingSwitch(
                 stringResource(R.string.settings_auto_adopt),
@@ -526,7 +539,7 @@ private fun ServerSection() {
 }
 
 @Composable
-private fun SessionGuardSection() {
+private fun SessionGuardSection(settings: AppSettingsStore.AppSettings) {
     val backendSession = com.opencode.android.ui.LocalBackendSession.current
     val health by produceState<com.opencode.android.domain.SessionGuardHealth?>(initialValue = null) {
         value =
@@ -562,10 +575,11 @@ private fun SessionGuardSection() {
                 } else {
                     stringResource(R.string.settings_hide_session_guard_unavailable)
                 },
-            checked = AppSettingsStore.state.value.hideSessionGuardInChat,
-            // Enabled with a detected guard — and also when the switch is already
-            // ON, so a guard that disappears cannot leave a stuck setting.
-            enabled = health != null || AppSettingsStore.state.value.hideSessionGuardInChat,
+            checked = settings.hideSessionGuardInChat,
+            // Always operable. The guard-only effect holds by CONSTRUCTION (the chat
+            // renders guard chrome only when a guard exists), so disabling the switch
+            // for a missing guard only made it look broken — and a guard that comes
+            // later should not require finding this screen first.
             onCheckedChange = { AppSettingsStore.setHideSessionGuardInChat(it) },
         )
         health?.metrics?.let { metrics ->

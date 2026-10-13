@@ -74,8 +74,12 @@ internal fun LiveReasoningItem(
 ) {
     val live by liveState.collectAsStateWithLifecycle()
     // The setting controls reasoning summaries everywhere; the LIVE block ignored it,
-    // so reasoning appeared even with the toggle off.
-    val showReasoningLive = com.opencode.android.data.AppSettingsStore.state.value.showReasoningSummaries
+    // so reasoning appeared even with the toggle off. Collected (not read as
+    // `.value`): flipping the switch in Settings must reach the chat that is
+    // already composed, otherwise it looks like the setting does nothing.
+    val appSettings by
+        com.opencode.android.data.AppSettingsStore.state.collectAsStateWithLifecycle()
+    val showReasoningLive = appSettings.showReasoningSummaries
     if (showReasoningLive && live.reasoning.isNotBlank()) {
         LiveReasoningBubble(
             text = live.reasoning,
