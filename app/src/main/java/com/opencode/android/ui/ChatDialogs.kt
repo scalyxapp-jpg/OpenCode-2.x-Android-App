@@ -694,12 +694,19 @@ internal fun QuestionRequestCard(
                         onClick = {
                             val answers =
                                 items.indices.map { qi ->
-                                    val labels =
+                                    // Server VALUES, not labels: the reply is validated
+                                    // against `Form.Option.value`, and label ≠ value for
+                                    // most options (that mismatch surfaced as "the
+                                    // question has expired" while nothing was sent).
+                                    val values =
                                         (selections[qi] ?: emptySet())
                                             .sorted()
-                                            .map { items[qi].options[it].label }
+                                            .map { index ->
+                                                val option = items[qi].options[index]
+                                                option.value ?: option.label
+                                            }
                                     val custom = customs[qi]?.takeIf { it.isNotBlank() }
-                                    if (custom != null) labels + custom else labels
+                                    if (custom != null) values + custom else values
                                 }
                             onAnswer(question.id, answers)
                         },

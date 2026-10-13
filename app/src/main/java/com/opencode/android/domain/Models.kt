@@ -240,6 +240,14 @@ data class Part(
 @Immutable
 data class QuestionOption(
     val label: String,
+    /**
+     * The value the server expects in an answer (`Form.Option.value`).
+     *
+     * The answer is validated against this, NOT against the label — sending labels
+     * produced `FormInvalidAnswerError`, which surfaced to the user as "the question
+     * has expired" while the answer never arrived. Falls back to the label.
+     */
+    val value: String? = null,
     val description: String? = null,
 )
 

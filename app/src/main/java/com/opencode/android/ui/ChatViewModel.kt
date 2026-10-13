@@ -1392,6 +1392,9 @@ class ChatViewModel
             onDone: (Boolean) -> Unit,
         ) {
             val session = _uiState.value.session ?: return
+            // Remembered so a FAILED reply can put the card back: dropping it
+            // optimistically and never restoring it lost the user's answers.
+            val asked = _uiState.value.pendingQuestions.firstOrNull { it.id == requestId }
             // Optimistic: drop the card immediately so the buttons cannot be
             // double-tapped and the UI never looks stuck while the reply is sent.
             _uiState.update { current ->
@@ -1402,25 +1405,8 @@ class ChatViewModel
                 )
             }
             viewModelScope.launch {
-                // The global reply route reaches the server's pending-question
-                // store; the session-scoped route 404s on some builds. Try the
-                // global form first and fall back.
-                val body = QuestionReplyRequest(answers)
-                val ok =
-                    try {
-                        api.replyQuestion(requestId, body).close()
-                        true
-                    } catch (e: Exception) {
-                        AppLog.e(APP_LOG_TAG, "replyQuestion (global) failed: ${e.message}")
-                        try {
-                            api.replySessionQuestion(session.id, requestId, body).close()
-                            true
-                        } catch (e2: Exception) {
-                            AppLog.e(APP_LOG_TAG, "replySessionQuestion failed: ${e2.message}")
-                            false
-                        }
-                    }
-                if (ok) {
+                val failure = sendQuestionReply(session.id, requestId, answers)
+                if (failure == null) {
                     // Same symmetry as the permission path: without this the actionable
                     // notification stayed in the shade until a `question.resolved` event
                     // (which the server does not always emit).
@@ -1428,25 +1414,97 @@ class ChatViewModel
                     loadPendingQuestions()
                     refreshMessages(session.id)
                     onDone(true)
-                } else {
-                    // A stale/expired request must not leave the user stuck: say so
-                    // and re-sync the real list from the server.
-                    UserMessages.post(
-                        R.string.action_failed,
-                        "Could not send the answer — the question may have expired",
-                    )
+                    return@launch
+                }
+                val message = questionReplyMessage(failure)
+                AppLog.e(APP_LOG_TAG, "answerQuestion failed: ${failure.tag} ${failure.message}")
+                UserMessages.post(R.string.action_failed, message)
+                if (failure.tag == "FormAlreadySettledError") {
+                    // The card is genuinely obsolete: keep it removed and re-sync.
+                    com.opencode.android.data.Notifier.clearQuestion(requestId)
+                } else if (asked != null) {
+                    // Restore the card so the answer can be retried instead of being
+                    // retyped from scratch.
                     _uiState.update { current ->
                         if (current.session?.id != session.id) {
                             current
+                        } else if (current.pendingQuestions.any { it.id == asked.id }) {
+                            current
                         } else {
-                            current.copy(statusError = "Could not send the answer — the question may have expired")
+                            current.copy(pendingQuestions = current.pendingQuestions + asked)
                         }
                     }
-                    loadPendingQuestions()
-                    onDone(false)
                 }
+                _uiState.update { current ->
+                    if (current.session?.id != session.id) {
+                        current
+                    } else {
+                        current.copy(statusError = message)
+                    }
+                }
+                loadPendingQuestions()
+                onDone(false)
             }
         }
+
+        /**
+         * Sends a form reply, retrying once with the server's REAL pending form id.
+         *
+         * The question card may be built from an SSE event whose id is not the form id
+         * (`frm_…`); posting that id yielded `FormNotFoundError`, which the UI reported as
+         * "the question may have expired" although nothing had expired. The session-scoped
+         * route is tried first because the session is always known here.
+         */
+        private suspend fun sendQuestionReply(
+            sessionId: String,
+            requestId: String,
+            answers: List<List<String>>,
+        ): com.opencode.android.data.FormReplyException? {
+            val body = QuestionReplyRequest(answers)
+            var first: com.opencode.android.data.FormReplyException? =
+                try {
+                    api.replySessionQuestion(sessionId, requestId, body).close()
+                    return null
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: com.opencode.android.data.FormReplyException) {
+                    e
+                } catch (e: Exception) {
+                    com.opencode.android.data.FormReplyException(null, e.message ?: "reply failed")
+                }
+            if (first?.tag == "FormAlreadySettledError") return first
+            // Resolve the real pending form and retry ONCE.
+            val realId =
+                runCatching { api.getSessionQuestions(sessionId).data }
+                    .getOrNull()
+                    ?.takeIf { it.size == 1 }
+                    ?.first()
+                    ?.id
+                    ?.takeIf { it.isNotBlank() && it != requestId }
+            if (realId != null) {
+                first =
+                    try {
+                        api.replySessionQuestion(sessionId, realId, body).close()
+                        return null
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: com.opencode.android.data.FormReplyException) {
+                        e
+                    } catch (e: Exception) {
+                        com.opencode.android.data.FormReplyException(null, e.message ?: "reply failed")
+                    }
+            }
+            return first
+        }
+
+        /** Turns a rejected form reply into something the user can act on. */
+        private fun questionReplyMessage(failure: com.opencode.android.data.FormReplyException): String =
+            when (failure.tag) {
+                "FormAlreadySettledError" -> "This question was already answered or cancelled"
+                "FormNotFoundError" -> "This question is no longer pending on the server"
+                "FormInvalidAnswerError" -> "The answer was rejected: ${failure.message}"
+                else -> "Could not send the answer: ${failure.message}"
+            }
 
         fun rejectQuestion(
             requestId: String,

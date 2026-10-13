@@ -111,7 +111,16 @@ data class PermissionDecision(
 /** `POST /api/session/{id}/form/{fid}/reply` body. */
 @Serializable
 data class FormReplyBody(
-    val answer: Map<String, List<String>> = emptyMap(),
+    /**
+     * Field key → value, with the JSON type the server validates against
+     * (`Form.Value`): `string` wants a plain string, `multiselect` an array,
+     * `number`/`integer` a number and `boolean` a boolean.
+     *
+     * Everything used to be sent as an ARRAY, which the server rejects with
+     * "Expected string for form field: …" — the answer never arrived and the UI
+     * reported the question as expired.
+     */
+    val answer: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
 )
 
 /** A pending v2 permission request (`action`/`resources`, not `permission`). */

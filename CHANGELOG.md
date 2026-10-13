@@ -20,6 +20,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.2] - 2026-10-13
+
+### Fixed
+- **Frage-Antworten (question tool) kommen jetzt wirklich beim Server an.** Zwei Ursachen,
+  beide am laufenden Server verifiziert:
+  1. Der Server validiert die Antwort gegen den **JSON-Typ** des Feldes: `string` verlangt einen
+     **String**, `multiselect` ein **Array**, `number`/`integer` eine **Zahl**, `boolean` einen
+     **Boolean**. Die App hat **alles als Array** geschickt → `FormInvalidAnswerError`
+     ("Expected string for form field: …"), die Antwort erreichte den Server nie und die UI
+     meldete „die Frage ist abgelaufen". Jetzt wird pro Feldtyp der passende Typ gesendet.
+  2. Bei Auswahlfeldern müssen die **Option-Werte** gesendet werden, nicht die Labels
+     (`Invalid option for form field: …`). Die Auswahl liefert jetzt `value` (mit `label` als
+     Fallback, falls der Server keinen Wert liefert).
+- **Keine verlorene Antwort mehr:** Der Antwortdialog entfernte die Karte optimistisch. Schlug
+  das Senden fehl, war sie weg und die Antwort musste von Hand nachgetippt werden. Die Karte
+  wird jetzt bei einem Fehlschlag **wiederhergestellt** (nur bei „bereits beantwortet" bleibt
+  sie entfernt) und die Fehlermeldung nennt den echten Grund.
+- **Echte Fehlerursachen statt „abgelaufen":** Die Server-Antwort wird ausgewertet —
+  `FormAlreadySettledError` → „Diese Frage wurde bereits beantwortet", `FormNotFoundError` →
+  „Diese Frage ist nicht mehr offen", `FormInvalidAnswerError` → die Server-Begründung.
+- **Unbekannte Formular-ID:** Wurde die Karte aus einem SSE-Event gebaut (die Event-ID ist nicht
+  immer die Formular-ID `frm_…`), wird die Antwort einmal mit der **echten offenen Formular-ID**
+  wiederholt, bevor aufgegeben wird.
+- **Feld-Schlüssel werden bei Bedarf nachgeladen:** Die Antwort muss mit den Feld-SCHLÜSSELN
+  verschlüsselt gesendet werden; fehlten sie (Karte aus einem Event), bricht die App nun nicht
+  mehr ab, sondern holt das Formular (`GET /api/session/{id}/form/{fid}`) und antwortet korrekt.
+
 ## [1.5.1] - 2026-10-13
 
 ### Fixed
@@ -355,7 +382,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.1...v1.4.2

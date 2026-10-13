@@ -66,6 +66,7 @@ import com.opencode.android.domain.WireIntegration
 import com.opencode.android.domain.WirePermission
 import com.opencode.android.domain.WireProvider
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -872,8 +873,10 @@ class OpenCodeApiAdapter(
         requestId: String,
         body: QuestionReplyRequest,
     ): ResponseBody {
-        val sessionId = formSessionIds[requestId] ?: throw IOException("unknown question $requestId")
-        val answers = requireAnswerMap(requestId, body)
+        val sessionId =
+            formSessionIds[requestId]
+                ?: throw FormReplyException("FormNotFoundError", "unknown question $requestId")
+        val answers = resolveAnswerMap(sessionId, requestId, body)
         return requireBody(v2.replyForm(sessionId, requestId, FormReplyBody(answers)))
             .also { forgetForm(requestId) }
     }
@@ -887,10 +890,12 @@ class OpenCodeApiAdapter(
         sessionId: String,
         requestId: String,
         body: QuestionReplyRequest,
-    ): ResponseBody =
-        requireBody(
-            v2.replyForm(sessionId, requestId, FormReplyBody(requireAnswerMap(requestId, body))),
-        )
+    ): ResponseBody {
+        val answers = resolveAnswerMap(sessionId, requestId, body)
+        val response = v2.replyForm(sessionId, requestId, FormReplyBody(answers))
+        if (!response.isSuccessful) throw formFailure(response)
+        return requireBody(response).also { forgetForm(requestId) }
+    }
 
     override suspend fun rejectSessionQuestion(
         sessionId: String,
@@ -1012,47 +1017,69 @@ class OpenCodeApiAdapter(
      * then silently sent `{answer:{}}`, i.e. an EMPTY reply for a valid question, and
      * the agent stayed blocked. Failing loudly is strictly better than that.
      */
-    private fun requireAnswerMap(
+    /**
+     * The answer body keyed by the form's field keys.
+     *
+     * The keys are only known from a previous list/detail fetch. When they are missing
+     * (the card was built from an SSE event) the form is fetched HERE instead of failing:
+     * the old code threw, which the UI reported as "the question may have expired" while
+     * the answer never reached the server.
+     */
+    private suspend fun resolveAnswerMap(
+        sessionId: String,
         requestId: String,
         body: QuestionReplyRequest,
-    ): Map<String, List<String>> {
-        val answers = answerMap(requestId, body)
-        if (answers.isEmpty() && body.answers.any { it.isNotEmpty() }) {
-            throw IOException("question $requestId is not cached yet — reopen the question to answer it")
+    ): Map<String, kotlinx.serialization.json.JsonElement> {
+        answerMap(requestId, body).takeIf { it.isNotEmpty() }?.let { return it }
+        if (body.answers.none { it.isNotEmpty() }) {
+            return emptyMap<String, kotlinx.serialization.json.JsonElement>()
         }
-        return answers
+        val form =
+            runCatching { v2.sessionForm(sessionId, requestId).data }.getOrNull()
+        if (form != null) {
+            formFields[requestId] = form.fields
+            form.sessionId?.let { formSessionIds[requestId] = it }
+        }
+        val resolved = answerMap(requestId, body)
+        if (resolved.isNotEmpty()) return resolved
+        throw IOException("the form's fields could not be loaded (form $requestId)")
+    }
+
+    /** Classifies a failed form reply so the UI can say what actually happened. */
+    private fun formFailure(response: Response<ResponseBody>): IOException {
+        val raw = runCatching { response.errorBody()?.string() }.getOrNull().orEmpty()
+        val tag =
+            runCatching {
+                kotlinx.serialization.json.Json
+                    .parseToJsonElement(raw)
+                    .jsonObject["_tag"]
+                    ?.jsonPrimitive
+                    ?.content
+            }.getOrNull()
+        val message =
+            runCatching {
+                kotlinx.serialization.json.Json
+                    .parseToJsonElement(raw)
+                    .jsonObject["message"]
+                    ?.jsonPrimitive
+                    ?.content
+            }.getOrNull()
+        return FormReplyException(tag, message ?: "HTTP ${response.code()}")
     }
 
     private fun answerMap(
         requestId: String,
         body: QuestionReplyRequest,
-    ): Map<String, List<String>> {
+    ): Map<String, kotlinx.serialization.json.JsonElement> {
         val fields = formFields[requestId].orEmpty()
         return body.answers
             .mapIndexedNotNull { index, answers ->
-                fields.getOrNull(index)?.key?.let { it to answers }
+                fields.getOrNull(index)?.key?.let { key ->
+                    key to formAnswerValue(fields[index].type, answers)
+                }
             }.toMap()
     }
 
-    /** `provider/model#variant` or a bare model id → a V2 [ModelRef]. */
-    private fun parseModelRef(value: String): ModelRef? {
-        if (value.isBlank()) return null
-        val variant = value.substringAfter('#', "").takeIf { it.isNotBlank() }
-        val withoutVariant = value.substringBefore('#')
-        val providerId = withoutVariant.substringBefore('/', "").takeIf { it.isNotBlank() } ?: return null
-        val modelId = withoutVariant.substringAfter('/', withoutVariant)
-        return ModelRef(id = modelId, providerId = providerId, variant = variant)
-    }
-
-    /**
-     * Unwraps a `Response<ResponseBody>`, closing the error body before
-     * throwing.
-     *
-     * Retrofit hands the raw error stream back via `errorBody()`; a plain throw
-     * leaves it open, and the callers retry (up to three times per page size, and
-     * every reply/rename/revert route), so a persistent server error leaked one
-     * connection per attempt until the pool was exhausted.
-     */
     private fun requireBody(response: Response<ResponseBody>): ResponseBody {
         if (!response.isSuccessful) {
             val code = response.code()
@@ -1077,6 +1104,15 @@ class OpenCodeApiAdapter(
         val code = response.code()
         response.errorBody()?.close()
         throw IOException("$what HTTP $code")
+    }
+
+    private fun parseModelRef(value: String): ModelRef? {
+        if (value.isBlank()) return null
+        val variant = value.substringAfter('#', "").takeIf { it.isNotBlank() }
+        val withoutVariant = value.substringBefore('#')
+        val providerId = withoutVariant.substringBefore('/', "").takeIf { it.isNotBlank() } ?: return null
+        val modelId = withoutVariant.substringAfter('/', withoutVariant)
+        return ModelRef(id = modelId, providerId = providerId, variant = variant)
     }
 
     private fun emptyBody(): ResponseBody = ResponseBody.create(null, ByteArray(0))
@@ -1108,7 +1144,11 @@ class OpenCodeApiAdapter(
                     multiple = field.multiple,
                     options =
                         field.options.map {
-                            QuestionOption(label = it.label ?: it.value.orEmpty(), description = it.description)
+                            QuestionOption(
+                                label = it.label ?: it.value.orEmpty(),
+                                value = it.value ?: it.label,
+                                description = it.description,
+                            )
                         },
                 )
             }
@@ -1186,3 +1226,16 @@ class OpenCodeApiAdapter(
         private const val MAX_FILE_BYTES = 8L * 1024 * 1024
     }
 }
+
+/**
+ * A form reply the server rejected, with its machine-readable tag.
+ *
+ * `FormNotFoundError` = the id is not a pending form (a card built from an SSE event
+ * carries an id that is not always a form id), `FormAlreadySettledError` = it was
+ * already answered/cancelled, `FormInvalidAnswerError` = the values did not validate.
+ * The UI distinguishes these instead of blaming an "expired" question for all three.
+ */
+class FormReplyException(
+    val tag: String?,
+    message: String,
+) : java.io.IOException(message)

@@ -264,6 +264,18 @@ interface OpenCodeV2Api {
         @Header("x-opencode-directory") directory: String? = null,
     ): WireEnvelope<List<WireForm>>
 
+    /**
+     * One form with its FIELDS. Needed to answer a form whose field keys were never
+     * cached (the card came from an SSE event): the reply body is keyed by those keys,
+     * and without them the answer could not be sent at all.
+     */
+    @GET("api/session/{sessionID}/form/{formID}")
+    suspend fun sessionForm(
+        @Path("sessionID") sessionId: String,
+        @Path("formID") formId: String,
+        @Header("x-opencode-directory") directory: String? = null,
+    ): WireEnvelope<WireForm>
+
     @POST("api/session/{sessionID}/form/{formID}/reply")
     suspend fun replyForm(
         @Path("sessionID") sessionId: String,
