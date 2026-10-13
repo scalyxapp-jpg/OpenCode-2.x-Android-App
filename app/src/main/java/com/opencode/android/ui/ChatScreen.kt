@@ -415,6 +415,15 @@ internal fun ChatScreen(
                     }
                     // "/mcp" dialog (web parity: title "MCPs", "N of M enabled",
                     // search, per-server switch, auth for needs-auth servers).
+                    if (uiState.raceDialogVisible) {
+                        RaceDialog(
+                            models = uiState.models,
+                            picked = uiState.racePick,
+                            onToggle = viewModel::toggleRacePick,
+                            onStart = viewModel::startRace,
+                            onDismiss = viewModel::closeRaceDialog,
+                        )
+                    }
                     // "/skills" picker (TUI parity: list, pick, inject).
                     if (uiState.skillsDialogVisible) {
                         SkillsDialog(
@@ -458,6 +467,15 @@ internal fun ChatScreen(
                             expanded = showMore,
                             onDismissRequest = { showMore = false },
                         ) {
+                            // Model race: the composer's text as the task, sent to
+                            // 2–3 models in parallel (their sessions, same project).
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.race_entry)) },
+                                onClick = {
+                                    showMore = false
+                                    viewModel.openRaceDialog()
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.rename)) },
                                 onClick = {
@@ -880,6 +898,10 @@ internal fun ChatScreen(
                                             onSend = viewModel::sendMessage,
                                             onQueue = viewModel::queueMessage,
                                             onSteer = viewModel::steerMessage,
+                                            onFlushOutbox = viewModel::flushOutbox,
+                                            onClearOutbox = viewModel::clearOutbox,
+                                            onStopRace = viewModel::stopRace,
+                                            onDismissRace = viewModel::dismissRace,
                                             onSteerQueued = viewModel::steerQueued,
                                             onRemoveQueued = viewModel::cancelQueued,
                                             onInterrupt = viewModel::interrupt,
@@ -1011,6 +1033,14 @@ internal class ChatActions(
     val onQueue: () -> Unit = {},
     /** Steers the running turn with the composer's text (web: Steer). */
     val onSteer: () -> Unit = {},
+    /** Offline outbox: deliver the waiting prompts now. */
+    val onFlushOutbox: () -> Unit = {},
+    /** Offline outbox: drop them. */
+    val onClearOutbox: () -> Unit = {},
+    /** Model race: stop every member that is still running. */
+    val onStopRace: () -> Unit = {},
+    /** Model race: forget the comparison (the sessions stay). */
+    val onDismissRace: () -> Unit = {},
     /** The web's "Steer" on a queued prompt: deliver it now. */
     val onSteerQueued: (String) -> Unit = {},
     /** The web's "Remove" on a queued prompt. */
@@ -1495,6 +1525,7 @@ internal fun SessionTab(
                             } else {
                                 0
                             }) +
+                                (if (uiState.race != null) 1 else 0) +
                                 (if (uiState.queuedMessages.isNotEmpty()) uiState.queuedMessages.size + 1 else 0)
                         // A tapped background notification names the message it
                         // describes. Scroll there once the list contains it; a
@@ -1573,6 +1604,16 @@ internal fun SessionTab(
                                 // the live items, so in the reversed layout they sit
                                 // just above them: the newest thing that has not run
                                 // yet. The server delivers them when the turn ends.
+                                uiState.race?.let { race ->
+                                    item(key = "race-card") {
+                                        RaceCard(
+                                            race = race,
+                                            onOpenSession = onOpenSession,
+                                            onStop = actions.onStopRace,
+                                            onDismiss = actions.onDismissRace,
+                                        )
+                                    }
+                                }
                                 if (uiState.queuedMessages.isNotEmpty()) {
                                     item(key = "queue-header") {
                                         Text(
@@ -1930,6 +1971,8 @@ internal fun SessionTab(
                         onSend = onSend,
                         onQueue = actions.onQueue,
                         onSteer = actions.onSteer,
+                        onFlushOutbox = actions.onFlushOutbox,
+                        onClearOutbox = actions.onClearOutbox,
                         onInterrupt = onInterrupt,
                         onAddFiles = onAddFiles,
                         onRemoveAttachment = onRemoveAttachment,
@@ -1954,6 +1997,8 @@ internal fun SessionTab(
             uploadingUris = uiState.uploadingUris,
             statusError = uiState.statusError,
             queuedCount = uiState.queuedMessages.size,
+            outboxCount = uiState.outbox.size,
+            outboxFlushing = uiState.outboxFlushing,
             followUpBehavior = appSettings.followUpBehavior,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,

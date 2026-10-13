@@ -487,4 +487,31 @@
     <string name="skill_message_label" formatted="false">Skill</string>
     <string name="skill_message_show" formatted="false">Show skill text</string>
     <string name="skill_message_hide" formatted="false">Hide skill text</string>
+    <!-- Model race: one prompt, several models, compared side by side -->
+    <string name="race_title" formatted="false">Model race</string>
+    <string name="race_entry" formatted="false">Race models…</string>
+    <string name="race_pick_hint" formatted="false">The same prompt runs in its own session for every picked model — each one is a full turn on your key. Pick 2–3.</string>
+    <string name="race_start" formatted="false">Start race</string>
+    <string name="race_need_prompt" formatted="false">Type a prompt first — it becomes the race task</string>
+    <string name="race_need_models" formatted="false">Pick at least two models</string>
+    <string name="race_unknown_model" formatted="false">That model is not in the catalog</string>
+    <string name="race_failed" formatted="false">Race problem: %1$s</string>
+    <string name="race_running" formatted="false">running…</string>
+    <string name="race_seconds" formatted="false">%1$s s</string>
+    <string name="race_cost" formatted="false">$%1$s</string>
+    <string name="race_cheapest" formatted="false">cheapest</string>
+    <string name="race_fastest" formatted="false">fastest</string>
+    <string name="race_stop_all" formatted="false">Stop all</string>
+    <string name="race_dismiss" formatted="false">Dismiss</string>
+    <string name="race_open" formatted="false">Continue in this session</string>
+    <string name="race_answer_empty" formatted="false">No answer yet</string>
+    <string name="race_tokens" formatted="false">%1$s tokens</string>
+    <!-- Offline outbox: prompts typed while the server was unreachable -->
+    <string name="outbox_tab_title" formatted="false">Waiting to send</string>
+    <string name="outbox_saved" formatted="false">No connection — saved to the outbox (%1$d waiting)</string>
+    <string name="outbox_sent" formatted="false">Sent %1$d outbox message(s)</string>
+    <string name="outbox_send_now" formatted="false">Send now</string>
+    <string name="outbox_discard" formatted="false">Discard all</string>
+    <string name="outbox_hint" formatted="false">%1$d waiting — sent automatically once the server is reachable</string>
+    <string name="outbox_gave_up" formatted="false">Giving up after %1$d attempts: %2$s</string>
 </resources>

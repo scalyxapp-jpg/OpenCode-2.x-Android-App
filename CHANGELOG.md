@@ -5,6 +5,65 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.13] - 2026-10-13
+
+### Added
+
+- **Model Race — ein Prompt, mehrere Modelle, direkter Vergleich (neues Feature).**
+  Recherche in vergleichbaren Mobile-Clients (Vibenary/OpenChamber/opencode-mobile)
+  zeigte Voice, Terminal, Git- und Worktree-Funktionen — aber **keine** Möglichkeit,
+  Modelle auf der *eigenen* Aufgabe zu vergleichen. Genau das baut der Race ein:
+  - Einstieg über **⋮ → „Race models…"**: der Prompt aus dem Composer wird zur Aufgabe,
+    man wählt **2–3 Modelle** (Mehrfachauswahl, mit Kostenhinweis).
+  - Jedes Modell läuft in einer **eigenen Session im selben Projekt** und wird per
+    `POST /api/session` **mit seinem Modell erzeugt** — kein Fenster, in dem ein Member
+    mit dem falschen Modell startet. Danach je ein `POST …/prompt`, Ergebnisse über
+    `GET …/{id}` (Kosten/Tokens/Status) und `GET …/{id}/message` (Antwort).
+  - Im Verlauf erscheint die **Vergleichskarte**: Antwort, Laufzeit, Kosten und Tokens
+    pro Modell, markiert als **cheapest**/**fastest**, plus **Stop all** und
+    **Dismiss**; ein Tipp öffnet die Session des Gewinners, um dort weiterzuarbeiten.
+  - Regeln pur und getestet (`RacePlan`): Prompt nötig, mindestens zwei **verschiedene**
+    Modelle, unbekannte Modelle werden abgelehnt (keine Phantom-Session), **Deckel bei
+    drei** Membern — jeder Member ist ein voller Turn auf dem eigenen Key.
+  - Live verifiziert: derselbe Prompt an `deepseek-flash` (0,0053 $) und
+    `deepseek-v4-pro` (0,0234 $), beide in ~3 s beantwortet.
+
+- **Offline-Outbox — Prompts überleben eine tote Verbindung (zweites neues Feature).**
+  Auf dem Handy ist die Verbindung oft kurz weg (VPN-Handshake, Funkloch, Tunnel,
+  Server-Neustart). Bisher wurde der Text in den Composer zurückgelegt und ein Fehler
+  gezeigt — jetzt wird der Prompt **behalten und automatisch zugestellt**:
+  - Nur **Konnektivitätsfehler** landen in der Outbox (UnknownHost, Connection
+    refused/reset, Timeout, `HTTP 5xx`/429, Socket-Ausnahmen). Eine echte Ablehnung
+    (`HTTP 4xx`, Guard-Konflikt, fehlendes Modell) wird weiterhin gemeldet und **nie**
+    eingereiht — ein abgelehnter Prompt würde sonst ewig wiederholt.
+  - Zeile über dem Composer: „N waiting — sent automatically once the server is
+    reachable" mit **Send now** und **Discard all**.
+  - Zustellung erfolgt automatisch sobald Android wieder ein Netz meldet
+    (`NetworkMonitor`), beim Öffnen der Session und manuell — **in Reihenfolge**, mit
+    Stopp beim ersten Fehler (kein Überholen abhängiger Folge-Prompts), Backoff
+    2 s → 30 s, max. 5 Versuche, danach geparkt mit sichtbarem letzten Fehler.
+  - **Pro Session** (max. 10 Einträge, älteste fallen) und **persistiert** — ein
+    App-Neustart verliert nichts. Anhänge werden nicht eingereiht (URIs können später
+    weg sein); ein solcher Send schlägt wie bisher fehl.
+
+### Fixed
+
+- **Race-Controller las Antworten nur über `role`.** V2-Nachrichten tragen
+  `type` (classic: `role`/`info.role`) — der neue `RaceControllerTest` gegen einen
+  Mock-Server hat das aufgedeckt, bevor es auf einem Gerät auffiel: jede geraste
+  Antwort wäre leer geblieben.
+
+### Added (tests)
+
+- `RacePlanTest` (7 Fälle: Prompt-/Modell-Validierung, Duplikate, unbekanntes Modell,
+  Labels, Deckel, cheapest/fastest aus beendeten Membern) und `RaceControllerTest`
+  (Fan-out gegen MockWebServer: eine Session pro Member mit Modell im Create,
+  ein Prompt pro Member, Antwort/Kosten/Tokens-Auswertung, Interrupt für **jeden**
+  Member beim Stop). **Zweites Feature:** `OutboxPolicyTest` (7 Fälle: nur
+  Konnektivität ist retryable, `HTTP 4xx` nicht, 429 schon, Backoff-Verdopplung mit
+  Deckel, Attempt-Gate, Cap pro Session) und `OutboxCodecTest` (Round-trip inkl.
+  Auswahl-Feldern; kaputtes JSON → leere Outbox statt Absturz).
+
 ## [1.5.12] - 2026-10-13
 
 ### Added
@@ -709,7 +768,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.13...HEAD
+[1.5.13]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.12...v1.5.13
 [1.5.12]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.11...v1.5.12
 [1.5.11]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.9...v1.5.10

@@ -37,6 +37,13 @@ import com.opencode.android.domain.InboxPayload
 import com.opencode.android.domain.MessageTime
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SkillEntry
+import com.opencode.android.data.OutboxItem
+import com.opencode.android.data.OutboxPolicy
+import com.opencode.android.data.OutboxStore
+import com.opencode.android.ui.race.RaceController
+import com.opencode.android.ui.race.RaceMember
+import com.opencode.android.ui.race.RacePlan
+import com.opencode.android.ui.race.RaceState
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
 import com.opencode.android.domain.SessionTimeUpdate
@@ -172,6 +179,16 @@ data class ChatUiState(
     // "/mcp": configured MCP servers (name + status), alphabetical.
     val mcpServers: List<McpEntry> = emptyList(),
     val mcpDialogVisible: Boolean = false,
+    /**
+     * Prompts that could not be sent because the server was unreachable; they are
+     * delivered automatically once it is back (offline outbox).
+     */
+    val outbox: List<OutboxItem> = emptyList(),
+    val outboxFlushing: Boolean = false,
+    /** Model race: picker visibility, the picked refs and the running comparison. */
+    val raceDialogVisible: Boolean = false,
+    val racePick: Set<String> = emptySet(),
+    val race: RaceState? = null,
     /** "/skills": the picker (TUI: skill menu) and the loaded skill catalog. */
     val skillsDialogVisible: Boolean = false,
     val skills: List<SkillEntry> = emptyList(),
@@ -258,6 +275,15 @@ class ChatViewModel
         @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
     ) : ViewModel() {
         private val api: OpenCodeApi get() = apiProvider.get()
+
+        init {
+            // Offline outbox: retry as soon as Android reports a usable network. The
+            // flow is edge-triggered (no replay), which is exactly right here — the
+            // manual "Send now" and the flush on session open cover the rest.
+            viewModelScope.launch {
+                com.opencode.android.data.NetworkMonitor.available.collect { flushOutbox() }
+            }
+        }
 
         // Guard revisions for the active session(s); owned by the conversation
         // workflows through the transport.
@@ -517,6 +543,8 @@ class ChatViewModel
                                 queuedMessages = emptyList(),
                             )
                         }
+                        // The outbox is per session; show only this session's items.
+                        _uiState.update { it.copy(outbox = OutboxStore.forSession(sessionId)) }
                         // Fence the old refresh: while this load runs, `_uiState.session`
                         // is still the PREVIOUS session, so a late write from it would
                         // pass its own id check and paint A's messages under B.
@@ -547,6 +575,11 @@ class ChatViewModel
                     startSse(sessionId)
                     startPolling(sessionId)
                     loadInbox(sessionId)
+                    // Offline outbox: show this session's waiting prompts and try to
+                    // deliver them (opening a session is a user signal that the server
+                    // is expected to be reachable).
+                    refreshOutbox()
+                    flushOutbox()
                     try {
                         // The session header, its full payload (for `directory`), the
                         // message page and the agent list are independent requests.
@@ -1113,6 +1146,203 @@ class ChatViewModel
                     UserMessages.post(R.string.skill_injection_failed, "${e.message}")
                 }
             }
+        }
+
+        // --- model race -----------------------------------------------------
+
+        /**
+         * One prompt, several models, side by side — the app can show price and
+         * context size, but only a race shows how a model handles *your* repository.
+         * Every member runs in its own session inside the same project.
+         */
+        private val raceController =
+            RaceController(
+                api = api,
+                scope = viewModelScope,
+                onState = { race -> _uiState.update { it.copy(race = race) } },
+                onError = { message -> UserMessages.post(R.string.race_failed, message) },
+            )
+
+        fun openRaceDialog() {
+            _uiState.update {
+                it.copy(raceDialogVisible = true, racePick = it.racePick.take(0).toSet())
+            }
+        }
+
+        fun closeRaceDialog() {
+            _uiState.update { it.copy(raceDialogVisible = false) }
+        }
+
+        fun toggleRacePick(ref: String) {
+            _uiState.update { current ->
+                val picked = current.racePick
+                val next =
+                    when {
+                        ref in picked -> picked - ref
+                        picked.size >= RacePlan.MAX_MODELS -> picked
+                        else -> picked + ref
+                    }
+                current.copy(racePick = next)
+            }
+        }
+
+        /** Starts the race with the composer's text as the prompt for every member. */
+        fun startRace() {
+            val prompt = _uiState.value.inputText.trim()
+            when (val plan = RacePlan.build(prompt, _uiState.value.racePick.toList(), ::resolveRaceModel)) {
+                is RacePlan.Result.Rejected -> {
+                    val message =
+                        when (plan.reason) {
+                            RacePlan.Result.Reason.EMPTY_PROMPT -> R.string.race_need_prompt
+                            RacePlan.Result.Reason.TOO_FEW_MODELS -> R.string.race_need_models
+                            RacePlan.Result.Reason.UNKNOWN_MODEL -> R.string.race_unknown_model
+                        }
+                    UserMessages.post(message)
+                    return
+                }
+
+                is RacePlan.Result.Ok -> {
+                    val session = _uiState.value.session ?: return
+                    _uiState.update {
+                        it.copy(
+                            raceDialogVisible = false,
+                            inputText = "",
+                            attachments = emptyList(),
+                        )
+                    }
+                    raceController.start(
+                        prompt = prompt,
+                        directory = session.directory,
+                        agent = _uiState.value.selectedAgent,
+                        members = plan.members,
+                    )
+                }
+            }
+        }
+
+        /** Catalog → (label, providerId, modelId); null keeps unknown refs out. */
+        private fun resolveRaceModel(ref: String): Triple<String, String, String>? {
+            val entry =
+                _uiState.value.models.firstOrNull {
+                    com.opencode.android.util.sessionModelRef(it.id, it.providerId) == ref
+                } ?: return null
+            val providerId = entry.providerId ?: return null
+            return Triple(entry.name?.takeIf { it.isNotBlank() } ?: entry.id, providerId, entry.id)
+        }
+
+        fun stopRace() = raceController.stop()
+
+        fun dismissRace() = raceController.dismiss()
+
+        fun refreshRace() = raceController.refresh()
+
+        // --- offline outbox -------------------------------------------------
+
+        private fun enqueueOutbox(
+            sessionId: String,
+            text: String,
+            agent: String?,
+            providerId: String?,
+            modelId: String?,
+            variant: String?,
+        ) {
+            OutboxStore.add(
+                OutboxItem(
+                    id = generateOpenCodeId("msg"),
+                    sessionId = sessionId,
+                    text = text,
+                    agent = agent,
+                    providerId = providerId,
+                    modelId = modelId,
+                    variant = variant,
+                    createdAt = System.currentTimeMillis(),
+                ),
+            )
+            refreshOutbox()
+        }
+
+        /** Mirrors the store into the UI state (per active session). */
+        private fun refreshOutbox() {
+            val sessionId = _uiState.value.session?.id ?: return
+            _uiState.update { it.copy(outbox = OutboxStore.forSession(sessionId)) }
+        }
+
+        /**
+         * Delivers the session's outbox in order. Stopping at the first failure keeps
+         * the original order — a prompt that depends on the previous one must not jump
+         * the queue.
+         */
+        fun flushOutbox() {
+            val session = _uiState.value.session ?: return
+            if (_uiState.value.outboxFlushing) return
+            val items = OutboxStore.forSession(session.id)
+            if (items.isEmpty()) return
+            val (providerId, modelId) = parseModelRef(_uiState.value.selectedModel)
+            _uiState.update { it.copy(outboxFlushing = true) }
+            sendJob =
+                viewModelScope.launch {
+                    var sent = 0
+                    try {
+                        for (item in items) {
+                            val now = System.currentTimeMillis()
+                            if (!OutboxPolicy.shouldAttempt(item, now)) continue
+                            val body =
+                                buildPromptAsyncRequest(
+                                    messageId = generateOpenCodeId("msg"),
+                                    partId = generateOpenCodeId("prt"),
+                                    agent = item.agent ?: _uiState.value.selectedAgent,
+                                    providerId = item.providerId ?: providerId,
+                                    modelId = item.modelId ?: modelId,
+                                    variant = item.variant ?: _uiState.value.selectedVariant,
+                                    finalText = item.text,
+                                )
+                            val result =
+                                try {
+                                    promptSender.send(session.id, body)
+                                } catch (e: Exception) {
+                                    PromptSendResult.Failed(e.message ?: "offline")
+                                }
+                            when (result) {
+                                PromptSendResult.Ok -> {
+                                    OutboxStore.remove(item.id)
+                                    sent++
+                                }
+
+                                PromptSendResult.Conflict -> {
+                                    OutboxStore.markAttempt(item.id, now, "Selection changed elsewhere")
+                                    break
+                                }
+
+                                is PromptSendResult.Failed -> {
+                                    OutboxStore.markAttempt(item.id, now, result.message)
+                                    // Retryable or not, stop here: the next flush (network
+                                    // event, manual tap, session open) tries again.
+                                    break
+                                }
+                            }
+                        }
+                    } finally {
+                        refreshOutbox()
+                        _uiState.update { it.copy(outboxFlushing = false) }
+                    }
+                    if (sent > 0) {
+                        UserMessages.post(R.string.outbox_sent, sent)
+                        refreshMessages(session.id)
+                    }
+                }
+        }
+
+        /** Drops one waiting prompt. */
+        fun discardOutbox(itemId: String) {
+            OutboxStore.remove(itemId)
+            refreshOutbox()
+        }
+
+        /** Drops everything waiting for this session. */
+        fun clearOutbox() {
+            val sessionId = _uiState.value.session?.id ?: return
+            OutboxStore.clearSession(sessionId)
+            refreshOutbox()
         }
 
         fun openMcpDialog() {
@@ -2921,6 +3151,8 @@ class ChatViewModel
             rawText: String,
             attachments: List<Attachment>,
             statusError: String,
+            /** false when the prompt was saved to the outbox instead. */
+            restoreText: Boolean = true,
         ) {
             optimisticEchoIds.remove(optimisticId)
             _uiState.update { current ->
@@ -2928,8 +3160,20 @@ class ChatViewModel
                     messages = current.messages.filterNot { it.id == optimisticId },
                     // Restore the composer so a failed send is retryable without
                     // retyping; never clobber text the user typed meanwhile.
-                    inputText = if (current.inputText.isBlank()) rawText else current.inputText,
-                    attachments = if (current.attachments.isEmpty()) attachments else current.attachments,
+                    inputText =
+                        if (!restoreText) {
+                            current.inputText
+                        } else if (current.inputText.isBlank()) {
+                            rawText
+                        } else {
+                            current.inputText
+                        },
+                    attachments =
+                        if (!restoreText || current.attachments.isNotEmpty()) {
+                            current.attachments
+                        } else {
+                            attachments
+                        },
                     isGenerating = false,
                     isUploading = false,
                     uploadDone = 0,
@@ -3413,18 +3657,41 @@ class ChatViewModel
                         throw e
                     } catch (e: Exception) {
                         AppLog.e(APP_LOG_TAG, "sendMessage ERROR: ${e.message}", e)
-                        UserMessages.post(R.string.action_failed, "${e.message}")
-                        // Drop the optimistic echo — it will never be persisted, so
-                        // leaving it made the conversation show a message the server
-                        // never received — and put the text back in the composer so a
-                        // failed send is retryable without retyping.
+                        // A CONNECTIVITY failure is queued in the offline outbox: on a
+                        // phone the link is often gone for a moment, and retyping the
+                        // prompt later was the old (bad) answer. A real rejection
+                        // (HTTP 4xx, conflict, missing model) is still reported.
+                        val retryable =
+                            attachments.isEmpty() &&
+                                OutboxPolicy.isRetryable(e::class.java.name, e.message)
                         lastFailureWasSend = true
                         rollbackOptimisticEcho(
                             messageId,
                             rawText,
                             attachments,
                             e.message ?: "Message could not be sent",
+                            restoreText = !retryable,
                         )
+                        if (retryable) {
+                            // The selection is read from the UI state: the try-block's
+                            // locals are out of scope here.
+                            val selection = _uiState.value
+                            val (savedProvider, savedModel) = parseModelRef(selection.selectedModel)
+                            enqueueOutbox(
+                                sessionId = session.id,
+                                text = rawText,
+                                agent = selection.selectedAgent,
+                                providerId = savedProvider,
+                                modelId = savedModel,
+                                variant = selection.selectedVariant,
+                            )
+                            UserMessages.post(
+                                R.string.outbox_saved,
+                                OutboxStore.forSession(session.id).size,
+                            )
+                        } else {
+                            UserMessages.post(R.string.action_failed, "${e.message}")
+                        }
                     }
                 }
         }

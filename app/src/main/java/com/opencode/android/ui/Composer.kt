@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -181,6 +182,10 @@ internal class ComposerActions(
      * (POST /prompt with `delivery:"queue"`).
      */
     val onQueue: () -> Unit = {},
+    /** Offline outbox: try to deliver the waiting prompts now. */
+    val onFlushOutbox: () -> Unit = {},
+    /** Offline outbox: drop them. */
+    val onClearOutbox: () -> Unit = {},
     /** Hands the text to the running turn (web: Steer). */
     val onSteer: () -> Unit = {},
     val onInterrupt: () -> Unit,
@@ -214,6 +219,9 @@ internal fun Composer(
     queuedCount: Int = 0,
     /** "queue" or "steer" — what the follow-up button does (Preferences). */
     followUpBehavior: String = "queue",
+    /** Prompts waiting in the offline outbox for this session. */
+    outboxCount: Int = 0,
+    outboxFlushing: Boolean = false,
     showAgent: Boolean = true,
     agents: List<Agent>,
     models: List<Model>,
@@ -227,6 +235,8 @@ internal fun Composer(
     val onSend = actions.onSend
     val onQueue = actions.onQueue
     val onSteer = actions.onSteer
+    val onFlushOutbox = actions.onFlushOutbox
+    val onClearOutbox = actions.onClearOutbox
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
     val onRemoveAttachment = actions.onRemoveAttachment
@@ -773,6 +783,49 @@ internal fun Composer(
                                     contentDescription = stringResource(R.string.send),
                                 )
                             }
+                        }
+                    }
+                }
+                // Offline outbox: prompts that could not be delivered because the
+                // server was unreachable. Shown above the queue line, with the two
+                // actions that matter (send now / discard) — the alternative was
+                // silently losing the text the user typed in a tunnel.
+                if (outboxCount > 0) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
+                                    MaterialTheme.shapes.small,
+                                )
+                                .padding(horizontal = MaterialTheme.spacing.small),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.outbox_hint, outboxCount),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (outboxFlushing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            TextButton(onClick = onFlushOutbox) {
+                                Text(
+                                    text = stringResource(R.string.outbox_send_now),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        TextButton(onClick = onClearOutbox) {
+                            Text(
+                                text = stringResource(R.string.outbox_discard),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
                         }
                     }
                 }

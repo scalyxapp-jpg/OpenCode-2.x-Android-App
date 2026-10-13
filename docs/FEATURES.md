@@ -279,6 +279,30 @@ web's context panel.
 - **Reasoning variants** are sent as a top-level `variant` field, and "default" is
   omitted rather than sent, matching the web.
 
+### Model race — benchmark a model on *your* task
+
+Price and context size do not tell you how a model handles your repository, so the
+chat's ⋮ menu has **"Race models…"**: type the task, pick 2–3 models, and each one runs
+that same prompt in **its own session inside the same project**. The app then shows the
+comparison live in the transcript: answer, wall-clock time, cost and tokens per model,
+with **cheapest** and **fastest** marked — and one tap continues in the winning session.
+
+Everything rides on endpoints the app already uses, verified against the live server:
+
+| Step | Call |
+| --- | --- |
+| member session | `POST /api/session` with `{location, agent, model}` — the model is set **at creation**, so a member never runs a turn on the wrong model |
+| the task | `POST /api/session/{id}/prompt` per member (own client-generated message id) |
+| results | `GET /api/session/{id}` (cost/tokens/status) + `GET /api/session/{id}/message` (the answer) |
+| stop | `POST /api/session/{id}/interrupt` for every running member |
+
+Rules are pure and tested (`RacePlan`): the prompt must not be blank, at least two
+**distinct** models are required, unknown refs are refused (no phantom session), and the
+race is **capped at three members** because every member is a full turn on your own key
+(the picker says so). A member that fails is marked failed; the others keep racing.
+The member sessions are ordinary sessions — they show up in the project list (titled
+"Race…") and can be continued like any other.
+
 ## 12. Providers and credentials
 
 - Browse the provider catalog grouped into **connected** and **popular/available**
@@ -326,6 +350,30 @@ Manage in opencode.json" note.
   can see what the agent can pull in.
 - The MCP section is emptied on session switch, so one session's server list never
   appears under another.
+
+## 13b. Offline outbox — prompts survive a dead connection
+
+On a phone the link is frequently gone for a moment: VPN handshake, lift, tunnel,
+server restart. The old behaviour was to restore the text into the composer and show an
+error — the user had to notice and send again later. The app now keeps the prompt:
+
+- A send that fails with a **connectivity** error (unknown host, connection
+  refused/reset, timeout, `HTTP 5xx`/`429`, socket exceptions) goes into the **outbox**,
+  the composer is cleared and a line above the composer says
+  `N waiting — sent automatically once the server is reachable`, with **Send now** and
+  **Discard all**.
+- A **rejection is never queued**: `HTTP 4xx`, a guard conflict or a missing model is
+  reported exactly as before. Replaying a rejected prompt forever would be a lie.
+- Delivery happens automatically: as soon as Android reports a usable network
+  (`NetworkMonitor`), when the session is opened, and on the manual **Send now** — in
+  the order the prompts were typed, stopping at the first failure so a dependent
+  follow-up never jumps the queue. Each item retries with a doubling backoff
+  (2 s → 30 s, max 5 attempts); after that it is parked and only sent manually, with
+  the last error visible.
+- The queue is **per session** and capped (10 items per session, oldest dropped), and it
+  is persisted — closing the app does not lose it.
+- Attachments are not queued (their URIs may be gone later); such a send fails the
+  normal way instead of silently losing the files.
 
 ## 14. Notifications
 

@@ -109,6 +109,10 @@ After installing, open the app and enter your OpenCode server address — see
   over cached text, rename/delete/archive, fork and revert.
 - **Review / Changes tab** — branch badge, on-demand working-tree diff, file tree
   and file viewer.
+- **Model race** — run the same task against 2–3 models in parallel sessions and
+  compare answer, time and cost side by side, then continue in the winner.
+- **Offline outbox** — a prompt typed while the server is unreachable is kept and
+  delivered automatically when it comes back (per session, ordered, with backoff).
 - **Permissions & questions** — approve/deny tool permissions (or auto-accept),
   answer agent questions with the server's own field types, and answer a blocked
   permission straight from the notification.
