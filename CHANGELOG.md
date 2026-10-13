@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   /themes, /undo, /quit, …) would hit, since they have no server endpoint. A unit
   test keeps the advertised list and the handlers in lockstep.
 
+## [1.5.3] - 2026-10-13
+
+### Removed
+- **Der Tab „Shortcuts" ist komplett entfernt.** Er listete nur die Desktop-/Web-Tastenkürzel,
+  die in der Android-App keine Wirkung haben (`ShortcutsTab`, `SHORTCUT_GROUPS` und die zugehörigen
+  Ressourcen sind gelöscht). Die Einstellungen haben jetzt vier Tabs: General · Servers ·
+  Providers · Models.
+- **„Reset all settings" ist an die richtige Stelle gezogen:** Die Aktion lag auf dem entfernten
+  Shortcuts-Tab. Sie setzt ALTE Einstellungen zurück (Theme, Fonts, Notifications, Sounds,
+  Guard-Token, Server) und steht jetzt im General-Tab direkt neben Export/Import — mit klarem
+  Namen und rot markiert, statt wie ein Shortcut-Reset zu wirken.
+
+### Changed
+- Die Tab-Beschriftungen der Einstellungen sind jetzt Ressourcen (waren englische Literale),
+  und ein veralteter gespeicherter Tab-Index (aus einer Version mit dem Shortcuts-Tab) fällt
+  sauber auf „General" zurück, statt einen leeren Screen zu zeigen.
+
 ## [1.5.2] - 2026-10-13
 
 ### Fixed
@@ -382,7 +399,8 @@ Deep-analysis pass: bugs/race conditions, semantics, GUI logic/UX, workflows.
 - Credentials, cached conversation text and crash reports are excluded from
   cloud backup and device transfer.
 
-[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.3...HEAD
+[1.5.3]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/scalyxapp-jpg/OpenCode-2.x-Android-App/compare/v1.4.2...v1.5.0

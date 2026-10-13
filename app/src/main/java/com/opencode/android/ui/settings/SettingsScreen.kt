@@ -50,7 +50,14 @@ internal fun SettingsScreen(
     // rememberSaveable: see ChatScreen — the selected settings tab survived neither a
     // rotation nor a process restore.
     var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("General", "Shortcuts", "Servers", "Providers", "Models")
+    // Localised tab labels (they were hardcoded English literals).
+    val tabs =
+        listOf(
+            stringResource(R.string.settings_tab_general),
+            stringResource(R.string.settings_tab_servers),
+            stringResource(R.string.settings_tab_providers),
+            stringResource(R.string.settings_tab_models),
+        )
     // Web parity: the settings header shows "OpenCode Desktop · v<version>".
     var version by remember { mutableStateOf<String?>(null) }
 
@@ -105,10 +112,12 @@ internal fun SettingsScreen(
             }
             when (tab) {
                 0 -> GeneralTab()
-                1 -> ShortcutsTab()
-                2 -> ServersTab(onSwitchBackend)
-                3 -> ProvidersTab()
-                4 -> ModelsTab()
+                1 -> ServersTab(onSwitchBackend)
+                2 -> ProvidersTab()
+                3 -> ModelsTab()
+                // Defensive: a stale saved index (from a build that still had the
+                // removed "Shortcuts" tab) must not render an empty screen.
+                else -> GeneralTab()
             }
         }
     }
@@ -119,6 +128,7 @@ internal fun SettingsScreen(
 @Composable
 internal fun GeneralTab() {
     val settings by AppSettingsStore.state.collectAsStateWithLifecycle()
+    var showReset by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     LazyColumn(
         modifier =
@@ -412,7 +422,41 @@ internal fun GeneralTab() {
             )
         }
 
+        // The global reset used to live on the (removed) "Shortcuts" tab. It is a
+        // settings-wide action, so it belongs here next to export/import.
+        item {
+            SectionHeader(stringResource(R.string.reset_all_settings))
+        }
+        item {
+            OutlinedButton(
+                onClick = { showReset = true },
+                colors =
+                    androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+            ) { Text(stringResource(R.string.reset_all_settings)) }
+        }
+
         item { Spacer(Modifier.height(MaterialTheme.spacing.large)) }
+    }
+
+    if (showReset) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showReset = false },
+            title = { Text(stringResource(R.string.reset_all_settings)) },
+            text = { Text(stringResource(R.string.reset_all_settings_warning)) },
+            confirmButton = {
+                androidx.compose.material3.Button(onClick = {
+                    AppSettingsStore.reset()
+                    showReset = false
+                }) { Text(stringResource(R.string.reset_all_settings)) }
+            },
+            dismissButton = {
+                androidx.compose.material3.OutlinedButton(onClick = { showReset = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }
 

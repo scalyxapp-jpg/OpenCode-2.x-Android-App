@@ -57,8 +57,6 @@
     <string name="no_files" formatted="false">No files</string>
     <string name="no_changes" formatted="false">No changes</string>
     <string name="no_usage_yet" formatted="false">No usage yet — send a message to see token and cost figures.</string>
-    <string name="shortcuts_desktop_note" formatted="false">These are the desktop/web keyboard shortcuts. The Android app has no keyboard shortcuts.</string>
-    <string name="keyboard_shortcuts" formatted="false">Keyboard shortcuts</string>
     <string name="error_prefix">Error: %1$s</string>
     <string name="backend_title" formatted="false">OpenCode Backend</string>
     <string name="close" formatted="false">Close</string>
@@ -103,7 +101,6 @@
     <string name="refresh" formatted="false">Refresh</string>
     <string name="new_session" formatted="false">New session</string>
     <string name="settings" formatted="false">Settings</string>
-    <string name="reset_to_defaults" formatted="false">Reset to defaults</string>
     <string name="switch_server" formatted="false">Switch server</string>
     <string name="add_server" formatted="false">Add server</string>
     <string name="name_optional" formatted="false">Name (optional)</string>
@@ -405,4 +402,8 @@
     <string name="could_not_load_subagents" formatted="false">Could not load subagents: %1$s</string>
     <string name="fork_created_unknown_id" formatted="false">Forked — the new session id could not be read; pull to refresh the list</string>
     <string name="share_failed_images" formatted="false">The shared image could not be taken over</string>
+    <string name="settings_tab_general" formatted="false">General</string>
+    <string name="settings_tab_servers" formatted="false">Servers</string>
+    <string name="settings_tab_providers" formatted="false">Providers</string>
+    <string name="settings_tab_models" formatted="false">Models</string>
 </resources>
