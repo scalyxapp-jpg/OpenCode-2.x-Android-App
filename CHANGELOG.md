@@ -5,6 +5,35 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.22] - 2026-10-14
+
+### Changed
+
+- **TUI-Parität als Regel: Wortlaute kommen jetzt aus der TUI/dem Server, nicht aus der App.**
+  Die Kürzungs-Notiz für zu lange Tool-Ausgaben lautete app-eigen
+  („… (N more characters — copy for the full output)"). Aus dem opencode-Binary ausgelesen ist
+  die TUI-/Server-Sprache `… output truncated …` bzw. `omitted N characters`; die Notiz heißt jetzt
+  **„… output truncated … (omitted N characters)"**. Die Kürzungs-Notiz bei Diffs
+  („… N more lines (truncated)") entsprach dem schon und bleibt.
+  - Neuer Test pinnt den Wortlaut (`ToolTextTest`), damit er nicht wieder abdriftet.
+
+### Verified (TUI-Abgleich, Stand jetzt)
+
+Bereits TUI-gleich und so belassen: Diff-Block (zweispaltige Zeilennummern, ±-Tönung,
+Kontextzeilen, Hunk-Kopfzeilen — 1.5.21 auf dem Gerät verifiziert) · Tool-Ergebniszeile aus
+**Server**-Text („Edited … (1 replacement)") · Titel-Schreibweise der Werkzeuge („Shell", „Read",
+„Edit") · Kompakierungs-Block (Wortlaut aus der Web-i18n des Servers) · Queue-Zeile
+(„N queued") · Skill-/Synthetic-Block.
+
+### Known gaps (nächste Schritte, in dieser Reihenfolge)
+
+1. Werkzeug-Zeilenkopf: TUI zeigt `Edit  <pfad>` mit Status-Suffix („Replacements: N") — App zeigt
+   Titel/Basename, die Server-Zeile steht darunter.
+2. Shell-Ausgabe: TUI kürzt mit `... output truncated ...` **und** nennt den Speicherort
+   („Full output saved to: …"), wenn der Server die Ausgabe auf Platte gelegt hat.
+3. „Thinking"-Block, Schritt-/Turn-Trenner und „Interrupted"-Kennzeichnung am Abbruch.
+4. Summary-/Changes-Karte („N changed files").
+
 ## [1.5.21] - 2026-10-14
 
 ### Fixed

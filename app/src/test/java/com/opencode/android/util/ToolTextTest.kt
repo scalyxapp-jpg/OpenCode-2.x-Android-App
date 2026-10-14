@@ -6,6 +6,14 @@ import org.junit.Test
 /** The label the background notifications show for a finished tool call. */
 class ToolTextTest {
     @Test
+    fun `the truncation note reads like the server and the TUI`() {
+        // Wording taken from the opencode bundle ("... output truncated ...", "omitted N
+        // characters"), so a capped row reads like the TUI instead of an app invention.
+        val note = ToolText.truncationSuffix(1_234)
+        assertEquals("… output truncated … (omitted 1234 characters)", note)
+    }
+
+    @Test
     fun `known tools are title case like the chat rows`() {
         assertEquals("Shell", ToolText.toolTitle("bash"))
         assertEquals("Read", ToolText.toolTitle("read"))

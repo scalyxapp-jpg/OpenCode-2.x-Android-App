@@ -7,10 +7,17 @@ import java.util.Locale
  * tested (the truncation note used to be an inline German literal).
  */
 object ToolText {
+    /**
+     * Note appended when the app caps tool output for DISPLAY.
+     *
+     * Wording follows the server/TUI ("… output truncated …", "omitted N characters" —
+     * taken from the opencode binary), instead of the app's earlier invented sentence, so a
+     * truncated row reads the same as in the TUI.
+     */
     fun truncationSuffix(hiddenChars: Int): String =
         String.format(
             Locale.ENGLISH,
-            "… (%d more characters — copy for the full output)",
+            "… output truncated … (omitted %d characters)",
             hiddenChars,
         )
 
