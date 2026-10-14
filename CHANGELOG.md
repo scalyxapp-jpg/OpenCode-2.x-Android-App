@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.2] - 2026-10-14
+
+### Added
+
+- **Entscheidungen werden automatisch an den Agenten übergeben.** Beim Speichern wird die
+  Entscheidung sofort in die geöffnete Session injiziert (`POST /api/session/{id}/synthetic`) —
+  kein zusätzlicher Schritt, und sie ist für den nächsten Prompt bindend. Der Übergang startet
+  einen Turn (Tokens), deshalb: **Settings → „Hand decisions over automatically"** (Standard an,
+  abschaltbar) zusätzlich zum bestehenden Freigabe-Schalter. Der manuelle Übergabe-Knopf bleibt.
+  Ohne geöffnete Session bleibt die Entscheidung **anhängig** — nichts wird später heimlich
+  nachgeschoben.
+- **Statuslabel pro Entscheidung im Journal.** Bisher war nicht erkennbar, welche Entscheidung
+  schon beim Agenten ist: jetzt steht in jeder Zeile
+  **`Injected · …kwMwYk`** (Ziel-Session, kurz — nachvollziehbar),
+  **`Injected · … 3 sessions`** (mehrere) oder **`Not injected`** (nur auf dem Handy).
+  Ein fehlgeschlagener automatischer Übergang behält „Not injected" und sagt den Grund; der
+  Übergang steht zusätzlich im Audit-Protokoll (`Injected`, Detail `automatic`).
+
+### Added (tests)
+
+- `JournalPolicyTest` (8 Fälle, +1): Status „übergeben vs. anhängig", Anzahl der Sessions,
+  kurzes Ziel-Kürzel bei einer Session und **kein** willkürliches Kürzel bei mehreren.
+- Betroffen geprüft (nur diese Klassen): `JournalPolicyTest` + `CentrePolicyTest` → **20 Tests,
+  0 Fehler**.
+
 ## [2.0.1] - 2026-10-14
 
 ### Fixed

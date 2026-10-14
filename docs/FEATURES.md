@@ -394,6 +394,27 @@ error — the user had to notice and send again later. The app now keeps the pro
 
 ## 13c. Live surfaces, explain mode and the decision journal
 
+### Decisions: capture, automatic hand-over, status
+
+A captured decision is **handed to the agent automatically** by default: with a session open,
+`POST /api/session/{id}/synthetic` receives it the moment you save, so the decision is binding
+for the very next prompt — no extra step. It starts a turn (tokens), which is why
+**Settings → Hand decisions over automatically** exists and every manual hand-over stays
+available. Without an open session the decision stays pending.
+
+Each journal row carries a **status label**, so a decision can never look "done" while nobody
+knows about it:
+
+| Label | Meaning |
+| --- | --- |
+| `Injected · …kwMwYk` | handed to that session (short id, so the row is traceable) |
+| `Injected · … 3 sessions` | handed to several sessions |
+| `Not injected` | still only on the phone — capture happened without a session, the switches were off, or the hand-over failed |
+
+A failed automatic hand-over keeps the `Not injected` label and says why in a message; the
+hand-over is also written to the audit log (`Injected`, detail `automatic`).
+
+
 **Always-on glance** — the ambient state lives on the surfaces you already have, no new
 app screen: the **home-screen widget**, the **ongoing notification** of the keep-alive
 service (lockscreen-visible, counters only) and the **Quick Settings tile** (subtitle =

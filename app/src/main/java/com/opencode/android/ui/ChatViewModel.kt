@@ -1429,18 +1429,57 @@ class ChatViewModel
             // Guarantees the write can land even if AppStartup has not finished (it runs on
             // IO, the UI can already be interactive).
             DecisionJournalStore.ensureContext(appContext)
-            DecisionJournalStore.add(
+            val entry =
                 JournalEntry(
                     id = generateOpenCodeId("dec"),
                     projectDir = journalProjectKey(),
                     text = text.trim(),
                     description = description?.trim()?.takeIf { it.isNotBlank() },
                     createdAt = System.currentTimeMillis(),
-                ),
-            )
+                )
+            DecisionJournalStore.add(entry)
             refreshJournal()
             // Visible confirmation: a silent save is indistinguishable from a lost one.
             UserMessages.post(R.string.journal_saved, DecisionJournalStore.state.value.size)
+            autoInjectDecision(entry)
+        }
+
+        /**
+         * Hands a freshly captured decision to the agent right away (Settings → "Hand over
+         * automatically", default on). The journal row's status label shows whether it
+         * worked, so a failed automatic hand-over is visible instead of silent.
+         *
+         * Requirements, in order: the hand-over must be allowed at all
+         * ([AppSettingsStore.setJournalInjectEnabled]), the automatic mode must be on and a
+         * session must be open — a decision captured without a session stays pending with
+         * the "Not injected" label until it is handed over by hand.
+         */
+        private fun autoInjectDecision(entry: JournalEntry) {
+            val settings = AppSettingsStore.state.value
+            if (!settings.journalInjectEnabled || !settings.journalAutoInject) return
+            val session = _uiState.value.session ?: return
+            viewModelScope.launch {
+                val ok =
+                    runCatching { api.injectSynthetic(session.id, entry.text, entry.description, session.directory) }
+                        .getOrDefault(false)
+                if (ok) {
+                    DecisionJournalStore.markInjected(entry.id, session.id)
+                    com.opencode.android.data.AuditLogStore.record(
+                        kind = com.opencode.android.data.AuditKind.Inject,
+                        title = entry.text.take(80),
+                        sessionId = session.id,
+                        detail = "automatic",
+                    )
+                    refreshJournal()
+                    UserMessages.post(
+                        R.string.journal_auto_injected,
+                        session.title?.takeIf { it.isNotBlank() } ?: session.id,
+                    )
+                } else {
+                    // The decision stays pending (label "Not injected") - say why.
+                    UserMessages.post(R.string.journal_inject_failed)
+                }
+            }
         }
 
         fun deleteJournalEntry(id: String) {

@@ -274,6 +274,14 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_journal_auto_inject),
+                subtitle = stringResource(R.string.settings_journal_auto_inject_sub),
+                checked = settings.journalAutoInject,
+                onCheckedChange = { AppSettingsStore.setJournalAutoInject(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_race),
                 subtitle = stringResource(R.string.settings_race_sub),
                 checked = settings.raceEnabled,

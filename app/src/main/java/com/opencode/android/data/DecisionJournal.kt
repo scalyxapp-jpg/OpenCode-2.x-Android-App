@@ -21,7 +21,22 @@ data class JournalEntry(
 ) {
     /** Handed over at least once? */
     fun sessionIdHint(): List<String> = injectedInto
+
+    /** Sessions the decision was handed to, newest first as recorded. */
+    fun targets(): List<String> = injectedInto
 }
+
+/** Whether a captured decision already reached an agent. */
+enum class JournalStatus {
+    NotInjected,
+    Injected,
+}
+
+/** Status of one entry plus how many sessions carry it. */
+data class JournalStatusInfo(
+    val status: JournalStatus,
+    val sessions: Int,
+)
 
 /**
  * Rules for the decision journal: what is kept, how it is grouped and how an export
@@ -90,6 +105,32 @@ object JournalPolicy {
                 it
             }
         }
+
+    /**
+     * Whether this decision already reached an agent, and how many sessions carry it.
+     *
+     * The list renders a status label from this: a captured decision that was handed over
+     * must be distinguishable at a glance from one that is still only on the phone — the
+     * same decision could otherwise look "done" while nobody knows about it.
+     */
+    fun status(entry: JournalEntry): JournalStatusInfo =
+        if (entry.injectedInto.isEmpty()) {
+            JournalStatusInfo(JournalStatus.NotInjected, 0)
+        } else {
+            JournalStatusInfo(JournalStatus.Injected, entry.injectedInto.size)
+        }
+
+    /**
+     * The session a decision was handed to, shortened for a label ("…kwMwYk").
+     *
+     * `null` while it was never handed over or when several sessions carry it (then the
+     * count is the label, not one arbitrary id).
+     */
+    fun targetHint(entry: JournalEntry): String? =
+        entry.injectedInto
+            .singleOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "…" + it.takeLast(6) }
 
     /** Markdown export ("decisions of this week"), oldest first so it reads like a log. */
     fun export(

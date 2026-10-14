@@ -102,4 +102,27 @@ class JournalPolicyTest {
         assertTrue(markdown.indexOf("first") < markdown.indexOf("second"))
         assertEquals("", JournalPolicy.export(emptyList(), "projekt"))
     }
+
+    @Test
+    fun `the status tells apart handed over from still pending`() {
+        // A captured decision that nobody knows about must not look "done".
+        val pending = entry("a")
+        assertEquals(JournalStatus.NotInjected, JournalPolicy.status(pending).status)
+        assertEquals(0, JournalPolicy.status(pending).sessions)
+        assertEquals(null, JournalPolicy.targetHint(pending))
+
+        val handed = JournalPolicy.markInjected(listOf(pending), "a", "ses_ed73c42feffeZJsfemn2kwMwYk").single()
+        assertEquals(JournalStatus.Injected, JournalPolicy.status(handed).status)
+        assertEquals(1, JournalPolicy.status(handed).sessions)
+        // One session: the label names it (short) so the row is traceable.
+        assertEquals("…kwMwYk", JournalPolicy.targetHint(handed))
+
+        // Several sessions: the count is the label, not one arbitrary id.
+        val twice =
+            JournalPolicy
+                .markInjected(listOf(handed), "a", "ses_second")
+                .first { it.id == "a" }
+        assertEquals(2, JournalPolicy.status(twice).sessions)
+        assertEquals(null, JournalPolicy.targetHint(twice))
+    }
 }

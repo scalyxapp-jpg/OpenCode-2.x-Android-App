@@ -98,6 +98,15 @@ object AppSettingsStore {
          * flag itself, so no call site can forget it).
          */
         val auditLogEnabled: Boolean = true,
+        /**
+         * Hand every captured decision to the agent immediately.
+         *
+         * On (default): capturing a decision injects it into the open session right away -
+         * one less step, and the decision is binding for the very next prompt. It starts a
+         * turn, so it costs tokens; off leaves the decision pending and the journal row says
+         * so, with the manual "hand over" action still available.
+         */
+        val journalAutoInject: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -176,6 +185,7 @@ object AppSettingsStore {
             wrapLines = prefs.getBoolean("wrapLines", false),
             showContextLines = prefs.getBoolean("showContextLines", true),
             auditLogEnabled = prefs.getBoolean("auditLogEnabled", true),
+            journalAutoInject = prefs.getBoolean("journalAutoInject", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -249,6 +259,8 @@ object AppSettingsStore {
     fun setShowContextLines(v: Boolean) = update { it.putBoolean("showContextLines", v) }
 
     fun setAuditLogEnabled(v: Boolean) = update { it.putBoolean("auditLogEnabled", v) }
+
+    fun setJournalAutoInject(v: Boolean) = update { it.putBoolean("journalAutoInject", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -399,6 +411,7 @@ object AppSettingsStore {
                 putBoolean("wrapLines", parsed.wrapLines)
                 putBoolean("showContextLines", parsed.showContextLines)
                 putBoolean("auditLogEnabled", parsed.auditLogEnabled)
+                putBoolean("journalAutoInject", parsed.journalAutoInject)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

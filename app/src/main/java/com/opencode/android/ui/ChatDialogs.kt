@@ -1,10 +1,8 @@
 package com.opencode.android.ui
-import com.opencode.android.util.formatCount
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.clickable
-import com.opencode.android.domain.SkillEntry
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,13 +18,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
-import com.opencode.android.data.JournalEntry
-import com.opencode.android.data.PromptHistoryEntry
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -51,6 +47,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.opencode.android.R
+import com.opencode.android.data.JournalEntry
+import com.opencode.android.data.PromptHistoryEntry
 import com.opencode.android.domain.ContextItem
 import com.opencode.android.domain.McpEntry
 import com.opencode.android.domain.Model
@@ -59,8 +57,10 @@ import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.QuestionItem
 import com.opencode.android.domain.QuestionOption
 import com.opencode.android.domain.SessionQuestion
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.ui.settings.SectionHeader
 import com.opencode.android.ui.theme.spacing
+import com.opencode.android.util.formatCount
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 
@@ -772,12 +772,16 @@ internal fun SkillsDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 when {
-                    loading && skills.isEmpty() -> Text(stringResource(R.string.extensions_loading))
-                    skills.isEmpty() ->
+                    loading && skills.isEmpty() -> {
+                        Text(stringResource(R.string.extensions_loading))
+                    }
+
+                    skills.isEmpty() -> {
                         EmptyState(
                             title = stringResource(R.string.skills_pick_empty),
                             compact = true,
                         )
+                    }
 
                     else -> {
                         PickerSearchField(
@@ -940,7 +944,8 @@ internal fun PromptHistoryDialog(
                             Text(
                                 text =
                                     com.opencode.android.util
-                                        .RelativeTime.label(entry.at, System.currentTimeMillis())
+                                        .RelativeTime
+                                        .label(entry.at, System.currentTimeMillis())
                                         ?: "",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1009,6 +1014,39 @@ internal fun JournalDialog(
                                 style = MaterialTheme.typography.bodyMedium,
                                 maxLines = 4,
                                 overflow = TextOverflow.Ellipsis,
+                            )
+                            // Status label: the same decision must not look "done" while
+                            // nobody knows about it. Injected names the target session.
+                            val status =
+                                com.opencode.android.data.JournalPolicy
+                                    .status(entry)
+                            Text(
+                                text =
+                                    if (status.status == com.opencode.android.data.JournalStatus.Injected) {
+                                        stringResource(R.string.journal_status_injected) +
+                                            (
+                                                com.opencode.android.data.JournalPolicy
+                                                    .targetHint(entry)
+                                                    ?: (
+                                                        " · " +
+                                                            pluralStringResource(
+                                                                R.plurals.journal_status_sessions,
+                                                                status.sessions,
+                                                                status.sessions,
+                                                            ).removePrefix("… ")
+                                                    )
+                                            )
+                                    } else {
+                                        stringResource(R.string.journal_status_not_injected)
+                                    },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color =
+                                    if (status.status == com.opencode.android.data.JournalStatus.Injected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
                             )
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),

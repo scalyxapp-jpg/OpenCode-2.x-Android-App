@@ -608,4 +608,13 @@
     <string name="settings_audit_log" formatted="false">Audit log</string>
     <string name="settings_audit_log_sub" formatted="false">Keep a local list of the actions that change state or spend money — stopping turns, approving or denying, reverting, forking, handing a decision over, MCP toggles. Shown in the Centre and copyable as Markdown. Off = nothing is recorded.</string>
     <string name="centre_more_sessions" formatted="false">… %1$d more sessions on Home</string>
+    <string name="settings_journal_auto_inject" formatted="false">Hand decisions over automatically</string>
+    <string name="settings_journal_auto_inject_sub" formatted="false">Capturing a decision injects it into the open session right away (starts a turn on your model). Off: it stays pending until you hand it over, and the journal row says so.</string>
+    <string name="journal_auto_injected" formatted="false">Decision handed to %1$s</string>
+    <string name="journal_status_injected" formatted="false">Injected</string>
+    <string name="journal_status_not_injected" formatted="false">Not injected</string>
+    <plurals name="journal_status_sessions">
+        <item quantity="one">… %1$d session</item>
+        <item quantity="other">… %1$d sessions</item>
+    </plurals>
 </resources>
