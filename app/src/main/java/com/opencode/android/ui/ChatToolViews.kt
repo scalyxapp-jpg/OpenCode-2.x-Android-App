@@ -40,7 +40,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,6 +60,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.R
 import com.opencode.android.domain.Part
 import com.opencode.android.ui.theme.spacing
@@ -86,6 +86,11 @@ internal fun diffLineNumbers(patch: String): List<DiffRow> {
     var new = 0
     return patch
         .lineSequence()
+        // A unified diff ends with a newline and multi-file patches are joined with one:
+        // a completely EMPTY line is a separator, not a content line. Counting it as context
+        // produced a phantom line number at the end of every diff (found by the test) and
+        // stretched the gutter width.
+        .filterNot { it.isEmpty() }
         .map { line ->
             when {
                 line.startsWith("@@") -> {
@@ -173,7 +178,8 @@ internal fun DiffBlock(
         // horizontal scrolling keeps columns aligned. Collected so the switch takes
         // effect on an already open chat.
         val appSettings by
-            com.opencode.android.data.AppSettingsStore.state.collectAsStateWithLifecycle()
+            com.opencode.android.data.AppSettingsStore.state
+                .collectAsStateWithLifecycle()
         val wrapLines = appSettings.wrapLines
         // Selectable so a single diff line can be copied (the copy button grabs it all).
         androidx.compose.foundation.text.selection.SelectionContainer {
@@ -185,110 +191,110 @@ internal fun DiffBlock(
                         Modifier.horizontalScroll(contentScroll)
                     },
             ) {
-            rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
-                // Full-width tint like the TUI: added rows green, removed red.
-                // Tinted from primary/error (not the container): containers sit
-                // too close to the surface in some themes and the tint drowned.
-                val rowBg =
-                    when {
-                        line.startsWith("+") && !line.startsWith("+++") -> {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-                        }
+                rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
+                    // Full-width tint like the TUI: added rows green, removed red.
+                    // Tinted from primary/error (not the container): containers sit
+                    // too close to the surface in some themes and the tint drowned.
+                    val rowBg =
+                        when {
+                            line.startsWith("+") && !line.startsWith("+++") -> {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                            }
 
-                        line.startsWith("-") && !line.startsWith("---") -> {
-                            MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
-                        }
+                            line.startsWith("-") && !line.startsWith("---") -> {
+                                MaterialTheme.colorScheme.error.copy(alpha = 0.22f)
+                            }
 
-                        else -> {
-                            Color.Transparent
+                            else -> {
+                                Color.Transparent
+                            }
                         }
-                    }
-                // Marker column like the TUI ([space]marker[space]).
-                val (marker, markerColor) =
-                    when {
-                        line.startsWith("+") && !line.startsWith("+++") -> {
-                            "+" to MaterialTheme.colorScheme.primary
-                        }
+                    // Marker column like the TUI ([space]marker[space]).
+                    val (marker, markerColor) =
+                        when {
+                            line.startsWith("+") && !line.startsWith("+++") -> {
+                                "+" to MaterialTheme.colorScheme.primary
+                            }
 
-                        line.startsWith("-") && !line.startsWith("---") -> {
-                            "-" to MaterialTheme.colorScheme.error
-                        }
+                            line.startsWith("-") && !line.startsWith("---") -> {
+                                "-" to MaterialTheme.colorScheme.error
+                            }
 
-                        else -> {
-                            " " to Color.Transparent
+                            else -> {
+                                " " to Color.Transparent
+                            }
                         }
-                    }
-                val lineColor =
-                    when {
-                        line.startsWith("+++") || line.startsWith("---") -> {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
+                    val lineColor =
+                        when {
+                            line.startsWith("+++") || line.startsWith("---") -> {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
 
-                        line.startsWith("@@") -> {
-                            MaterialTheme.colorScheme.primary
-                        }
+                            line.startsWith("@@") -> {
+                                MaterialTheme.colorScheme.primary
+                            }
 
-                        else -> {
-                            MaterialTheme.colorScheme.onSurface
+                            else -> {
+                                MaterialTheme.colorScheme.onSurface
+                            }
                         }
-                    }
-                Row(
-                    modifier =
-                        Modifier
-                            .widthIn(min = viewWidth)
-                            .background(rowBg),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = oldNum?.toString() ?: "",
-                        style = codeStyle,
-                        fontFamily = codeFont,
-                        color = gutterColor,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        softWrap = false,
-                        maxLines = 1,
+                    Row(
                         modifier =
                             Modifier
-                                .width(gutterWidth)
-                                .padding(start = MaterialTheme.spacing.small),
-                    )
-                    Text(
-                        text = newNum?.toString() ?: "",
-                        style = codeStyle,
-                        fontFamily = codeFont,
-                        color = gutterColor,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
-                        softWrap = false,
-                        maxLines = 1,
-                        modifier =
-                            Modifier
-                                .width(gutterWidth)
-                                .padding(start = 4.dp),
-                    )
-                    Text(
-                        text = marker,
-                        style = codeStyle,
-                        fontFamily = codeFont,
-                        color = markerColor,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        softWrap = false,
-                        maxLines = 1,
-                        modifier =
-                            Modifier
-                                .width(16.dp)
-                                .padding(horizontal = MaterialTheme.spacing.extraSmall),
-                    )
-                    Text(
-                        text = if (line.startsWith("+") || line.startsWith("-")) line.drop(1) else line,
-                        style = codeStyle,
-                        fontFamily = codeFont,
-                        color = lineColor,
-                        softWrap = false,
-                        maxLines = 1,
-                        modifier = Modifier.padding(end = MaterialTheme.spacing.small),
-                    )
+                                .widthIn(min = viewWidth)
+                                .background(rowBg),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = oldNum?.toString() ?: "",
+                            style = codeStyle,
+                            fontFamily = codeFont,
+                            color = gutterColor,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            softWrap = false,
+                            maxLines = 1,
+                            modifier =
+                                Modifier
+                                    .width(gutterWidth)
+                                    .padding(start = MaterialTheme.spacing.small),
+                        )
+                        Text(
+                            text = newNum?.toString() ?: "",
+                            style = codeStyle,
+                            fontFamily = codeFont,
+                            color = gutterColor,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                            softWrap = false,
+                            maxLines = 1,
+                            modifier =
+                                Modifier
+                                    .width(gutterWidth)
+                                    .padding(start = 4.dp),
+                        )
+                        Text(
+                            text = marker,
+                            style = codeStyle,
+                            fontFamily = codeFont,
+                            color = markerColor,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            softWrap = false,
+                            maxLines = 1,
+                            modifier =
+                                Modifier
+                                    .width(16.dp)
+                                    .padding(horizontal = MaterialTheme.spacing.extraSmall),
+                        )
+                        Text(
+                            text = if (line.startsWith("+") || line.startsWith("-")) line.drop(1) else line,
+                            style = codeStyle,
+                            fontFamily = codeFont,
+                            color = lineColor,
+                            softWrap = false,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = MaterialTheme.spacing.small),
+                        )
+                    }
                 }
-            }
             }
         }
     }
@@ -659,7 +665,8 @@ internal fun ToolCallRow(
                                                 append(output ?: "")
                                             },
                                         ).ifBlank { if (diffText.isNullOrBlank()) "—" else "" },
-                                        com.opencode.android.ui.theme.primaryLinkColor(),
+                                        com.opencode.android.ui.theme
+                                            .primaryLinkColor(),
                                     ),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily =

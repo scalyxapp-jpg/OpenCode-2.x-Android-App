@@ -44,8 +44,8 @@ android {
         applicationId = "com.opencode.android"
         minSdk = 25
         targetSdk = 36
-        versionCode = 30
-        versionName = "1.5.20"
+        versionCode = 31
+        versionName = "1.5.21"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

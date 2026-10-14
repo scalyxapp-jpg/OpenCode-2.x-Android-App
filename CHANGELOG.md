@@ -5,7 +5,32 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.20] - 2026-10-14
+## [1.5.21] - 2026-10-14
+
+### Fixed
+
+- **Code-Änderungen werden im Chat wieder vollständig gezeigt (wie in der TUI) — mit
+  Zeilennummern und Änderungen.** Ursache: Der Renderer las den Diff ausschließlich aus
+  `state.metadata.diff`; OpenCode 2.0.26 liefert den Patch aber in
+  **`state.metadata.files[].patch`** (derselbe Text, den die TUI druckt, inkl. Hunks und
+  Kopfzeilen). Dadurch blieb jede edit-Zeile ohne Diff — man sah nur die Ein-Zeilen-Ausgabe
+  („Edited … (1 replacement)"). Live am laufenden Server nachgewiesen.
+  Jetzt gilt (in dieser Reihenfolge): `metadata.diff` (andere Builds) → **alle**
+  `metadata.files[].patch` → `input.patch` (patch-Tool) → bei **`write`** der geschriebene
+  Dateiinhalt als nummerierter, vollständig „hinzugefügter" Hunk. Der vorhandene
+  TUI-Renderer (zweispaltige Zeilennummern-Leiste, grün/rot getönte ± Zeilen, Kontextzeilen,
+  horizontales Scrollen bzw. Umbruch laut Einstellung, Deckel 400 Zeilen mit Hinweis) zeigt
+  damit wieder den ganzen Code.
+- **Phantom-Zeile am Ende jedes Diffs.** Der Parser zählte die abschließende Leerzeile (bzw.
+  den Trenner zwischen mehreren Patches) als Kontextzeile: eine überzählige Zeilennummer und
+  eine zu breite Nummern-Spalte. Leere Zeilen werden jetzt übersprungen — vom Test gefunden.
+
+### Added (tests)
+
+- `ToolDiffTextTest` (5 Fälle): Patch aus `metadata.files[].patch` (mit dem **echten**
+  Server-Payload), Zeilennummern aus dem Hunk (`@@ -43,10 +43,10 @@` → 44/44), Vorrang von
+  `metadata.diff`, `write` → nummerierter Hunk (1…N), read/shell → kein Diff.
+  Gesamt im betroffenen Satz: **489 Tests, 0 Fehler**.
 
 ### Fixed
 

@@ -107,7 +107,9 @@ internal fun Part.inputField(name: String): String? = stateInput()?.get(name).as
  * ("Shell", "Read", "Edit"). Unknown tools keep their raw id so no information
  * is lost, an empty id falls back to a neutral "Tool".
  */
-internal fun toolRowTitle(tool: String?): String = com.opencode.android.util.ToolText.toolTitle(tool)
+internal fun toolRowTitle(tool: String?): String =
+    com.opencode.android.util.ToolText
+        .toolTitle(tool)
 
 // Tool ids → web display labels. Web shows "Shell" for bash and
 // "Called `delegate_task`" for anything without a friendly name.
@@ -195,11 +197,55 @@ data class ChangedFile(
     val diff: String? = null,
 )
 
+/**
+ * The unified diff of an edit/patch tool call.
+ *
+ * Source order matters and was the bug behind "I no longer see the code with line numbers":
+ * OpenCode 2.0.26 sends the patch in `state.metadata.files[].patch` (the same text the TUI
+ * prints, hunks included), while other builds put it in `metadata.diff`. Reading only the
+ * latter left every edit row without any diff.
+ */
 internal fun toolDiffText(part: Part): String? {
     val md =
         part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
-            ?: return null
-    return (md["diff"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+    val direct = (md?.get("diff") as? kotlinx.serialization.json.JsonPrimitive)?.content
+    if (!direct.isNullOrBlank()) return direct
+    // 2.0.26: one entry per changed file, each with its own unified patch.
+    val files = md?.get("files") as? kotlinx.serialization.json.JsonArray
+    val patches =
+        files
+            ?.mapNotNull { item ->
+                ((item as? kotlinx.serialization.json.JsonObject)?.get("patch") as? kotlinx.serialization.json.JsonPrimitive)
+                    ?.content
+                    ?.takeIf { it.isNotBlank() }
+            }.orEmpty()
+    if (patches.isNotEmpty()) return patches.joinToString("\n")
+    // A patch tool carries the diff it applied as its input.
+    part.inputField("patch")?.takeIf { it.isNotBlank() }?.let { return it }
+    // `write` has no patch (the file is new/overwritten): show the written content as an
+    // all-added hunk so the TUI's numbered listing appears instead of nothing.
+    return writtenContentPatch(part)
+}
+
+/**
+ * The content of a `write` call as a numbered, all-added hunk.
+ *
+ * The server sends `input.content` (the full file) without a diff, so this synthesises the
+ * hunk header and marks every line as added — exactly what the TUI shows for a written file.
+ */
+internal fun writtenContentPatch(part: Part): String? {
+    val tool = part.toolName()?.lowercase() ?: return null
+    if (tool !in setOf("write", "create", "apply_patch")) return null
+    val content = part.inputField("content")?.takeIf { it.isNotBlank() } ?: return null
+    val lines = content.trimEnd('\n').split('\n')
+    return buildString {
+        append("@@ -1,")
+            .append(lines.size)
+            .append(" +1,")
+            .append(lines.size)
+            .append(" @@\n")
+        lines.forEach { append('+').append(it).append('\n') }
+    }
 }
 
 internal fun changedFiles(parts: List<Part>): List<ChangedFile> =
