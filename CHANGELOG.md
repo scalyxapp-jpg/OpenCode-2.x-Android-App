@@ -5,6 +5,40 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.3] - 2026-10-14
+
+### Fixed
+
+**Prompts aus der Warteschlange blieben in der Queue stehen, obwohl sie längst im Chat waren.**
+
+Beleg zuerst, live gegen den Server: ein Prompt mit `delivery:"queue"` **verlässt die Inbox in
+dem Moment, in dem er zugestellt wird**, und wird eine reguläre Nachricht **mit derselben ID** —
+die Inbox war danach leer (`msg_qt1` als Nachricht vorhanden, Inbox `[]`). Der Server ist also
+sauber; der Fehler saß in der App:
+
+- Die **optimistische Queue-Karte** (die Zeile, die der Composer sofort anzeigt, bevor die
+  Antwort da ist) wurde nur von einem späteren Inbox-Reload oder einem
+  `session.inbox.changed`-Event entfernt. Blieb das aus, hing die Zeile dauerhaft in der Queue —
+  und der Prompt stand **doppelt** im Chat (einmal als Nachricht, einmal als Queue-Zeile).
+  Jetzt gilt: **was schon als Nachricht im Transcript steht, ist nicht mehr in der Queue**
+  (`QueuePolicy.pending`, reine Regel, getestet). Das ist selbstheilend und braucht kein Event —
+  das Transcript ist die Wahrheit.
+- Zusätzlich wird die Inbox **am Turn-Ende** neu gelesen (`session.idle`): das ist genau der
+  Moment, in dem ein wartender Prompt zugestellt wird. Damit verschwinden auch Einträge, die
+  nie im Transcript auftauchen (z. B. per „Steer" vorgeschoben).
+
+Gefiltert wird, was der Nutzer sieht: Queue-Liste, Zähler im Umlauf-Indikator und die Zahl am
+Composer. Einträge **ohne ID** bleiben bewusst stehen — sie lassen sich nicht zuordnen, und sie
+auszublenden würde einen erwarteten Prompt verschwinden lassen.
+
+### Added (tests)
+
+- `QueuePolicyTest` (4 Fälle): zugestellter Prompt fällt aus der Queue, ganze Queue leert sich,
+  nichts wird gefiltert solange nichts zugestellt ist, IDs ohne Wert bleiben, nur `user`-Typen
+  zählen als Queue-Prompts.
+- Betroffen geprüft (nur diese Klassen): `QueuePolicyTest` → **4 Tests, 0 Fehler**; Compile der
+  App grün.
+
 ## [2.0.2] - 2026-10-14
 
 ### Added

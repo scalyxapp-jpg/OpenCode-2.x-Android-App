@@ -1150,6 +1150,15 @@ internal fun SessionTab(
     deepLinkMessageId: String? = null,
 ) {
     val onOpenSession = actions.onOpenSession
+    // Delivered queued prompts leave the server inbox and become a message with the SAME
+    // id (verified live: the inbox stays empty, the prompt is a regular message). Anything
+    // already in the transcript is therefore not queued any more. Without this the
+    // optimistic queue row stayed until some unrelated reload and the prompt showed twice.
+    val pendingQueue =
+        com.opencode.android.ui.session.QueuePolicy.pending(
+            uiState.queuedMessages,
+            remember(uiState.messages) { uiState.messages.mapNotNull { it.id }.toSet() },
+        )
     val onLoadOlder = actions.onLoadOlder
     val onRetry = actions.onRetry
     val onInputChange = actions.onInputChange
@@ -1597,7 +1606,7 @@ internal fun SessionTab(
                             }) +
                                 (if (uiState.race != null) 1 else 0) +
                                 (if (uiState.explain != null) 1 else 0) +
-                                (if (uiState.queuedMessages.isNotEmpty()) uiState.queuedMessages.size + 1 else 0)
+                                (if (pendingQueue.isNotEmpty()) pendingQueue.size + 1 else 0)
                         // A tapped background notification names the message it
                         // describes. Scroll there once the list contains it; a
                         // message outside the loaded page simply stays put (the
@@ -1697,13 +1706,13 @@ internal fun SessionTab(
                                         )
                                     }
                                 }
-                                if (uiState.queuedMessages.isNotEmpty()) {
+                                if (pendingQueue.isNotEmpty()) {
                                     item(key = "queue-header") {
                                         Text(
                                             text =
                                                 stringResource(
                                                     R.string.queue_count,
-                                                    uiState.queuedMessages.size,
+                                                    pendingQueue.size,
                                                 ),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.primary,
@@ -1715,7 +1724,7 @@ internal fun SessionTab(
                                     }
                                 }
                                 itemsIndexed(
-                                    items = uiState.queuedMessages,
+                                    items = pendingQueue,
                                     key = { _, item -> "queue-${item.id ?: item.hashCode()}" },
                                     contentType = { _, _ -> "queued" },
                                 ) { _, item ->
@@ -2080,7 +2089,7 @@ internal fun SessionTab(
             uploadTotal = uiState.uploadTotal,
             uploadingUris = uiState.uploadingUris,
             statusError = uiState.statusError,
-            queuedCount = uiState.queuedMessages.size,
+            queuedCount = pendingQueue.size,
             outboxCount = uiState.outbox.size,
             outboxFlushing = uiState.outboxFlushing,
             followUpBehavior = appSettings.followUpBehavior,

@@ -533,6 +533,10 @@ object StreamReducer {
                             add(StreamEffect.EndTurn)
                             add(StreamEffect.Reconcile(includeMeta = true))
                             add(StreamEffect.LoadPendingQuestions)
+                            // The end of a turn is exactly when a queued prompt is delivered:
+                            // re-read the inbox so the row that just became a message cannot
+                            // linger as "queued" (the transcript filter covers the rest).
+                            add(StreamEffect.RefreshInbox)
                             if (firstIdle) add(StreamEffect.NotifyDone)
                         },
                 )
