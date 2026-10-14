@@ -97,7 +97,10 @@ class ToolChangedFilesTest {
     fun `the tool badge names the tool like the TUI`() {
         assertEquals("Edit", toolDisplayName("edit"))
         assertEquals("Read", toolDisplayName("read"))
-        assertEquals("Search", toolDisplayName("grep"))
+        assertEquals("Grep", toolDisplayName("grep"))
+        assertEquals("Glob", toolDisplayName("glob"))
+        assertEquals("Task", toolDisplayName("task"))
+        assertEquals("Webfetch", toolDisplayName("webfetch"))
         assertEquals("Write", toolDisplayName("write"))
         assertEquals("Shell", toolDisplayName("bash"))
         // An unknown tool keeps its raw id - no information is lost.
@@ -138,5 +141,37 @@ class ToolChangedFilesTest {
         // re-flow the text, so the spaces around it stay.
         assertEquals("I plan the  change", tuiReasoningText("I plan the [REDACTED] change"))
         assertEquals("plain", tuiReasoningText("  plain  "))
+    }
+
+    // --- failed tool calls ------------------------------------------------
+
+    @Test
+    fun `a failed tool call shows its reason and starts open`() {
+        val failed =
+            part(
+                "bash",
+                """{"status":"error","input":{"command":"false"},"error":{"name":"ToolError","data":{"message":"command exited with 1"}}}""",
+            )
+        assertEquals("command exited with 1", toolErrorText(failed))
+        assertNull(toolErrorText(part("bash", """{"status":"completed","output":"ok"}""")))
+        // The reason is the point of the row, so a failed call is never collapsed -
+        // regardless of the "expand shell/edit tool parts" switches.
+        assertEquals(true, defaultToolExpanded(failed, shellExpanded = false, editExpanded = false))
+        // An aborted call keeps the short label the TUI/web use.
+        val aborted = part("bash", """{"status":"error","error":{"name":"MessageAbortedError"}}""")
+        assertEquals("Interrupted", toolErrorText(aborted))
+    }
+
+    // --- large diff guard -------------------------------------------------
+
+    @Test
+    fun `the guard counts the changed lines of a diff`() {
+        val rows =
+            diffLineNumbers(
+                "@@ -1,4 +1,4 @@\n keep\n-old one\n+new one\n+second\n keep\n",
+            )
+        assertEquals(3, countChangedRows(rows))
+        assertEquals(true, diffTooLarge(changedLines = 3, limit = 2))
+        assertEquals(false, diffTooLarge(changedLines = 2, limit = 2))
     }
 }

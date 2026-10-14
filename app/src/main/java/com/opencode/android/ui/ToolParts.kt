@@ -32,8 +32,22 @@ internal fun isExploreTool(tool: String?): Boolean = tool?.lowercase() in setOf(
 private val EDIT_TOOLS = setOf("edit", "write", "apply_patch", "multiedit", "patch")
 
 /**
+ * A tool call's failure, in the words of the reference clients.
+ *
+ * The chat never rendered `state.error` at all — a failed tool call showed a red
+ * title and no reason. The message comes from the server (`error.data.message`, or a
+ * plain string); `MessageAbortedError` keeps the short "Interrupted" label the TUI/web
+ * also use. `null` when the call did not fail.
+ */
+internal fun toolErrorText(part: Part): String? =
+    if (part.stateField("status") == "error") messageErrorText(part.stateObject()?.get("error")) else null
+
+/**
  * Whether a tool row starts expanded, driven by the "Expand shell/edit tool
  * parts" settings (web parity). Unknown tools stay collapsed.
+ *
+ * A failed call always starts open: the reason it failed is the whole point of
+ * the row, and hiding it behind a tap was the previous behaviour.
  */
 internal fun defaultToolExpanded(
     part: Part,
@@ -42,6 +56,7 @@ internal fun defaultToolExpanded(
 ): Boolean {
     val tool = part.toolName()?.lowercase()
     return when {
+        toolErrorText(part) != null -> true
         tool == "bash" || tool == "shell" -> shellExpanded
         tool != null && tool in EDIT_TOOLS -> editExpanded
         else -> false

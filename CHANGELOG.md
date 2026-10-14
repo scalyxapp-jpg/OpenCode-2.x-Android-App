@@ -5,6 +5,50 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.24] - 2026-10-14
+
+Grundlage: der opencode-Bundle enthält den **kompletten String-Katalog der Referenz-Clients**
+(`ui.*`-Schlüssel, 203 Stück). Die englischen Werte wurden ausgelesen und mit der App verglichen —
+nicht geraten.
+
+### Fixed
+
+- **Ein fehlgeschlagener Werkzeug-Aufruf zeigte keinen Grund.** `state.error` wurde nirgends
+  gerendert: die Zeile wurde nur rot, blieb eingeklappt, und die Fehlermeldung war nur nach einem
+  Aufklappen zu sehen — wo sie ebenfalls fehlte. Jetzt eine Fehler-Karte in der Referenz-Wortlaut
+  (`ui.toolErrorCard.*`): **„Failed"** + Meldung des Servers + **„Copy error"**; fehlgeschlagene
+  Zeilen starten immer offen (unabhängig von „Expand shell/edit tool parts"). `MessageAbortedError`
+  bleibt „Interrupted" wie im TUI.
+- **Große Diffs wurden still gekappt.** Jetzt die Warnung der Referenz
+  (`ui.sessionReview.largeDiff.*`): **„Diff too large to render"** + **„Limit: N changed lines.
+  Current: M changed lines."** + **„Render anyway"**, das den Deckel bewusst aufhebt. Gilt erst ab
+  400 *geänderten* Zeilen (der Deckel misst ±-Zeilen wie die Referenz, nicht Kontextzeilen).
+
+### Changed
+
+- **Werkzeug-Namen wie in den Referenz-Clients.** Aus `ui.tool.*` gelesen: `grep` → **Grep**
+  (vorher „Search"), `glob` → **Glob** (vorher „List"), `task`/`delegate_task` → **Task** (vorher
+  „Subagent"), `webfetch` → **Webfetch**, `websearch` → **Web Search** (beide vorher „Web").
+  Read/Write/Edit/Patch/Shell/Skill/Todos unverändert (dort stimmten sie).
+- **„N Changed files"** statt „N changed files" — die Referenz schreibt es mit großem C
+  (`ui.sessionTurn.diffs.changed.*`); gilt für Chat-Karte und Changes-Tab.
+
+### Researched (bewusst nicht gebaut)
+
+- **Exit-Code eines Shell-Aufrufs:** Der Server liefert `metadata.exit`, aber es gibt **keinen**
+  passenden String-Schlüssel im Katalog und **keine** Client-Stelle, die `.exit` liest — weder TUI
+  noch Web zeigen einen Exit-Code an. Nichts nachzubauen (im Bundle nachgewiesen).
+- **Weitere Referenz-Features, die die App nicht hat** (dokumentiert, nicht gebaut):
+  „Hide steps"/„Show steps" pro Turn (`ui.sessionTurn.steps.*`), Diff-Ansicht umschalten
+  Split/Unified, „Hide non-diff lines"/„Show all lines", „Expand all"/„Collapse all",
+  „Open file" (`ui.sessionReview*`). Die App hat Unified-Diff + Aufklapp-Modus.
+
+### Added (tests)
+
+- Neue Fälle: Fehlertext + Aufklapp-Zustand fehlgeschlagener Zeilen (inkl. „Interrupted"),
+  Zählen der ±-Zeilen und die Grenzprüfung des Deckels; Werkzeug-Namen gegen den Katalog
+  (`ui.tool.*`) gepinnt. Gesamt im betroffenen Satz: **502 Tests, 0 Fehler**.
+
 ## [1.5.23] - 2026-10-14
 
 ### Fixed

@@ -164,6 +164,15 @@ internal fun DiffBlock(
     val codeFont =
         com.opencode.android.ui.theme
             .codeFont()
+    // The reference clients do not render a huge diff by default
+    // (`ui.sessionReview.largeDiff.*` in the server's string catalogue: a title,
+    // "Limit: N changed lines. Current: M changed lines." and a "Render anyway"
+    // action). The same guard with the app's cap keeps a big refactor from building
+    // thousands of composables - and the user can always override it.
+    val changedLines = remember(rows) { countChangedRows(rows) }
+    val tooLarge = diffTooLarge(changedLines, MAX_DIFF_LINES)
+    var renderAnyway by remember(rows) { androidx.compose.runtime.mutableStateOf(false) }
+    val visibleRows = if (renderAnyway) rows else rows.take(MAX_DIFF_LINES)
     // BoxWithConstraints hands the viewport width down: each tinted row is at
     // least viewport-wide (TUI full-width tint), longer rows grow with content.
     androidx.compose.foundation.layout.BoxWithConstraints(
@@ -191,7 +200,7 @@ internal fun DiffBlock(
                         Modifier.horizontalScroll(contentScroll)
                     },
             ) {
-                rows.take(MAX_DIFF_LINES).forEach { (line, oldNum, newNum) ->
+                visibleRows.forEach { (line, oldNum, newNum) ->
                     // Full-width tint like the TUI: added rows green, removed red.
                     // Tinted from primary/error (not the container): containers sit
                     // too close to the surface in some themes and the tint drowned.
@@ -298,19 +307,56 @@ internal fun DiffBlock(
             }
         }
     }
-    if (rows.size > MAX_DIFF_LINES) {
+    if (tooLarge && !renderAnyway) {
+        Column(modifier = Modifier.padding(vertical = MaterialTheme.spacing.extraSmall)) {
+            Text(
+                text = stringResource(R.string.diff_too_large_title),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                text = stringResource(R.string.diff_too_large_meta, MAX_DIFF_LINES, changedLines),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.diff_render_anyway),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier =
+                    Modifier
+                        .clickable(role = Role.Button) { renderAnyway = true }
+                        .padding(vertical = 2.dp),
+            )
+        }
+    } else if (rows.size > visibleRows.size) {
+        // Few changes, but the hunks around them overflow the cap: a plain note.
         Text(
             text =
                 pluralStringResource(
                     R.plurals.diff_lines_truncated,
-                    rows.size - MAX_DIFF_LINES,
-                    rows.size - MAX_DIFF_LINES,
+                    rows.size - visibleRows.size,
+                    rows.size - visibleRows.size,
                 ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
+
+/** The `+`/`-` lines of a diff row list - what the large-diff guard measures. */
+internal fun countChangedRows(rows: List<DiffRow>): Int =
+    rows.count { row ->
+        (row.line.startsWith("+") && !row.line.startsWith("+++")) ||
+            (row.line.startsWith("-") && !row.line.startsWith("---"))
+    }
+
+/** Whether a diff exceeds the render limit and needs the reference clients' guard. */
+internal fun diffTooLarge(
+    changedLines: Int,
+    limit: Int,
+): Boolean = changedLines > limit
 
 // Web "N Changed files" card: aggregate +/- plus one row per file.
 @Composable
@@ -643,6 +689,47 @@ internal fun ToolCallRow(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                        }
+                        // A failed call shows WHY, like the reference clients' error card
+                        // (`ui.toolErrorCard.*`: "Failed" plus a "Copy error" action).
+                        // Until now the row only turned red and hid the reason behind a tap.
+                        val errorText = toolErrorText(part)
+                        if (!errorText.isNullOrBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                                    modifier = Modifier.padding(MaterialTheme.spacing.small),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.tool_failed),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    Text(
+                                        text = errorText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.tool_copy_error),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier =
+                                            Modifier
+                                                .clickable(role = Role.Button) {
+                                                    copyToClipboard(context, toolCopyLabel, errorText)
+                                                    toast(context, copiedMsg)
+                                                }.padding(vertical = 2.dp, horizontal = 4.dp),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(MaterialTheme.spacing.small))
                         }
                         // Unified diff first (edit/write/patch), then the result.
                         if (!diffText.isNullOrBlank()) {

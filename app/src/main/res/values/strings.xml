@@ -204,8 +204,8 @@
         <item quantity="other">… %1$d more lines (truncated)</item>
     </plurals>
     <plurals name="changed_files">
-        <item quantity="one">%1$d changed file</item>
-        <item quantity="other">%1$d changed files</item>
+        <item quantity="one">%1$d Changed file</item>
+        <item quantity="other">%1$d Changed files</item>
     </plurals>
     <string name="running" formatted="false">running…</string>
     <string name="status_label">Status: %1$s</string>
@@ -577,4 +577,9 @@
     <string name="settings_outbox_auto_flush" formatted="false">Send outbox automatically</string>
     <string name="settings_outbox_auto_flush_sub" formatted="false">Waiting prompts are delivered as soon as the server is reachable; off = only via "Send now"</string>
     <string name="setting_disabled_hint" formatted="false">Disabled in settings: %1$s</string>
+    <string name="tool_failed" formatted="false">Failed</string>
+    <string name="tool_copy_error" formatted="false">Copy error</string>
+    <string name="diff_too_large_title" formatted="false">Diff too large to render</string>
+    <string name="diff_too_large_meta" formatted="false">Limit: %1$d changed lines. Current: %2$d changed lines.</string>
+    <string name="diff_render_anyway" formatted="false">Render anyway</string>
 </resources>

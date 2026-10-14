@@ -22,12 +22,19 @@ object ToolText {
         )
 
     /**
-     * Display name of a tool call, Title Case like the web's tool headers
-     * ("Shell", "Read", "Edit"). Unknown tools keep their raw id so no
-     * information is lost; an empty id becomes a neutral "Tool".
+     * Display name of a tool call, exactly the names the reference clients use
+     * (`ui.tool.*` in the server's string catalogue, read out of the opencode
+     * bundle: "Read", "Grep", "Glob", "List", "Task", "Webfetch", "Web Search",
+     * "Shell", "Patch", "Edit", "Write", "Skill").
      *
-     * Single source of truth: the chat's tool rows and the background
-     * notification labels both use it.
+     * These used to be invented names that appear nowhere in the catalogue —
+     * "Search" for grep, "List" for glob, "Subagent" for task, "Web" for both web
+     * tools — so the same tool was named differently than the TUI and the web.
+     * Unknown tools keep their raw id so no information is lost; an empty id
+     * becomes a neutral "Tool".
+     *
+     * Single source of truth: the chat's tool rows, the live rows and the
+     * background notification labels all use it.
      */
     fun toolTitle(tool: String?): String {
         val raw = tool?.trim().orEmpty()
@@ -38,13 +45,15 @@ object ToolText {
             "write" -> "Write"
             "edit", "multiedit" -> "Edit"
             "patch", "apply_patch" -> "Patch"
-            "grep", "search", "ripgrep" -> "Search"
-            "glob", "list", "ls" -> "List"
+            "grep", "search", "ripgrep" -> "Grep"
+            "glob" -> "Glob"
+            "list", "ls" -> "List"
             "todowrite", "todo_write" -> "Todos"
-            "task", "subagent", "delegate_task" -> "Subagent"
+            "task", "subagent", "delegate_task" -> "Task"
             "question" -> "Question"
             "skill" -> "Skill"
-            "websearch", "webfetch" -> "Web"
+            "websearch" -> "Web Search"
+            "webfetch" -> "Webfetch"
             else -> raw
         }
     }

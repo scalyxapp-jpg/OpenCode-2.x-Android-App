@@ -14,10 +14,22 @@ class ToolTextTest {
     }
 
     @Test
-    fun `known tools are title case like the chat rows`() {
+    fun `known tools are named like the reference clients`() {
+        // Names taken from the server's string catalogue (`ui.tool.*` in the opencode
+        // bundle): the app used its own "Search"/"List"/"Subagent"/"Web" names, which
+        // appear nowhere there.
         assertEquals("Shell", ToolText.toolTitle("bash"))
         assertEquals("Read", ToolText.toolTitle("read"))
         assertEquals("Edit", ToolText.toolTitle("multiedit"))
+        assertEquals("Write", ToolText.toolTitle("write"))
+        assertEquals("Patch", ToolText.toolTitle("apply_patch"))
+        assertEquals("Grep", ToolText.toolTitle("grep"))
+        assertEquals("Glob", ToolText.toolTitle("glob"))
+        assertEquals("List", ToolText.toolTitle("list"))
+        assertEquals("Task", ToolText.toolTitle("task"))
+        assertEquals("Skill", ToolText.toolTitle("skill"))
+        assertEquals("Webfetch", ToolText.toolTitle("webfetch"))
+        assertEquals("Web Search", ToolText.toolTitle("websearch"))
     }
 
     @Test
