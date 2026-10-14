@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-10-14
+
+### Fixed
+
+**„Braucht dich" in der Zentrale funktionierte nicht** — gemeldet mit Screenshot. Live gegen
+den laufenden Server nachgestellt, drei getrennte Defekte:
+
+1. **Feldtitel statt Frage.** Die Zuordnung ließ `WireForm.title` fallen und die Zentrale nahm
+   den Titel des ersten *Feldes*: im Screenshot standen deshalb „Num", „Bool", „Str", „Multi",
+   „Multi" — das sind **Feldtypen**, nicht das, was gefragt wird. `SessionQuestion` trägt jetzt
+   den Formular-Titel (`GET /api/form` liefert `title: "num" … "multi"` neben
+   `fields[].type: "number" … "multiselect"`), und die Zeile nutzt ihn.
+2. **Eine Zeile pro Eintrag statt pro Session.** Die Live-Antwort waren **fünf Formulare aus
+   einer einzigen Session** (`ses_eca7e402…`) → fünf fast identische Zeilen ohne Kontext. Jetzt
+   wird **pro wartender Session** eine Zeile gebildet: bei genau einer Frage steht die Frage
+   als Titel und die Session als Detail, bei mehreren ist die Session der Titel und die Zahl
+   das Detail („5 open forms"). Ein Berechtigungs-Eintrag nennt weiter die Aktion.
+3. **Nur ein Verzeichnis abgefragt.** `GET /api/form` und `GET /api/permission/request` sind
+   **pro Verzeichnis** begrenzt (live bewiesen: ein Projekt meldete fünf Formulare, ein anderes
+   `[]`). Die Zentrale fragte nur das Verzeichnis der ersten Session ab — wartende Arbeit aus
+   jedem anderen Projekt war unsichtbar. Jetzt werden die Verzeichnisse der letzten Sessions
+   (max. 5, dedupliziert) **plus** die globale Location abgefragt und die Treffer über die ID
+   zusammengeführt.
+
+### Added
+
+- **Aktualisieren** in der Kopfzeile der Zentrale: die Abschnitte lassen sich auffrischen, ohne
+  den Bildschirm zu verlassen (vorher nur beim Betreten geladen).
+- Ein Wechsel im Postausgang lädt „Braucht dich" neu, statt einen Teil zu patchen — damit kann
+  die Liste nicht mehr vom Server abweichen.
+
+### Added (tests)
+
+- `CentrePolicyTest` auf 12 Fälle erweitert: der Live-Fall (fünf Formulare einer Session → **eine**
+  Zeile), einzelne Frage (Frage als Titel), unbekannte Session (lesbares Label aus der ID),
+  Verzeichnis-Scan über mehrere Projekte, dedupliziert und begrenzt.
+- Gesamt im betroffenen Satz: **516 Tests, 0 Fehler**.
+
 ## [2.0.0] - 2026-10-14
 
 **Der Sprung auf 2.0 ist kein Etikett: Die App bekommt eine eigene Ebene — die Zentrale —

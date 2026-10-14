@@ -85,63 +85,110 @@ object CentrePolicy {
         )
 
     /**
-     * Everything that is waiting for the user, across all sessions.
+     * Everything that is waiting for the user, **grouped by session**.
      *
-     * Server truth first (a pending permission or question means a turn is blocked
-     * *right now*), then the local outbox (a send that could not leave the phone).
-     * Unknown sessions are still listed: the item names its session id, and opening it
-     * is the user's job, not the policy's.
+     * One row per waiting session, never one per item: the server returned five pending
+     * forms in one session, which rendered as five near-identical rows that named their
+     * first FIELD ("Num", "Bool", …) instead of what was being asked. The session is the
+     * unit the user can act on — tapping opens it, and the session's own screen shows the
+     * pending cards.
+     *
+     * Order: blocked turns first (a permission or an open form stops the agent RIGHT NOW),
+     * then sends still waiting in the outbox.
      */
     fun needs(
         permissions: List<PermissionRequest>,
         questions: List<SessionQuestion>,
         outboxCounts: Map<String, Int>,
+        sessionTitles: Map<String, String> = emptyMap(),
     ): List<CentreNeed> {
-        val perms =
-            permissions.mapNotNull { request ->
-                val sessionId = request.sessionId ?: return@mapNotNull null
-                CentreNeed(
-                    kind = NeedKind.Permission,
-                    sessionId = sessionId,
-                    title =
-                        request.title?.takeIf { it.isNotBlank() }
-                            ?: request.permission?.takeIf { it.isNotBlank() }
-                            ?: "Permission",
-                    detail = request.description?.takeIf { it.isNotBlank() },
-                )
+        fun label(sessionId: String): String = sessionTitles[sessionId]?.takeIf { it.isNotBlank() } ?: "Session …${sessionId.takeLast(6)}"
+
+        fun counts(
+            count: Int,
+            singular: String,
+            plural: String,
+        ) = "$count $singular" + if (count == 1) "" else "s"
+
+        val permsBySession =
+            permissions
+                .filter { !it.sessionId.isNullOrBlank() }
+                .distinctBy { it.id ?: it.hashCode() }
+                .groupBy { it.sessionId!! }
+        val formsBySession =
+            questions
+                .filter { !it.sessionId.isNullOrBlank() }
+                .distinctBy { it.id }
+                .groupBy { it.sessionId!! }
+
+        val sessionIds =
+            (permsBySession.keys + formsBySession.keys + outboxCounts.filterValues { it > 0 }.keys).distinct()
+
+        val needs =
+            sessionIds.map { sessionId ->
+                val sessionLabel = label(sessionId)
+                val perms = permsBySession[sessionId].orEmpty()
+                val forms = formsBySession[sessionId].orEmpty()
+                val waiting = outboxCounts[sessionId] ?: 0
+                val kind =
+                    when {
+                        perms.isNotEmpty() -> NeedKind.Permission
+                        forms.isNotEmpty() -> NeedKind.Question
+                        else -> NeedKind.Outbox
+                    }
+                // A single question reads best as itself; with several, the session is the
+                // headline and the count is the detail.
+                val title =
+                    when {
+                        perms.isNotEmpty() -> {
+                            perms.first().title?.takeIf { it.isNotBlank() }
+                                ?: perms.first().permission?.takeIf { it.isNotBlank() }
+                                ?: sessionLabel
+                        }
+
+                        forms.size == 1 -> {
+                            forms.first().title?.takeIf { it.isNotBlank() }
+                                ?: forms
+                                    .first()
+                                    .questions
+                                    .firstOrNull()
+                                    ?.question
+                                    ?.takeIf { it.isNotBlank() }
+                                ?: sessionLabel
+                        }
+
+                        else -> {
+                            sessionLabel
+                        }
+                    }
+                val detail =
+                    listOfNotNull(
+                        sessionLabel.takeIf { it != title },
+                        counts(perms.size, "permission", "permissions").takeIf { perms.isNotEmpty() },
+                        counts(forms.size, "open form", "open forms").takeIf { forms.isNotEmpty() },
+                        counts(waiting, "message waiting", "messages waiting").takeIf { waiting > 0 },
+                    ).joinToString(" · ")
+                CentreNeed(kind = kind, sessionId = sessionId, title = title, detail = detail)
             }
-        val asks =
-            questions.mapNotNull { question ->
-                val sessionId = question.sessionId ?: return@mapNotNull null
-                val first =
-                    question.questions
-                        .firstOrNull()
-                        ?.question
-                        ?.takeIf { it.isNotBlank() }
-                CentreNeed(
-                    kind = NeedKind.Question,
-                    sessionId = sessionId,
-                    title = first ?: "Question",
-                    detail =
-                        question.questions
-                            .size
-                            .takeIf { it > 1 }
-                            ?.let { "$it questions" },
-                )
-            }
-        val waiting =
-            outboxCounts
-                .filterValues { it > 0 }
-                .map { (sessionId, count) ->
-                    CentreNeed(
-                        kind = NeedKind.Outbox,
-                        sessionId = sessionId,
-                        title = "Waiting to send",
-                        detail = "$count message" + if (count == 1) "" else "s",
-                    )
-                }
-        return perms + asks + waiting
+        return needs.sortedBy { it.kind.ordinal }
     }
+
+    /**
+     * Directories to ask for pending work, most recent first.
+     *
+     * `GET /api/form` and `GET /api/permission/request` are scoped per directory, so asking
+     * only the first session's directory hid every other project — the server returned five
+     * pending forms for one directory while another project's items stayed invisible.
+     */
+    fun directoriesToScan(
+        sessions: List<Session>,
+        limit: Int = 5,
+    ): List<String> =
+        sessions
+            .mapNotNull { it.directory ?: it.path }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(limit)
 
     /** `$1.23` — the same shape the glance surfaces use. */
     fun costLabel(cost: Double?): String? = cost?.let { "$" + String.format(java.util.Locale.ENGLISH, "%.2f", it) }

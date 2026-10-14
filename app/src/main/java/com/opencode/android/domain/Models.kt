@@ -286,6 +286,13 @@ data class QuestionToolRef(
 data class SessionQuestion(
     val id: String,
     @SerialName("sessionID") val sessionId: String? = null,
+    /**
+     * The form's own title (`WireForm.title`, e.g. the question the agent asks).
+     *
+     * Was dropped by the mapping, which left the cockpit showing the first FIELD title
+     * instead ("Num", "Bool", …) — those are form field types, not questions.
+     */
+    val title: String? = null,
     val questions: List<QuestionItem> = emptyList(),
     val tool: QuestionToolRef? = null,
 )

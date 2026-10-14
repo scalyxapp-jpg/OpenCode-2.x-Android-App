@@ -14,11 +14,10 @@ import com.opencode.android.domain.ForkBody
 import com.opencode.android.domain.ForkRequest
 import com.opencode.android.domain.FormReplyBody
 import com.opencode.android.domain.HealthResponse
-import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.InboxItem
 import com.opencode.android.domain.McpResourceEntry
+import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.Message
-import com.opencode.android.domain.WireData
 import com.opencode.android.domain.MessageListResponse
 import com.opencode.android.domain.Model
 import com.opencode.android.domain.ModelRef
@@ -49,8 +48,6 @@ import com.opencode.android.domain.QuestionToolRef
 import com.opencode.android.domain.RevertRequest
 import com.opencode.android.domain.RevertStageBody
 import com.opencode.android.domain.Session
-import com.opencode.android.domain.SessionStats
-import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SessionCreateRequest
 import com.opencode.android.domain.SessionGuard
 import com.opencode.android.domain.SessionGuardHealth
@@ -58,21 +55,23 @@ import com.opencode.android.domain.SessionListResponse
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionQuestionListResponse
 import com.opencode.android.domain.SessionResponse
+import com.opencode.android.domain.SessionStats
 import com.opencode.android.domain.SessionStatus
 import com.opencode.android.domain.SessionUpdateRequest
+import com.opencode.android.domain.SkillEntry
 import com.opencode.android.domain.SummarizeRequest
 import com.opencode.android.domain.TodoItem
 import com.opencode.android.domain.UploadResponse
 import com.opencode.android.domain.VcsDiffFile
 import com.opencode.android.domain.VcsInfo
 import com.opencode.android.domain.WireCredentialCreate
+import com.opencode.android.domain.WireData
 import com.opencode.android.domain.WireForm
 import com.opencode.android.domain.WireFormField
 import com.opencode.android.domain.WireIntegration
 import com.opencode.android.domain.WirePermission
 import com.opencode.android.domain.WireProvider
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -80,6 +79,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -449,15 +449,16 @@ class OpenCodeApiAdapter(
         val text =
             try {
                 body.use { responseBody ->
-                    com.opencode.android.util.LimitedInputStream(
-                        responseBody.byteStream(),
-                        MAX_FILE_BYTES,
-                        "file content",
-                    ).use { stream ->
-                        // The JSON string in the body is decoded through the shared
-                        // length-bounded read.
-                        stream.readBytes().toString(Charsets.UTF_8)
-                    }
+                    com.opencode.android.util
+                        .LimitedInputStream(
+                            responseBody.byteStream(),
+                            MAX_FILE_BYTES,
+                            "file content",
+                        ).use { stream ->
+                            // The JSON string in the body is decoded through the shared
+                            // length-bounded read.
+                            stream.readBytes().toString(Charsets.UTF_8)
+                        }
                 }
             } catch (e: com.opencode.android.util.BodyTooLargeException) {
                 throw java.io.IOException("file too large to open (limit ${MAX_FILE_BYTES / (1024 * 1024)} MB)")
@@ -1160,6 +1161,7 @@ class OpenCodeApiAdapter(
      * then silently sent `{answer:{}}`, i.e. an EMPTY reply for a valid question, and
      * the agent stayed blocked. Failing loudly is strictly better than that.
      */
+
     /**
      * The answer body keyed by the form's field keys.
      *
@@ -1298,6 +1300,7 @@ class OpenCodeApiAdapter(
         return SessionQuestion(
             id = id ?: "",
             sessionId = sessionId,
+            title = title,
             questions = questions,
             tool = null as QuestionToolRef?,
         )

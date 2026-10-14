@@ -120,39 +120,93 @@ class CentrePolicyTest {
     // --- needs you ---------------------------------------------------------
 
     @Test
-    fun `permissions questions and waiting sends all land in needs you`() {
+    fun `waiting work is grouped per session, not per item`() {
+        // The live case: five pending forms in ONE session. They used to render as five rows
+        // that each showed a form FIELD title ("Num", "Bool", ...).
+        val forms =
+            listOf("num", "bool", "str", "multi", "multi").mapIndexed { index, title ->
+                SessionQuestion(
+                    id = "frm$index",
+                    sessionId = "ses_a",
+                    title = title,
+                    questions = listOf(QuestionItem(question = title.replaceFirstChar { it.uppercase() })),
+                )
+            }
         val needs =
             CentrePolicy.needs(
                 permissions =
                     listOf(
-                        PermissionRequest(id = "p1", sessionId = "s1", title = "Run tests", description = "bash"),
+                        PermissionRequest(id = "p1", sessionId = "ses_b", title = "Run tests"),
                         // Without a session there is nothing to open: skipped.
                         PermissionRequest(id = "p2", sessionId = null, title = "orphan"),
                     ),
+                questions = forms,
+                outboxCounts = mapOf("ses_c" to 2, "ses_d" to 0),
+                sessionTitles =
+                    mapOf("ses_a" to "R4 Semantik", "ses_b" to "Fix bug", "ses_c" to "Outbox session"),
+            )
+        // One row per session, blocked turns first.
+        assertEquals(listOf("ses_b", "ses_a", "ses_c"), needs.map { it.sessionId })
+        assertEquals(listOf(NeedKind.Permission, NeedKind.Question, NeedKind.Outbox), needs.map { it.kind })
+        // A permission row names the action; the session is the detail.
+        assertEquals("Run tests", needs[0].title)
+        assertEquals("Fix bug · 1 permission", needs[0].detail)
+        // Five forms: the session is the headline, the count is the detail - never "Num".
+        assertEquals("R4 Semantik", needs[1].title)
+        assertEquals("5 open forms", needs[1].detail)
+        // A session without waiting sends does not show up.
+        assertEquals(emptyList<String>(), needs.filter { it.sessionId == "ses_d" }.map { it.title })
+    }
+
+    @Test
+    fun `a single question shows itself, with the session as the detail`() {
+        val needs =
+            CentrePolicy.needs(
+                permissions = emptyList(),
                 questions =
                     listOf(
                         SessionQuestion(
-                            id = "q1",
-                            sessionId = "s2",
-                            questions =
-                                listOf(
-                                    QuestionItem(question = "Which database?"),
-                                    QuestionItem(question = "And?"),
-                                    QuestionItem(question = "More?"),
-                                ),
+                            id = "frm1",
+                            sessionId = "ses_a",
+                            title = "Which database?",
+                            questions = listOf(QuestionItem(question = "Which database?")),
                         ),
                     ),
-                outboxCounts = mapOf("s3" to 2, "s4" to 0),
+                outboxCounts = emptyMap(),
+                sessionTitles = mapOf("ses_a" to "R4 Semantik"),
             )
-        assertEquals(listOf(NeedKind.Permission, NeedKind.Question, NeedKind.Outbox), needs.map { it.kind })
-        assertEquals("Run tests", needs[0].title)
-        assertEquals("bash", needs[0].detail)
-        assertEquals("Which database?", needs[1].title)
-        assertEquals("3 questions", needs[1].detail)
-        assertEquals("Waiting to send", needs[2].title)
-        assertEquals("2 messages", needs[2].detail)
-        // A session without waiting sends does not show up.
-        assertEquals(emptyList<String>(), needs.filter { it.sessionId == "s4" }.map { it.title })
+        assertEquals("Which database?", needs.single().title)
+        assertEquals("R4 Semantik · 1 open form", needs.single().detail)
+    }
+
+    @Test
+    fun `an unknown session still gets a readable label`() {
+        val needs =
+            CentrePolicy.needs(
+                permissions = emptyList(),
+                questions = emptyList(),
+                outboxCounts = mapOf("ses_ed73c42feffeZJsfemn2kwMwYk" to 1),
+            )
+        assertEquals("Session …kwMwYk", needs.single().title)
+        assertEquals("1 message waiting", needs.single().detail)
+    }
+
+    @Test
+    fun `pending work is asked for in every project, newest sessions first`() {
+        val sessions =
+            listOf(
+                Session(id = "s1", directory = "/a"),
+                Session(id = "s2", directory = "/b"),
+                Session(id = "s3", directory = "/a"),
+                Session(id = "s4", path = "/c"),
+                Session(id = "s5", directory = ""),
+                Session(id = "s6", directory = "/d"),
+                Session(id = "s7", directory = "/e"),
+                Session(id = "s8", directory = "/f"),
+            )
+        // Distinct, most recent first, capped: a form in another project used to be invisible.
+        assertEquals(listOf("/a", "/b", "/c", "/d", "/e"), CentrePolicy.directoriesToScan(sessions))
+        assertEquals(listOf("/a"), CentrePolicy.directoriesToScan(sessions, limit = 1))
     }
 
     @Test

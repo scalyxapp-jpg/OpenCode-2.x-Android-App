@@ -77,10 +77,11 @@ class CentreViewModel
                 AuditLogStore.state.collect { events -> _state.update { it.copy(audit = events) } }
             }
             viewModelScope.launch {
-                OutboxStore.state.collect {
-                    val counts = it.groupingBy { item -> item.sessionId }.eachCount()
-                    _state.update { current -> current.copy(needs = current.needs.rebuildWith(counts)) }
-                }
+                // A changed outbox always means the "needs you" section changed, and the
+                // section is derived from several sources at once - so reload instead of
+                // patching one of them (patching is what made the list disagree with the
+                // server). Only fires on an actual change of the outbox.
+                OutboxStore.state.collect { refresh() }
             }
             // Live running set: the feed's status events, folded exactly like the home list.
             feedJob =
@@ -112,13 +113,25 @@ class CentreViewModel
                 _state.update { it.copy(loading = true) }
                 runCatching {
                     val sessions = api.getSessions(limit = 50, order = "desc").data
-                    val directory = sessions.firstNotNullOfOrNull { it.directory ?: it.path } ?: ""
                     val statuses: Map<String, SessionStatus> =
-                        runCatching { api.getSessionStatuses(directory) }.getOrDefault(emptyMap())
-                    val permissions: List<PermissionRequest> =
-                        runCatching { api.getPermissions(directory) }.getOrDefault(emptyList())
-                    val questions: List<SessionQuestion> =
-                        runCatching { api.getQuestionRequests(directory).data }.getOrDefault(emptyList())
+                        runCatching { api.getSessionStatuses(CentrePolicy.directoriesToScan(sessions).firstOrNull().orEmpty()) }
+                            .getOrDefault(emptyMap())
+                    // Pending work is scoped PER DIRECTORY on this server (verified live: one
+                    // project reported five open forms while another reported none). Asking
+                    // only the first session's directory hid every other project, so the
+                    // directories of the recent sessions are all scanned — plus the global
+                    // location, which is the empty directory.
+                    val directories = (CentrePolicy.directoriesToScan(sessions) + "").distinct()
+                    val permissions =
+                        directories
+                            .flatMap { directory ->
+                                runCatching { api.getPermissions(directory) }.getOrDefault(emptyList())
+                            }.distinctBy { it.id ?: it.hashCode() }
+                    val questions =
+                        directories
+                            .flatMap { directory ->
+                                runCatching { api.getQuestionRequests(directory).data }.getOrDefault(emptyList())
+                            }.distinctBy { it.id }
                     val stats = runCatching { api.getStats(fromMs = startOfToday()) }.getOrNull()
                     runningIds.value = statuses.filterValues { it.type == "busy" }.keys
                     retryingIds.value = statuses.filterValues { it.type == "retry" }.keys
@@ -126,11 +139,12 @@ class CentreViewModel
                         OutboxStore.state.value
                             .groupingBy { it.sessionId }
                             .eachCount()
+                    val titles = sessions.associate { it.id to it.title.orEmpty() }
                     _state.update { current ->
                         current.copy(
                             loading = false,
                             rows = CentrePolicy.rows(sessions, statuses),
-                            needs = CentrePolicy.needs(permissions, questions, outbox),
+                            needs = CentrePolicy.needs(permissions, questions, outbox, titles),
                             costToday = stats?.cost,
                             sessionsToday = stats?.sessions,
                             promptsToday = stats?.prompts,
@@ -251,21 +265,6 @@ class CentreViewModel
                     set(java.util.Calendar.MILLISECOND, 0)
                 }.timeInMillis
     }
-
-/** Same outbox-derived rows as [CentrePolicy.needs], used when only the outbox changed. */
-private fun List<CentreNeed>.rebuildWith(outboxCounts: Map<String, Int>): List<CentreNeed> {
-    val withoutOutbox = filterNot { it.kind == NeedKind.Outbox }
-    val waiting =
-        outboxCounts.filterValues { it > 0 }.map { (sessionId, count) ->
-            CentreNeed(
-                kind = NeedKind.Outbox,
-                sessionId = sessionId,
-                title = "Waiting to send",
-                detail = "$count message" + if (count == 1) "" else "s",
-            )
-        }
-    return withoutOutbox + waiting
-}
 
 /** The audit switch gates recording; the screen hides the section when it is off. */
 internal fun auditVisible(): Boolean = AppSettingsStore.state.value.auditLogEnabled
