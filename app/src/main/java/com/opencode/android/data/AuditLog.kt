@@ -44,6 +44,9 @@ enum class AuditKind {
 
     /** A prompt left the outbox/failed queue. */
     Send,
+
+    /** The context was compacted (asked for by the user, from the Centre's insights). */
+    Compact,
 }
 
 /** One recorded action. Newest first in the store. */
@@ -93,6 +96,7 @@ object AuditPolicy {
             AuditKind.Mcp -> "MCP"
             AuditKind.Guard -> "Guard"
             AuditKind.Send -> "Sent"
+            AuditKind.Compact -> "Compacted"
         }
 
     /** One-line summary for the section header, e.g. "12 events · 3 stops". */

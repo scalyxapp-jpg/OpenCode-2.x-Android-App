@@ -619,7 +619,8 @@ instead of faking it.
   a cursor, and page sizes are capped to keep memory in check (a 200-message page
   of a heavy session was measured at 14 MB and caused an `OutOfMemoryError`).
 
-## 22. The Centre (cockpit)
+## 22. The Centre (Central Intelligence)
+
 
 The Centre answers the three questions a phone user has while agents work, and it is the
 only screen that exists purely for them:
@@ -641,9 +642,32 @@ Live-ness comes from the global event feed (`session.status` folded by the same 
 session list uses), so a turn started by the web or the TUI appears here immediately and
 flips back the moment it ends. One HTTP snapshot per visit/refresh, no polling.
 
+### The derived picture (Central Intelligence)
+
+Above the lists sits **What needs attention**: statements derived from the whole snapshot, not raw
+values. `CentreInsights` applies conservative rules — no progress while running, a retry loop,
+queued prompts behind a turn, context ≥ 85 % full, a cost spike, unsent prompts, waiting work,
+orphans, disconnected MCP servers, else "All clear" — and each one carries the action that fits
+(Stop / Open / Steer / Compact). Unknown input produces **no** statement rather than a guess: a
+false alarm on a turn that is merely thinking hard would make the whole panel untrustworthy.
+
+Actions are executed through **`CentralActions`** (`data/`), the one place that performs writes:
+`stop`, `stopAll`, `steer`, `compact`, `handOverDecision`. Every surface — Centre, notification,
+widget, chat — therefore has the same guards, the same audit entries and the same error wording,
+and every call returns `ActionResult` (`Ok` / `Skipped` / `Failed`).
+
+Live-ness comes from the global event feed (`session.status`, folded by the same reducer the
+session list uses), so a turn started by the web or the TUI appears immediately and flips back the
+moment it ends. Everything else is ONE parallel snapshot per visit/refresh — deliberately no
+polling, no extra background consumer. The queue probes are capped (5 sessions) and the session
+probes for orphan detection too (10), so a refresh cannot turn into a request storm.
+
 **API:** `GET /api/session` · `GET /api/session/active` · `POST /api/session/{id}/interrupt` ·
-`GET /api/permission/request` · `GET /api/permission/request` (questions) ·
-`GET /api/experimental/session/stats`.
+`GET /api/permission/request` · `GET /api/form` · `GET /api/session/{id}/inbox` (queues) ·
+`PATCH …/inbox/{id}` (steer) · `POST /api/session/{id}/compact` · `POST …/synthetic` ·
+`GET /api/mcp` · `GET /api/skill` · `GET /api/plugin` · `GET /api/vcs` ·
+`GET /api/experimental/session/stats` (today + 7-day baseline) ·
+`GET /api/session/{id}` (orphan probe).
 
 ## 23. Audit log
 

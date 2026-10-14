@@ -618,4 +618,14 @@
         <item quantity="other">… %1$d sessions</item>
     </plurals>
     <string name="session_gone" formatted="false">This session no longer exists on the server — it was probably deleted or cleaned up. Close it and pick another session.</string>
+    <string name="centre_insights" formatted="false">What needs attention</string>
+    <string name="centre_summary" formatted="false">%1$d running · %2$d waiting for you · %3$s today</string>
+    <string name="centre_server" formatted="false">Server &amp; projects</string>
+    <string name="centre_mcp" formatted="false">MCP %1$d/%2$d</string>
+    <string name="centre_skills_plugins" formatted="false">%1$d skills · %2$d plugins</string>
+    <string name="centre_context" formatted="false">ctx %1$d%% · %2$s</string>
+    <string name="centre_queued_behind" formatted="false">%1$d queued</string>
+    <string name="centre_action_open" formatted="false">Open</string>
+    <string name="centre_action_steer" formatted="false">Steer</string>
+    <string name="centre_action_compact" formatted="false">Compact</string>
 </resources>

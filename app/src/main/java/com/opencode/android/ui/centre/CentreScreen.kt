@@ -163,6 +163,31 @@ internal fun CentreScreen(
                 }
             }
 
+            // --- the derived picture --------------------------------------------
+            item {
+                SectionRow(
+                    title = stringResource(R.string.centre_insights),
+                    subtitle =
+                        stringResource(
+                            R.string.centre_summary,
+                            state.summary.running,
+                            state.summary.needsYou,
+                            CentrePolicy.costLabel(state.summary.costToday) ?: "—",
+                        ),
+                )
+            }
+            items(state.insights.take(INSIGHT_PREVIEW)) { insight ->
+                InsightRow(
+                    insight = insight,
+                    onAct = {
+                        when (insight.action) {
+                            InsightAction.OpenSession -> insight.sessionId?.let(onOpenSession)
+                            else -> viewModel.execute(insight)
+                        }
+                    },
+                )
+            }
+
             // --- what is running ------------------------------------------------
             item {
                 SectionRow(
@@ -254,7 +279,10 @@ internal fun CentreScreen(
             // --- today ---------------------------------------------------------
             item {
                 Spacer(Modifier.height(MaterialTheme.spacing.small))
-                SectionRow(title = stringResource(R.string.centre_today))
+                SectionRow(
+                    title = stringResource(R.string.centre_today),
+                    subtitle = state.summary.trend,
+                )
             }
             item {
                 Row(
@@ -282,6 +310,25 @@ internal fun CentreScreen(
                         modifier = Modifier.weight(1f),
                     )
                 }
+            }
+
+            // --- the server behind it all --------------------------------------
+            item {
+                Spacer(Modifier.height(MaterialTheme.spacing.small))
+                SectionRow(
+                    title = stringResource(R.string.centre_server),
+                    subtitle =
+                        stringResource(
+                            R.string.centre_mcp,
+                            state.server.mcpConnected,
+                            state.server.mcpTotal,
+                        ) +
+                            " · " +
+                            stringResource(R.string.centre_skills_plugins, state.server.skills, state.server.plugins),
+                )
+            }
+            items(state.server.branches) { (directory, branch) ->
+                EmptyLine("${directory.substringAfterLast('/')} · $branch")
             }
 
             // --- audit ---------------------------------------------------------
@@ -319,6 +366,82 @@ internal fun CentreScreen(
 
 /** How many audit rows the cockpit lists; the share action exports all of them. */
 private const val AUDIT_PREVIEW = 12
+
+/** How many derived statements are shown at once; the rest is noise on a phone. */
+private const val INSIGHT_PREVIEW = 6
+
+/**
+ * One derived statement, with the action it suggests.
+ *
+ * The colour carries the severity: a warning about a wedged turn must be findable without
+ * reading. The action text is the same everywhere because the button only calls
+ * [CentreViewModel.execute] - the mapping lives in the ViewModel, not in the UI.
+ */
+@Composable
+private fun InsightRow(
+    insight: Insight,
+    onAct: () -> Unit,
+) {
+    val container =
+        when (insight.severity) {
+            Severity.Critical -> MaterialTheme.colorScheme.errorContainer
+            Severity.Warning -> MaterialTheme.colorScheme.tertiaryContainer
+            Severity.Notice -> MaterialTheme.colorScheme.secondaryContainer
+            Severity.Info -> MaterialTheme.colorScheme.surfaceContainerHigh
+        }
+    val onContainer =
+        when (insight.severity) {
+            Severity.Critical -> MaterialTheme.colorScheme.onErrorContainer
+            Severity.Warning -> MaterialTheme.colorScheme.onTertiaryContainer
+            Severity.Notice -> MaterialTheme.colorScheme.onSecondaryContainer
+            Severity.Info -> MaterialTheme.colorScheme.onSurface
+        }
+    Surface(
+        color = container,
+        contentColor = onContainer,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(MaterialTheme.spacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = insight.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                insight.detail.takeIf { it.isNotBlank() }?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (insight.action != InsightAction.None) {
+                TextButton(onClick = onAct) {
+                    Text(
+                        text =
+                            stringResource(
+                                when (insight.action) {
+                                    InsightAction.StopSession -> R.string.centre_stop
+                                    InsightAction.SteerQueue -> R.string.centre_action_steer
+                                    InsightAction.CompactSession -> R.string.centre_action_compact
+                                    else -> R.string.centre_action_open
+                                },
+                            ),
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun SectionRow(
@@ -405,6 +528,37 @@ private fun SessionRow(
                             text = it,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // Context pressure per row: the session list already carries the tokens, the
+                    // catalog the window - so this costs no request.
+                    if (row.tokens > 0L) {
+                        val limit = row.tokenLimit
+                        Text(
+                            text =
+                                if (limit > 0L) {
+                                    stringResource(
+                                        R.string.centre_context,
+                                        ((row.tokens.toDouble() * 100.0) / limit).toInt(),
+                                        CentrePolicy.formatTokens(row.tokens),
+                                    )
+                                } else {
+                                    CentrePolicy.formatTokens(row.tokens) + " tok"
+                                },
+                            style = MaterialTheme.typography.labelSmall,
+                            color =
+                                if (limit > 0L && row.tokens * 100.0 / limit >= 85.0) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                    if (row.queueDepth > 0) {
+                        Text(
+                            text = stringResource(R.string.centre_queued_behind, row.queueDepth),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                     row.directory?.takeIf { it.isNotBlank() }?.let {

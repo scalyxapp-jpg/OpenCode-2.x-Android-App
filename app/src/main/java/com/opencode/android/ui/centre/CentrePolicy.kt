@@ -1,6 +1,7 @@
 package com.opencode.android.ui.centre
 
 import androidx.compose.runtime.Immutable
+import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionQuestion
@@ -35,8 +36,16 @@ data class CentreRow(
     val running: Boolean = false,
     val retrying: Boolean = false,
     val cost: Double? = null,
-    /** Unix ms of the last activity, for the "newest first" order. */
+    /** Unix ms of the last activity, for the "newest first" order and the "no progress" rule. */
     val updatedAt: Long = 0L,
+    /** Retry #N and the server's reason, when the session is in a retry loop. */
+    val retryAttempt: Int? = null,
+    val retryMessage: String? = null,
+    /** Tokens in the context window and the model's window size (0 = unknown). */
+    val tokens: Long = 0L,
+    val tokenLimit: Long = 0L,
+    /** Prompts waiting behind this turn in the server queue. */
+    val queueDepth: Int = 0,
 )
 
 /**
@@ -80,6 +89,10 @@ object CentrePolicy {
                     retrying = status == "retry",
                     cost = session.cost,
                     updatedAt = session.time?.updated ?: session.time?.created ?: 0L,
+                    retryAttempt = statuses[session.id]?.attempt,
+                    retryMessage = statuses[session.id]?.message?.takeIf { it.isNotBlank() },
+                    // Straight from the session list: no extra request per session.
+                    tokens = sessionTokens(session),
                 )
             },
         )
@@ -202,6 +215,56 @@ object CentrePolicy {
             .filter { it.isNotBlank() }
             .distinct()
             .take(limit)
+
+    /**
+     * Tokens occupying a session's context window.
+     *
+     * The session list already carries them (`GET /api/session`), so the Centre gets context
+     * pressure without one request per session — the same sum the chat's "N ctx" chip uses.
+     */
+    fun sessionTokens(session: Session): Long =
+        (session.tokens?.input ?: 0L) +
+            (session.tokens?.output ?: 0L) +
+            (session.tokens?.reasoning ?: 0L) +
+            (session.tokens?.cache?.read ?: 0L) +
+            (session.tokens?.cache?.write ?: 0L)
+
+    /** `180k` / `1.2M` — short enough for a badge, exact enough to reason about. */
+    fun formatTokens(tokens: Long): String =
+        when {
+            tokens <= 0L -> "0"
+            tokens < 1_000L -> tokens.toString()
+            tokens < 1_000_000L -> {
+                val k = tokens / 1_000.0
+                if (k < 10) String.format(java.util.Locale.ENGLISH, "%.1fk", k)
+                else "${k.toInt()}k"
+            }
+
+            else -> String.format(java.util.Locale.ENGLISH, "%.1fM", tokens / 1_000_000.0)
+        }
+
+    /**
+     * Today's cost against the previous days' average: `+45% vs. 7-day average`.
+     *
+     * `null` when either side is unknown or the baseline is zero — a percentage against zero is
+     * noise, not information.
+     */
+    fun costTrend(
+        today: Double?,
+        baseline: Double?,
+        days: Int = 7,
+    ): String? {
+        if (today == null || baseline == null || baseline <= 0.0) return null
+        val percent = ((today - baseline) / baseline * 100.0).toInt()
+        val sign = if (percent > 0) "+" else ""
+        return "$sign$percent% vs. $days-day average"
+    }
+
+    /** Connected/total MCP servers from `GET /api/mcp` (status strings vary by build). */
+    fun mcpSummary(statuses: Map<String, McpStatus>): Pair<Int, Int> {
+        val connected = statuses.values.count { !it.status.isNullOrBlank() && !it.status.contains("disconnect", ignoreCase = true) }
+        return connected to statuses.size
+    }
 
     /** `$1.23` — the same shape the glance surfaces use. */
     fun costLabel(cost: Double?): String? = cost?.let { "$" + String.format(java.util.Locale.ENGLISH, "%.2f", it) }

@@ -5,6 +5,88 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-10-14
+
+**Die Zentrale wird zur Central Intelligence: Sie zeigt nicht mehr nur Zustände, sie leitet
+Aussagen daraus ab — und alle Schreibzugriffe laufen durch eine zentrale Aktionsschicht.**
+
+### Added — Insight-Engine (ableitende Logik)
+
+`CentreInsights` verwandelt Server-Werte in Sätze, auf die man reagieren kann. Die Regeln sind
+bewusst konservativ (ein falscher „hängt"-Alarm auf einem hart denkenden Turn zerstört das
+Vertrauen in das ganze Panel), und jede Regel braucht positive Evidenz — Unbekanntes ergibt
+**keine** Aussage statt einer Vermutung:
+
+| Regel | Schwelle | Aktion |
+| --- | --- | --- |
+| Kein Fortschritt | laufend & >10 min ohne Aktivität (unbekannt = nie) | Stop |
+| Retry-Schleife | `retry` & Versuch ≥ 2, mit Server-Grund | Öffnen |
+| Queue-Rückstau | wartende Prompts hinter einem laufenden Turn | Steer |
+| Kontext fast voll | ≥ 85 % von Fenster (Tokens aus der Session-Liste, Fenster aus dem Katalog) | Compact |
+| Kostenausreißer | heute ≥ 2× Vortages-Schnitt **und** ≥ 1 $ | — |
+| Ungesendete Prompts | lokaler Postausgang nicht leer | — |
+| Wartende Arbeit | „Braucht dich" nicht leer | — |
+| Verwaiste Anfragen | Anfragen gelöschter Sessions | — |
+| MCP nicht verbunden | verbunden < gesamt | — |
+| Sonst | — | „All clear" |
+
+Sortierung: Schweregrad, dann **handelbare vor reinen Informationen**, dann stabil nach ID.
+
+### Added — zentrale Aktionsschicht
+
+`CentralActions` (in `data/`) ist der **einzige** Ort, der Zustand ändert: `stop`, `stopAll`,
+`steer`, `compact`, `handOverDecision`. Damit haben Zentrale, Benachrichtigung, Widget und Chat
+**dieselben Guards, dieselben Audit-Einträge und dieselben Fehlertexte** — vorher baute jede
+Stelle ihre eigene Anfrage, eine vergaß den Audit-Eintrag, eine den Schalter. Alles gibt
+`ActionResult` zurück (`Ok` / `Skipped(reason)` / `Failed(message)`), transportfrei als
+suspend-Lambdas, damit die Policy ohne Retrofit testbar ist. Neue Audit-Art: `Compacted`.
+`insight.action` → `CentreViewModel.execute(insight)`: die Zuordnung „Aussage → Aktion" liegt im
+ViewModel, nicht in der Oberfläche, damit jede Fläche sie gleich ausführen kann.
+
+### Added — mehr Vernetzung (Endpunkte, die vorher brachlagen)
+
+Ein Schnappschuss wird jetzt **parallel** geholt (jeder Teil darf ausfallen, ohne den Rest zu
+leeren), alles begrenzt — **kein Polling**:
+
+- `GET /api/session` + `/api/session/active` → Sessions, Status, **Tokens und Kosten pro Session**
+- **Server-Queues** je laufender Session (`GET /api/session/{id}/inbox`, max. 5) → Rückstau sichtbar
+- `GET /api/mcp` → verbundene/gesamt · `/api/skill` + `/api/plugin` → Zähler
+- `GET /api/vcs` (max. 3 Verzeichnisse) → Branch je Projekt
+- `GET /api/experimental/session/stats` **zweimal** (heute + 7 Tage) → Tageswert **mit Vergleich**
+  zum Vortages-Schnitt
+- `GET /api/session/{id}/context`-Fenster über den Anbieter-Katalog (`contextLimitFor`) statt einer
+  Anfrage je Session
+
+### Changed — das Lagebild
+
+- Kopfzeile: „N running · M waiting for you · $X today" (plus Trend in der Tages-Sektion).
+- **Aussagen-Sektion** oben, farbig nach Schweregrad, mit dem Aktionsknopf der Aussage.
+- Laufende Zeilen zeigen **Kontextlast** (`ctx 87% · 180k`, ab 85 % in Fehlerfarbe), **Queue-Tiefe**
+  und den Retry-Grund; Kosten und Projekt wie bisher.
+- Neue **Server & Projekte**-Karte: MCP verbunden/gesamt, Skills, Plugins, Branches.
+
+### Added — geteilte ID-Erzeugung
+
+`util/OpenCodeIds` erzeugt `msg_…`/`prt_…` (Thread-sicher, Zähler gegen Kollisionen in derselben
+Millisekunde). Das ist die Voraussetzung für optimistische Oberflächen von **jeder** Fläche aus:
+die Compaction aus der Zentrale trägt eine Client-ID, die der Server zurückgibt.
+
+### Added (tests)
+
+- `CentreInsightsTest` (10 Fälle): jede Regel in **beiden** Richtungen (feuert / bleibt still),
+  Schwellen (9 vs. 20 Minuten, Versuch 1 vs. 2, 80 % vs. 90 % Kontext, Ausreißer mit/ohne
+  Untergrenze), Sortierung nach Schweregrad und Handlungsfähigkeit.
+- `CentralActionsTest` (7 Fälle): Transport erreicht, Fehler wird zu `Failed` statt Exception,
+  Not-Aus stoppt alle und meldet die Zahl, Steer genau eines Prompts, Compaction, Guard für
+  abgeschaltete Funktion **verhindert die Anfrage**, Ablehnung/Transportfehler werden gemeldet.
+- Betroffen geprüft (nur diese Klassen): **30 Tests, 0 Fehler**.
+
+### Ehrlich offen
+
+- „Projekt mit uncommitteten Änderungen" ist in der Engine vorgesehen, aber **nicht verdrahtet**:
+  `/vcs/diff` liefert Megabyte-Patches, `/vcs/status` auf diesem Server nur Branch-Infos — es gibt
+  keinen billigen Weg, „dirty" zu erkennen. Lieber keine Aussage als eine geratene.
+
 ## [2.0.6] - 2026-10-14
 
 ### Fixed
