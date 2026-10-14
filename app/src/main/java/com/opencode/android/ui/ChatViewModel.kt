@@ -1414,6 +1414,19 @@ class ChatViewModel
                 },
             )
 
+        /**
+         * Explains a tool part - a shell command, a written diff or the call itself.
+         *
+         * One entry point for the question "what did that do?", so the reader can learn from what
+         * the agent ran instead of taking it on faith. The artifact and its wording come from
+         * [com.opencode.android.ui.explain.ExplainPolicy.target] (pure, tested).
+         */
+        fun explainPart(part: Part) {
+            val target = com.opencode.android.ui.explain.ExplainPolicy.target(part) ?: return
+            if (target.snippet.isBlank()) return
+            explain(target.kind, target.snippet, target.label)
+        }
+
         fun explain(
             kind: com.opencode.android.ui.explain.ExplainPolicy.Kind,
             snippet: String,

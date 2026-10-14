@@ -70,6 +70,8 @@ data class CentreUiState(
     val promptsToday: Int? = null,
     val stepsToday: Int? = null,
     val audit: List<AuditEvent> = emptyList(),
+    /** One-tap prompts offered per session (from the server's command list). */
+    val promptChips: List<String> = emptyList(),
     val stopping: Boolean = false,
     val message: String? = null,
 ) {
@@ -131,6 +133,24 @@ class CentreViewModel
                     com.opencode.android.data.replyPermission(api, sessionId, requestId, answer)
                 },
                 deleteSession = { sessionId -> api.deleteSession(sessionId) },
+                sendPrompt = { sessionId, text, delivery ->
+                    // Minimal body: the server uses the session's own agent/model when they are
+                    // absent, exactly like the chat's plain "send".
+                    val body =
+                        com.opencode.android.domain.PromptAsyncRequest(
+                            messageID = OpenCodeIds.msg(),
+                            delivery = delivery,
+                            parts =
+                                listOf(
+                                    com.opencode.android.domain.PromptAsyncPart(
+                                        id = OpenCodeIds.part(),
+                                        type = "text",
+                                        text = text,
+                                    ),
+                                ),
+                        )
+                    api.sendPromptAsync(sessionId, body).isSuccessful
+                },
             )
 
         init {
@@ -204,6 +224,7 @@ class CentreViewModel
                             val mcp = async { runCatching { api.getMcpServers() }.getOrDefault(emptyMap()) }
                             val skills = async { runCatching { api.getSkills().size }.getOrDefault(0) }
                             val plugins = async { runCatching { api.getPlugins().size }.getOrDefault(0) }
+                            val commands = async { runCatching { api.getCommands() }.getOrDefault(emptyList()) }
                             val today = async { runCatching { api.getStats(fromMs = startOfToday()) }.getOrNull() }
                             val week =
                                 async {
@@ -276,6 +297,7 @@ class CentreViewModel
                                 mcp = mcp.await(),
                                 skills = skills.await(),
                                 plugins = plugins.await(),
+                                commands = commands.await(),
                                 today = today.await(),
                                 week = week.await(),
                                 projects =
@@ -413,6 +435,7 @@ class CentreViewModel
                                 ),
                             costToday = extras.today?.cost,
                             costBaselinePerDay = baseline,
+                            promptChips = CentrePolicy.promptSuggestions(extras.commands),
                             sessionsToday = extras.today?.sessions,
                             promptsToday = extras.today?.prompts,
                             stepsToday = extras.today?.steps,
@@ -522,6 +545,22 @@ class CentreViewModel
         fun archive(row: CentreRow) {
             report(actions.archive(row.sessionId, row.title), "Archived ${row.title}")
             refresh()
+        }
+
+        /**
+         * Sends a one-tap prompt to a session: the daily-use shortcut.
+         *
+         * Queued while the session runs (never kills work in flight), direct when idle.
+         */
+        fun quickPrompt(
+            row: CentreRow,
+            text: String,
+        ) {
+            viewModelScope.launch {
+                val running = row.running || row.retrying
+                report(actions.prompt(row.sessionId, text, row.title, running), "Prompt sent")
+                refresh()
+            }
         }
 
         /** Compacts a row's session (long-press / overflow menu, and the insight action). */
@@ -642,6 +681,7 @@ class CentreViewModel
             val mcp: Map<String, com.opencode.android.domain.McpStatus>,
             val skills: Int,
             val plugins: Int,
+            val commands: List<com.opencode.android.domain.CommandEntry>,
             val today: com.opencode.android.domain.SessionStats?,
             val week: com.opencode.android.domain.SessionStats?,
             val projects: Projects,

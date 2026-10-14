@@ -719,6 +719,9 @@ internal fun OpenCodeApp(
                                 CentreScreen(
                                     onBack = { navController.popBackStack() },
                                     onOpenSession = { sessionId -> openSession(sessionId, "Session") },
+                                    onOpenHome = {
+                                        navController.navigate(Routes.HOME) { launchSingleTop = true }
+                                    },
                                 )
                             }
                             composable(Routes.SETTINGS) {

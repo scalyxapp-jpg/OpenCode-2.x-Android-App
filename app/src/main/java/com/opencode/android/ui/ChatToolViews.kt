@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -532,6 +533,9 @@ internal fun ToolCallRow(
     onOpenSession: (String) -> Unit = {},
     // "Expand shell/edit tool parts" settings: whether this row starts open.
     initiallyExpanded: Boolean = false,
+    /** Explain mode: offer "explain this command/code/call" on the row. */
+    explainEnabled: Boolean = false,
+    onExplain: (() -> Unit)? = null,
 ) {
     var expanded by remember(part.id) { mutableStateOf(initiallyExpanded) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -755,6 +759,21 @@ internal fun ToolCallRow(
                                     modifier = Modifier.size(18.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
+                            }
+                            // "Explain this": the command, the written code or the call itself -
+                            // so the reader can learn what the agent actually did.
+                            if (explainEnabled && onExplain != null) {
+                                IconButton(
+                                    onClick = onExplain,
+                                    modifier = Modifier.size(48.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.Lightbulb,
+                                        contentDescription = stringResource(R.string.explain_this),
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
                         }
                         // A failed call shows WHY, like the reference clients' error card

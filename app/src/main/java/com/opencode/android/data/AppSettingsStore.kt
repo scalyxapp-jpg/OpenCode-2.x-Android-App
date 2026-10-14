@@ -114,6 +114,11 @@ object AppSettingsStore {
          * always an explicit tap. Off = the insight still appears, without the action button.
          */
         val insightCompactEnabled: Boolean = true,
+        /**
+         * Send prompts straight from the Centre ("continue", a slash command) without opening
+         * the session. Talks to a model, so it stays switchable.
+         */
+        val quickPromptsEnabled: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -194,6 +199,7 @@ object AppSettingsStore {
             auditLogEnabled = prefs.getBoolean("auditLogEnabled", true),
             journalAutoInject = prefs.getBoolean("journalAutoInject", true),
             insightCompactEnabled = prefs.getBoolean("insightCompactEnabled", true),
+            quickPromptsEnabled = prefs.getBoolean("quickPromptsEnabled", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -271,6 +277,8 @@ object AppSettingsStore {
     fun setJournalAutoInject(v: Boolean) = update { it.putBoolean("journalAutoInject", v) }
 
     fun setInsightCompactEnabled(v: Boolean) = update { it.putBoolean("insightCompactEnabled", v) }
+
+    fun setQuickPromptsEnabled(v: Boolean) = update { it.putBoolean("quickPromptsEnabled", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -423,6 +431,7 @@ object AppSettingsStore {
                 putBoolean("auditLogEnabled", parsed.auditLogEnabled)
                 putBoolean("journalAutoInject", parsed.journalAutoInject)
                 putBoolean("insightCompactEnabled", parsed.insightCompactEnabled)
+                putBoolean("quickPromptsEnabled", parsed.quickPromptsEnabled)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

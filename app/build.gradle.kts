@@ -44,8 +44,8 @@ android {
         applicationId = "com.opencode.android"
         minSdk = 25
         targetSdk = 36
-        versionCode = 56
-        versionName = "3.5.1"
+        versionCode = 57
+        versionName = "3.5.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

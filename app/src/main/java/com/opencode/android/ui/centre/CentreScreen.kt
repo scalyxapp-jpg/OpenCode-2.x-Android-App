@@ -58,6 +58,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.ExperimentalFoundationApi
 import java.util.Locale
 
@@ -77,6 +80,7 @@ import java.util.Locale
 internal fun CentreScreen(
     onBack: () -> Unit,
     onOpenSession: (String) -> Unit,
+    onOpenHome: () -> Unit = {},
     viewModel: CentreViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -111,6 +115,14 @@ internal fun CentreScreen(
 
     // Running first (all of them), then a preview of the idle ones.
     val busyRows = state.rows.filter { it.running || it.retrying }
+    // Coarse labels: "3 min ago" does not need a ticking clock, and recomputing it when the
+    // snapshot changes keeps the UI quiet.
+    val nowMs = remember(state.rows) { System.currentTimeMillis() }
+    val recentRows =
+        state.rows
+            .filterNot { it.running || it.retrying }
+            .sortedByDescending { it.updatedAt }
+            .take(RECENT_PREVIEW)
     val allIdleRows = state.rows.filterNot { it.running || it.retrying }
     val idleRows = if (showAllSessions) allIdleRows else allIdleRows.take(CentrePolicy.PREVIEW_ROWS)
     val idleHidden = allIdleRows.size - idleRows.size
@@ -198,6 +210,49 @@ internal fun CentreScreen(
                         )
                     }
                 }
+            }
+
+            // --- continue where you left off -------------------------------------
+            // The daily entry point: the newest sessions that are NOT running (the running ones
+            // are the section below), each with a one-tap prompt. Seeing the work is only half of
+            // it - the Centre is where it gets continued.
+            item {
+                SectionRow(
+                    title = stringResource(R.string.centre_continue),
+                    subtitle =
+                        if (state.promptChips.isEmpty()) {
+                            stringResource(R.string.centre_continue_sub)
+                        } else {
+                            stringResource(R.string.centre_continue_sub_chips)
+                        },
+                )
+            }
+            if (recentRows.isEmpty()) {
+                item { EmptyLine(stringResource(R.string.centre_nothing_recent)) }
+            }
+            items(recentRows) { row ->
+                ResumeRow(
+                    row = row,
+                    timeLabel = CentrePolicy.ago(row.updatedAt, nowMs),
+                    summary = CentrePolicy.summaryLabel(row),
+                    chips = state.promptChips,
+                    onOpen = { onOpenSession(row.sessionId) },
+                    onPrompt = { text -> viewModel.quickPrompt(row, text) },
+                )
+            }
+            item {
+                // The Centre is a picture, not a search: point to the full list instead of
+                // duplicating it.
+                Text(
+                    text = stringResource(R.string.centre_all_sessions),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier =
+                        Modifier
+                            .clickable(role = Role.Button) { onOpenHome() }
+                            .padding(vertical = MaterialTheme.spacing.extraSmall),
+                )
             }
 
             // --- the derived picture --------------------------------------------
@@ -509,6 +564,106 @@ private const val AUDIT_PREVIEW = 12
 
 /** How many derived statements are shown at once; the rest is noise on a phone. */
 private const val INSIGHT_PREVIEW = 6
+
+/** How many recent sessions "Continue" offers; the full list lives on Home. */
+private const val RECENT_PREVIEW = 3
+
+/**
+ * One "continue here" row: what the session is, when it was touched, what it changed - and the
+ * one-tap prompts.
+ *
+ * The chips only appear when the row is expanded: a phone screen must not be a wall of buttons,
+ * but the daily action ("continue", "/compact") has to be reachable in one tap.
+ */
+@Composable
+private fun ResumeRow(
+    row: CentreRow,
+    timeLabel: String?,
+    summary: String?,
+    chips: List<String>,
+    onOpen: () -> Unit,
+    onPrompt: (String) -> Unit,
+) {
+    var expanded by remember(row.sessionId) { mutableStateOf(false) }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(MaterialTheme.spacing.small)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+            ) {
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpen),
+                ) {
+                    Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text =
+                            listOfNotNull(
+                                timeLabel,
+                                summary,
+                                CentrePolicy.costLabel(row.cost),
+                                CentrePolicy.formatTokens(row.tokens).takeIf { row.tokens > 0L },
+                            ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Bolt,
+                        contentDescription = stringResource(R.string.centre_quick_prompt),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            if (expanded && chips.isNotEmpty()) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                ) {
+                    chips.forEach { chip ->
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            shape = MaterialTheme.shapes.extraSmall,
+                            modifier = Modifier.clickable { onPrompt(chip) },
+                        ) {
+                            Text(
+                                text = chip,
+                                style = MaterialTheme.typography.labelMedium,
+                                maxLines = 1,
+                                modifier =
+                                    Modifier.padding(
+                                        horizontal = MaterialTheme.spacing.small,
+                                        vertical = MaterialTheme.spacing.extraSmall,
+                                    ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /**
  * One derived statement, with the action it suggests.

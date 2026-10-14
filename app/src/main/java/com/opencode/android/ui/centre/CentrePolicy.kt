@@ -1,6 +1,7 @@
 package com.opencode.android.ui.centre
 
 import androidx.compose.runtime.Immutable
+import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.Session
@@ -51,6 +52,10 @@ data class CentreRow(
     /** Tokens in the context window and the model's window size (0 = unknown). */
     val tokens: Long = 0L,
     val tokenLimit: Long = 0L,
+    /** Files touched by this session and their +/- counts (`session.summary`). */
+    val files: Int = 0,
+    val additions: Int = 0,
+    val deletions: Int = 0,
     /** Prompts waiting behind this turn in the server queue. */
     val queueDepth: Int = 0,
 )
@@ -100,6 +105,9 @@ object CentrePolicy {
                     retryMessage = statuses[session.id]?.message?.takeIf { it.isNotBlank() },
                     // Straight from the session list: no extra request per session.
                     tokens = sessionTokens(session),
+                    files = session.summary?.files ?: 0,
+                    additions = session.summary?.additions ?: 0,
+                    deletions = session.summary?.deletions ?: 0,
                 )
             },
         )
@@ -310,6 +318,52 @@ object CentrePolicy {
         val connected = statuses.values.count { !it.status.isNullOrBlank() && !it.status.contains("disconnect", ignoreCase = true) }
         return connected to statuses.size
     }
+
+    /**
+     * How long ago something happened: `now` / `3 min` / `2 h` / `4 d`.
+     *
+     * Daily use needs "when", not a timestamp: a session list without it forces you to open
+     * things to find out which one is stale.
+     */
+    fun ago(
+        atMs: Long,
+        nowMs: Long,
+    ): String? {
+        if (atMs <= 0L) return null
+        val delta = (nowMs - atMs).coerceAtLeast(0L)
+        val minutes = delta / 60_000L
+        return when {
+            minutes < 1 -> "now"
+            minutes < 60 -> "$minutes min"
+            minutes < 60 * 24 -> "${minutes / 60} h"
+            else -> "${minutes / (60 * 24)} d"
+        }
+    }
+
+    /** `3 files (+42/−7)`, or null for a session that changed nothing. */
+    fun summaryLabel(row: CentreRow): String? {
+        if (row.files <= 0) return null
+        val counts =
+            if (row.additions > 0 || row.deletions > 0) " (+${row.additions}/−${row.deletions})" else ""
+        return "${row.files} file" + (if (row.files == 1) "" else "s") + counts
+    }
+
+    /**
+     * The one-tap prompts offered for a session: "Continue" plus the server's own commands.
+     *
+     * The commands come from `GET /api/command`, so the list is what THIS server offers instead
+     * of something invented. Capped: a chip row is a shortcut, not a menu.
+     */
+    fun promptSuggestions(
+        commands: List<CommandEntry>,
+        limit: Int = 4,
+    ): List<String> =
+        (listOf(CONTINUE_PROMPT) + commands.mapNotNull { it.name.takeIf { name -> name.isNotBlank() }?.let { "/$it" } })
+            .distinct()
+            .take(limit)
+
+    /** The first chip: the most common thing to say to an agent you left alone. */
+    const val CONTINUE_PROMPT = "Continue where you left off and report what you changed."
 
     /** `$1.23` — delegated to the shared formatter so no surface can disagree. */
     fun costLabel(cost: Double?): String? =

@@ -5,6 +5,74 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] - 2026-10-14
+
+**Die Zentrale wird alltagstauglich: sie zeigt nicht mehr nur, sie lässt einen sofort weitermachen.**
+
+Rückmeldung war: „zu wenig nützlich im Daily Use". Der Kern des Problems: die Zentrale war eine
+Beobachtungsstation — zum Arbeiten musste man die Session erst öffnen. Jetzt ist der
+**Weiterarbeiten-Einstieg** die erste Sektion.
+
+### Added — „Continue" (neue erste Sektion)
+
+- Die **zuletzt angefassten Sessions** (die neuesten, die nicht laufen — die laufenden stehen
+  direkt darunter), je Zeile: Titel, **wann zuletzt** („3 min", „2 h", „4 d"), **was passiert ist**
+  (`3 files (+42/−7)` aus `session.summary`, ohne Zusatz-Anfrage), Kosten und Kontextlast.
+- **Ein-Tipp-Prompts:** das ⚡-Symbol klappt eine Reihe Chips auf — **„Continue where you left off
+  and report what you changed."** plus die **eigenen Slash-Befehle des Servers** aus
+  `GET /api/command` (also das, was dieser Server wirklich anbietet, nichts Erfundenes), gedeckelt
+  auf vier Chips. Tippen sendet sofort.
+- **Sicherheitsregel dabei:** läuft ein Turn, geht der Prompt als `delivery:"queue"` raus und
+  **unterbricht nie** laufende Arbeit; im Ruhezustand wird er direkt gesendet. Jeder Versand steht
+  im Audit-Protokoll (`Sent`).
+- **„All sessions & search →"** führt zur vollen Liste auf Home, statt eine zweite Suchliste zu
+  bauen.
+
+### Changed — Zeilen sagen „wann"
+
+`CentrePolicy.ago` (rein, getestet) liefert „now / 3 min / 2 h / 4 d"; ohne Zeitstempel **keine**
+Angabe statt einer falschen. `summaryLabel` beschreibt die Änderungen einer Session in der Form der
+Referenz-Clients.
+
+### Added — Schalter
+
+**Settings → „Quick prompts from the Centre"** (Standard an). Aus heißt: die Chips erscheinen nicht,
+und die zentrale Aktionsschicht **verweigert** den Versand zusätzlich (`Skipped`) — ein Shortcut
+darf nicht an einem Schalter vorbeikommen. (Der Prompt geht an ein Modell und kostet Tokens, deshalb
+überhaupt schaltbar.)
+
+### Added — „Explain this" für Befehle, Tool-Calls und geschriebenen Code
+
+Der Explain-Knopf saß bisher nur am Nachrichtentext. Jetzt hat **jede Tool-Zeile** ein
+💡 **„Explain this (I want to learn)"**:
+
+- **Geschriebener Code:** der Diff des Edit/Write, erklärt vom `docs`-Agenten — was er tut und
+  worauf man achten muss.
+- **Shell-Befehle:** der Befehl **samt Ausgabe**, erklärt vom `ask`-Agenten mit einer
+  Lern-Aufforderung: was die einzelnen Teile und Flags tun, warum es hier nötig ist, was
+  schiefgehen kann und wie eine sicherere/üblichere Variante aussieht.
+- **Sonstige Tool-Calls:** Werkzeug, Pfad, Parameter und Ergebnis — damit man lernt, solche
+  Aufrufe zu lesen.
+- **Kein Knopf ohne Inhalt:** eine laufende Zeile ohne Eingabe/Ausgabe hat nichts zu erklären und
+  bietet die Aktion gar nicht erst an (vom Test gefunden).
+
+Die Auswahl (Kind, Ausschnitt, Beschriftung) liegt in `ExplainPolicy.target` (rein, getestet),
+die Ausführung im vorhandenen Explain-Pfad (eigene Session, `ask`/`docs`, Schalter
+„Explain mode" wie bisher).
+
+### Added (tests)
+
+- `CentralActionsTest` (11, +2): Quick-Prompt wird bei laufendem Turn **ge**queued und im
+  Ruhezustand direkt gesendet; ein leerer Prompt wird gar nicht gesendet; der Schalter verhindert
+  die Anfrage selbst.
+- `CentrePolicyTest` (16, +2): Zeitangaben (jetzt/3 min/2 h/4 d, ohne Zeitstempel nichts) und
+  Änderungs-Zusammenfassung (Ein-/Mehrzahl, ohne Änderungen nichts); Chip-Vorschläge = „Continue"
+  plus Server-Befehle, gedeckelt, ohne Befehle trotzdem der Daily-Shortcut.
+- `ExplainPolicyTest` (6, +3): Befehl/Tool-Call gehen an den `ask`-Agenten mit Lern-Wortlaut,
+  Diff → `CODE`, Befehl → `COMMAND` (mit Ausgabe), Rest → `TOOL_CALL`, und eine leere Zeile hat
+  nichts zu erklären.
+- Betroffen geprüft (nur diese Klassen): **47 Tests, 0 Fehler**.
+
 ## [3.5.1] - 2026-10-14
 
 ### Fixed

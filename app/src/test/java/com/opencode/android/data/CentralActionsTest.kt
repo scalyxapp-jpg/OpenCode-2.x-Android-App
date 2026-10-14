@@ -26,6 +26,9 @@ class CentralActionsTest {
         val answers = mutableListOf<String>()
         var answerSucceeds = true
         val deleted = mutableListOf<String>()
+        /** `sessionId:text:delivery` of every prompt the shortcut sent. */
+        val prompts = mutableListOf<String>()
+        var promptSucceeds = true
     }
 
     private fun actions(
@@ -51,10 +54,15 @@ class CentralActionsTest {
             recorder.answerSucceeds
         },
         deleteSession = { sessionId -> recorder.deleted += sessionId },
+        sendPrompt = { sessionId, text, delivery ->
+            recorder.prompts += "$sessionId:$text:${delivery ?: "direct"}"
+            recorder.promptSucceeds
+        },
         setting = { setting ->
             when (setting) {
                 CentralSetting.JournalInjectEnabled -> journalInjectEnabled
                 CentralSetting.InsightCompactEnabled -> true
+                CentralSetting.QuickPromptsEnabled -> true
             }
         },
     )
@@ -119,6 +127,51 @@ class CentralActionsTest {
         }
 
     @Test
+    fun `a quick prompt is queued while a turn runs and direct when idle`() =
+        runBlocking {
+            val recorder = Recorder()
+            actions(recorder).prompt("ses_1", "Continue", "Title", running = true)
+            actions(recorder).prompt("ses_1", "Continue", "Title", running = false)
+            assertEquals(
+                listOf("ses_1:Continue:queue", "ses_1:Continue:direct"),
+                recorder.prompts,
+            )
+            // An empty prompt is not sent at all.
+            assertTrue(actions(recorder).prompt("ses_1", "   ", "Title", false) is ActionResult.Skipped)
+            assertEquals(2, recorder.prompts.size)
+        }
+
+    @Test
+    fun `quick prompts respect their switch`() =
+        runBlocking {
+            val recorder = Recorder()
+            val switchedOff =
+                CentralActions(
+                    interrupt = {},
+                    steer = { _, _ -> true },
+                    compact = { _, _ -> },
+                    handDecisionOver = { _, _, _, _ -> true },
+                    replyPermission = { _, _, _ -> true },
+                    deleteSession = { },
+                    sendPrompt = { sessionId, text, delivery ->
+                        recorder.prompts += "$sessionId:$text:${delivery ?: "direct"}"
+                        true
+                    },
+                    setting = { setting ->
+                        when (setting) {
+                            CentralSetting.JournalInjectEnabled -> true
+                            CentralSetting.InsightCompactEnabled -> true
+                            CentralSetting.QuickPromptsEnabled -> false
+                        }
+                    },
+                )
+            val result = switchedOff.prompt("ses_1", "Continue", "Title", false)
+            assertTrue(result is ActionResult.Skipped)
+            // The guard must prevent the request, not just the message.
+            assertEquals(emptyList<String>(), recorder.prompts)
+        }
+
+    @Test
     fun `deleting a session reaches the server and archives it locally`() =
         runBlocking {
             val recorder = Recorder()
@@ -169,6 +222,7 @@ class CentralActionsTest {
                     setting = { false },
                     replyPermission = { _, _, _ -> true },
                     deleteSession = { },
+                    sendPrompt = { _, _, _ -> true },
                 )
             val skipped = switchedOff.handOverDecision("ses_1", "Title", entry, null)
             assertTrue(skipped is ActionResult.Skipped)

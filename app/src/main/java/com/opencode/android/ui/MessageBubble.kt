@@ -72,6 +72,9 @@ internal fun MessageBubble(
     onOpenSession: (String) -> Unit = {},
     /** Explain mode: ask about this message in its own session. */
     onExplain: (String) -> Unit = {},
+    /** Explain mode for a tool row (command / written code / the call). */
+    explainToolsEnabled: Boolean = false,
+    onExplainPart: (com.opencode.android.domain.Part) -> Unit = {},
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     // Revert is destructive (everything after the message is discarded), so it
@@ -390,6 +393,8 @@ internal fun MessageBubble(
                                     shellExpanded = shellToolPartsExpanded,
                                     editExpanded = editToolPartsExpanded,
                                 ),
+                            explainEnabled = explainToolsEnabled,
+                            onExplain = { onExplainPart(part) },
                         )
                     }
                     // Web "N Changed files" summary card (edit/write/patch).

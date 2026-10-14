@@ -3,6 +3,7 @@ package com.opencode.android.ui.centre
 import com.opencode.android.data.AuditEvent
 import com.opencode.android.data.AuditKind
 import com.opencode.android.data.AuditPolicy
+import com.opencode.android.domain.CommandEntry
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.QuestionItem
 import com.opencode.android.domain.Session
@@ -250,6 +251,52 @@ class CentrePolicyTest {
         )
         // A clean project has nothing to say - the caller filters on null.
         assertNull(CentrePolicy.dirtyProjectLabel("/p/proj", "main", emptyList()))
+    }
+
+    @Test
+    fun `a row says when it was touched and what it changed`() {
+        val now = 1_800_000_000_000L
+        assertEquals("now", CentrePolicy.ago(now - 30_000, now))
+        assertEquals("3 min", CentrePolicy.ago(now - 3 * 60_000, now))
+        assertEquals("2 h", CentrePolicy.ago(now - 2 * 60 * 60_000, now))
+        assertEquals("4 d", CentrePolicy.ago(now - 4 * 24 * 60 * 60_000, now))
+        // No timestamp (never touched) -> no label instead of a wrong one.
+        assertNull(CentrePolicy.ago(0L, now))
+
+        val row =
+            CentreRow(
+                sessionId = "s",
+                title = "t",
+                files = 3,
+                additions = 42,
+                deletions = 7,
+            )
+        assertEquals("3 files (+42/−7)", CentrePolicy.summaryLabel(row))
+        assertEquals("1 file", CentrePolicy.summaryLabel(row.copy(files = 1, additions = 0, deletions = 0)))
+        assertNull(CentrePolicy.summaryLabel(row.copy(files = 0)))
+    }
+
+    @Test
+    fun `the one-tap prompts are continue plus the server's own commands`() {
+        val commands =
+            listOf(
+                CommandEntry(name = "compact"),
+                CommandEntry(name = "init"),
+                CommandEntry(name = "review"),
+                CommandEntry(name = "extra"),
+                CommandEntry(name = ""),
+            )
+        // "Continue" always leads; the server's names follow, capped.
+        assertEquals(
+            listOf(CentrePolicy.CONTINUE_PROMPT, "/compact", "/init", "/review"),
+            CentrePolicy.promptSuggestions(commands),
+        )
+        assertEquals(
+            listOf(CentrePolicy.CONTINUE_PROMPT, "/compact"),
+            CentrePolicy.promptSuggestions(commands, limit = 2),
+        )
+        // A server without commands still gets the daily shortcut.
+        assertEquals(listOf(CentrePolicy.CONTINUE_PROMPT), CentrePolicy.promptSuggestions(emptyList()))
     }
 
     @Test

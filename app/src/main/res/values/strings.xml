@@ -645,4 +645,13 @@
     <string name="centre_delete" formatted="false">Delete</string>
     <string name="centre_delete_confirm" formatted="false">“%1$s” will be permanently deleted from the server. This cannot be undone.</string>
     <string name="centre_show_less" formatted="false">Show less</string>
+    <string name="settings_quick_prompts" formatted="false">Quick prompts from the Centre</string>
+    <string name="settings_quick_prompts_sub" formatted="false">Send „Continue“, a slash command or a short instruction to a session straight from the Centre — no need to open it first. While a turn is running the prompt is queued, never interrupting it.</string>
+    <string name="centre_continue" formatted="false">Continue</string>
+    <string name="centre_continue_sub" formatted="false">Recently touched sessions</string>
+    <string name="centre_continue_sub_chips" formatted="false">Tap ⚡ for a one-tap prompt</string>
+    <string name="centre_nothing_recent" formatted="false">No recent sessions.</string>
+    <string name="centre_quick_prompt" formatted="false">Quick prompt</string>
+    <string name="centre_all_sessions" formatted="false">All sessions &amp; search →</string>
+    <string name="explain_this" formatted="false">Explain this (I want to learn)</string>
 </resources>

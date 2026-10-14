@@ -38,6 +38,9 @@ enum class CentralSetting {
 
     /** "Offer compaction from insights" — the switch behind the Centre's Compact action. */
     InsightCompactEnabled,
+
+    /** "Quick prompts from the Centre" — sending a prompt without opening the session. */
+    QuickPromptsEnabled,
 }
 
 /**
@@ -50,6 +53,7 @@ internal fun centralSettingValue(setting: CentralSetting): Boolean =
     when (setting) {
         CentralSetting.JournalInjectEnabled -> AppSettingsStore.state.value.journalInjectEnabled
         CentralSetting.InsightCompactEnabled -> AppSettingsStore.state.value.insightCompactEnabled
+        CentralSetting.QuickPromptsEnabled -> AppSettingsStore.state.value.quickPromptsEnabled
     }
 
 /**
@@ -79,6 +83,11 @@ class CentralActions(
     /** Deletes a session on the server. Permanent - the caller confirms first. */
     private val deleteSession: suspend (sessionId: String) -> Unit,
     /**
+     * Sends a prompt into a session. `delivery` is `queue` while a turn runs (never kills the
+     * running turn) and `null` when the session is idle.
+     */
+    private val sendPrompt: suspend (sessionId: String, text: String, delivery: String?) -> Boolean,
+    /**
      * Answers a pending permission request. The app's helper resolves the global vs.
      * session-scoped route, so the caller only names the request.
      */
@@ -86,6 +95,41 @@ class CentralActions(
     /** Reads a feature switch. Injected so tests can pin both states. */
     private val setting: (CentralSetting) -> Boolean = ::centralSettingValue,
 ) {
+    /**
+     * Sends a prompt without opening the session ("continue", "run the tests", a slash command).
+     *
+     * This is the daily-use shortcut: the Centre is where the work is *seen*, so it must also be
+     * where it is *continued*. Gated by [CentralSetting.QuickPromptsEnabled] (it talks to a model
+     * and costs tokens), and audit-logged as `Sent`.
+     */
+    suspend fun prompt(
+        sessionId: String,
+        text: String,
+        title: String,
+        running: Boolean,
+    ): ActionResult {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return ActionResult.Skipped("nothing to send")
+        if (!setting(CentralSetting.QuickPromptsEnabled)) {
+            return ActionResult.Skipped("quick prompts are switched off")
+        }
+        return run("prompt") {
+            // Queue while a turn runs: a shortcut must never kill work in flight.
+            val delivery = if (running) "queue" else null
+            if (!sendPrompt(sessionId, trimmed, delivery)) {
+                ActionResult.Failed("the server rejected the prompt")
+            } else {
+                AuditLogStore.record(
+                    kind = AuditKind.Send,
+                    title = trimmed.take(80),
+                    sessionId = sessionId,
+                    detail = (if (running) "queued for " else "sent to ") + title.ifBlank { sessionId },
+                )
+                ActionResult.Ok
+            }
+        }
+    }
+
     /**
      * Deletes a session. Permanent: the caller asks first, this records it.
      *

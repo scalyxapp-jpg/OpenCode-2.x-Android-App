@@ -962,6 +962,7 @@ internal fun ChatScreen(
                                                     text,
                                                 )
                                             },
+                                            onExplainPart = { part -> viewModel.explainPart(part) },
                                             onDismissExplain = viewModel::dismissExplain,
                                             onClearOutbox = viewModel::clearOutbox,
                                             onStopRace = viewModel::stopRace,
@@ -1103,6 +1104,8 @@ internal class ChatActions(
     val onFlushOutbox: () -> Unit = {},
     /** Explain mode: ask about one artifact in its own session. */
     val onExplain: (String) -> Unit = {},
+    /** Explain mode for a tool row: the command, the written code or the call itself. */
+    val onExplainPart: (com.opencode.android.domain.Part) -> Unit = {},
     /** Explain mode: drop the running side question / its card. */
     val onDismissExplain: () -> Unit = {},
     /** Offline outbox: drop them. */
@@ -1783,6 +1786,8 @@ internal fun SessionTab(
                                             shellToolPartsExpanded = appSettings.shellToolPartsExpanded,
                                             editToolPartsExpanded = appSettings.editToolPartsExpanded,
                                             onOpenSession = onOpenSession,
+                                            explainToolsEnabled = appSettings.explainEnabled,
+                                            onExplainPart = actions.onExplainPart,
                                         )
                                     }
                                 }

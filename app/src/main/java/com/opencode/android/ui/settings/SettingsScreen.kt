@@ -282,6 +282,14 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_quick_prompts),
+                subtitle = stringResource(R.string.settings_quick_prompts_sub),
+                checked = settings.quickPromptsEnabled,
+                onCheckedChange = { AppSettingsStore.setQuickPromptsEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_insight_compact),
                 subtitle = stringResource(R.string.settings_insight_compact_sub),
                 checked = settings.insightCompactEnabled,
