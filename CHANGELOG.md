@@ -5,6 +5,39 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.4] - 2026-10-14
+
+### Fixed (Decisions)
+
+- **„Decisions" zeigte 0, obwohl Einträge vorhanden waren — erst ein Tippen aktualisierte.**
+  Ursache: `uiState.journal` war ein **Schnappschuss**, der nur beim Öffnen des Dialogs (und
+  nach add/delete/inject) neu berechnet wurde. Beim Start stand dort die leere Liste, die
+  Menü-Zahl war also 0. Jetzt **beobachtet das ViewModel den Journal-Store** (`collect`): die
+  Zahl ist live, egal woher die Änderung kommt. Beim Session-Wechsel wird zusätzlich neu
+  gescopt (das Journal ist projektgebunden).
+- **Tile/Glance sagten „No decisions open", während das Journal Einträge hatte.** Die
+  Ambient-Zahl kannte nur die Anfragen des Modells (Berechtigungen/Fragen) — **captured
+  Entscheidungen fehlten völlig**. Es gibt jetzt **eine** Quelle
+  (`ambientDecisionCount` = offene Anfragen + noch nicht übergebene Entscheidungen), die auch
+  beim Capture sofort auf Widget, Notification-Zeile und Tile durchschlägt.
+
+### Fixed (Message queue)
+
+- **Eine „Queued"-Karte konnte für einen Prompt erscheinen, der längst normal gesendet wurde.**
+  Ist kein Turn im Umlauf, liefert der Server einen `delivery:"queue"`-Prompt **sofort** aus
+  (live bewiesen) — es entstand also eine Queue-Zeile für eine normale Nachricht, die wieder
+  verschwinden musste. Die optimistische Karte wird jetzt **nur noch bei laufendem Turn**
+  angelegt; sonst geht der Prompt als normale Nachricht durch.
+- (aus 2.0.3, hier zusammengeführt) zugestellte Prompts fallen über das Transcript aus der
+  Queue, und die Inbox wird am Turn-Ende neu gelesen.
+
+### Added (tests)
+
+- `JournalPolicyTest` (9 Fälle, +1): „nur nicht übergebene Entscheidungen zählen als offen" —
+  übergebene zählen nicht mit.
+- `QueuePolicyTest` (4 Fälle) unverändert grün.
+- Betroffen geprüft (nur diese Klassen): **13 Tests, 0 Fehler**; App-Compile grün.
+
 ## [2.0.3] - 2026-10-14
 
 ### Fixed

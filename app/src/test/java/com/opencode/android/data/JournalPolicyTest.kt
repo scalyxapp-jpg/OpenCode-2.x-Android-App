@@ -104,6 +104,19 @@ class JournalPolicyTest {
     }
 
     @Test
+    fun `only decisions nobody handed over count as open`() {
+        // The ambient surfaces must not say "No decisions open" while the journal holds
+        // entries that were never handed to an agent.
+        val pending = entry("a")
+        val handed = JournalPolicy.markInjected(listOf(entry("b")), "b", "ses_x").single()
+        assertEquals(0, JournalPolicy.notInjectedCount(emptyList()))
+        // Two captured, neither handed over.
+        assertEquals(2, JournalPolicy.notInjectedCount(listOf(pending, entry("c"))))
+        // The handed-over one does not count.
+        assertEquals(1, JournalPolicy.notInjectedCount(listOf(pending, handed)))
+    }
+
+    @Test
     fun `the status tells apart handed over from still pending`() {
         // A captured decision that nobody knows about must not look "done".
         val pending = entry("a")

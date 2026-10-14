@@ -294,6 +294,19 @@ class ChatViewModel
         private val api: OpenCodeApi get() = apiProvider.get()
 
         init {
+            // The journal is LIVE: the count in the chat menu used to be a snapshot taken
+            // only when the dialog opened (or after add/delete/inject), so it read 0 while
+            // entries existed until the user tapped it. Collecting the store fixes that class
+            // of staleness for every surface that shows the count.
+            viewModelScope.launch {
+                DecisionJournalStore.state.collect { entries ->
+                    journalSource = entries
+                    _uiState.update { it.copy(journal = JournalPolicy.visible(entries, journalProjectKey())) }
+                    // Capture/delete/hand-over must show up on the ambient surfaces at once:
+                    // the tile and the notification line derive from this single count.
+                    com.opencode.android.data.GlanceStore.update(pendingDecisions = ambientDecisionCount(entries))
+                }
+            }
             // Offline outbox: retry as soon as Android reports a usable network. The
             // flow is edge-triggered (no replay), which is exactly right here — the
             // manual "Send now" and the flush on session open cover the rest.
@@ -672,6 +685,9 @@ class ChatViewModel
                     // `conversation`, which does not exist until construction finished.
                     startGlanceFeed()
                     loadInbox(sessionId)
+                    // The journal is project-scoped: switching sessions re-scopes the list
+                    // (and its count) without waiting for a store emission.
+                    refreshJournal()
                     // Offline outbox: show this session's waiting prompts and try to
                     // deliver them (opening a session is a user signal that the server
                     // is expected to be reachable).
@@ -1540,12 +1556,32 @@ class ChatViewModel
             return JournalPolicy.export(entries, project.substringAfterLast('/').ifBlank { project })
         }
 
+        /**
+         * The ONE number the ambient surfaces show as "waiting for you": the model's open
+         * requests (permissions, questions) plus captured decisions nobody handed over.
+         *
+         * Captured decisions used to be invisible there — the tile claimed "No decisions
+         * open" while the journal held entries.
+         */
+        private fun ambientDecisionCount(
+            entries: List<JournalEntry> = DecisionJournalStore.state.value,
+            permissionCount: Int = _uiState.value.pendingPermissions.size,
+        ): Int =
+            permissionCount +
+                _uiState.value.pendingQuestions.size +
+                JournalPolicy.notInjectedCount(entries)
+
+        /** Last emission of the journal store; [refreshJournal] re-scopes it. */
+        private var journalSource: List<JournalEntry> = emptyList()
+
         private fun refreshJournal() {
             // Same key as `addJournalEntry` (incl. the global fallback), otherwise an entry
             // saved without a resolved directory was invisible right after saving.
             val dir = journalProjectKey()
+            val source =
+                DecisionJournalStore.state.value.ifEmpty { journalSource }
             _uiState.update {
-                it.copy(journal = JournalPolicy.visible(DecisionJournalStore.state.value, dir))
+                it.copy(journal = JournalPolicy.visible(source, dir))
             }
         }
 
@@ -2115,8 +2151,7 @@ class ChatViewModel
                         }
                     }
                     com.opencode.android.data.GlanceStore.update(
-                        pendingDecisions =
-                            pending.size + _uiState.value.pendingQuestions.size,
+                        pendingDecisions = ambientDecisionCount(DecisionJournalStore.state.value, pending.size),
                     )
                     // Actionable notifications for newly seen requests. Notifier
                     // dedupes by request id, so repeated loads do not re-alert.
@@ -3728,12 +3763,22 @@ class ChatViewModel
                     payload = InboxPayload(text = rawText),
                     delivery = QUEUE_DELIVERY,
                 )
+            // The card is only honest while a turn is actually running: with an idle
+            // session the server delivers a queued prompt immediately (verified live), so it
+            // becomes a normal message - showing "Queued" for it was a state the user had to
+            // wait for to disappear.
+            val turnRunning = _uiState.value.isGenerating || _uiState.value.isCompacting
             _uiState.update {
                 it.copy(
                     inputText = "",
                     attachments = emptyList(),
                     statusError = null,
-                    queuedMessages = it.queuedMessages.filterNot { item -> item.id == messageId } + optimistic,
+                    queuedMessages =
+                        if (turnRunning) {
+                            it.queuedMessages.filterNot { item -> item.id == messageId } + optimistic
+                        } else {
+                            it.queuedMessages.filterNot { item -> item.id == messageId }
+                        },
                 )
             }
             sendJob =

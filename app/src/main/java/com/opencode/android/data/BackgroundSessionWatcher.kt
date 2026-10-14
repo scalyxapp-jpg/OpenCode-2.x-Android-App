@@ -1,5 +1,7 @@
 package com.opencode.android.data
 
+// Same package: DecisionJournalStore/JournalPolicy need no import.
+
 import android.content.Context
 import com.opencode.android.R
 import com.opencode.android.domain.Event
@@ -207,7 +209,11 @@ object BackgroundSessionWatcher {
                 // surfaces are right without polling the request list.
                 (event.properties?.requestId ?: event.properties?.part?.id)?.let { id ->
                     pendingDecisionIds += id
-                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                    GlanceStore.update(
+                        pendingDecisions =
+                            pendingDecisionIds.size +
+                                JournalPolicy.notInjectedCount(DecisionJournalStore.state.value),
+                    )
                     // "Auto-accept permissions" — the switch must also work unattended,
                     // which is exactly when the foreground loader never runs. Answer once
                     // (no durable rule) so a running turn cannot stall on a prompt.
@@ -229,7 +235,11 @@ object BackgroundSessionWatcher {
                                     AppLog.d(APP_LOG_TAG) { "auto-approved permission $id" }
                                     Notifier.clearPermission(id)
                                     pendingDecisionIds -= id
-                                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                                    GlanceStore.update(
+                                        pendingDecisions =
+                                            pendingDecisionIds.size +
+                                                JournalPolicy.notInjectedCount(DecisionJournalStore.state.value),
+                                    )
                                 }
                             }
                         }
@@ -242,7 +252,11 @@ object BackgroundSessionWatcher {
             -> {
                 (event.properties?.requestId ?: event.properties?.part?.id)?.let { id ->
                     pendingDecisionIds -= id
-                    GlanceStore.update(pendingDecisions = pendingDecisionIds.size)
+                    GlanceStore.update(
+                        pendingDecisions =
+                            pendingDecisionIds.size +
+                                JournalPolicy.notInjectedCount(DecisionJournalStore.state.value),
+                    )
                 }
             }
         }

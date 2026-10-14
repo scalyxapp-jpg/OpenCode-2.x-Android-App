@@ -107,6 +107,15 @@ object JournalPolicy {
         }
 
     /**
+     * Captured decisions that were never handed to an agent.
+     *
+     * Feeds the ambient glance/tile count: "No decisions open" while the journal holds
+     * entries nobody handed over was plainly wrong — a decision on the phone only is exactly
+     * the kind of thing those surfaces exist for.
+     */
+    fun notInjectedCount(entries: List<JournalEntry>): Int = entries.count { it.injectedInto.isEmpty() }
+
+    /**
      * Whether this decision already reached an agent, and how many sessions carry it.
      *
      * The list renders a status label from this: a captured decision that was handed over
