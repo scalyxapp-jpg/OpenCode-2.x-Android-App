@@ -47,6 +47,9 @@ enum class AuditKind {
 
     /** The context was compacted (asked for by the user, from the Centre's insights). */
     Compact,
+
+    /** A session was deleted on the server (permanent). */
+    Delete,
 }
 
 /** One recorded action. Newest first in the store. */
@@ -97,6 +100,7 @@ object AuditPolicy {
             AuditKind.Guard -> "Guard"
             AuditKind.Send -> "Sent"
             AuditKind.Compact -> "Compacted"
+            AuditKind.Delete -> "Deleted"
         }
 
     /** One-line summary for the section header, e.g. "12 events · 3 stops". */

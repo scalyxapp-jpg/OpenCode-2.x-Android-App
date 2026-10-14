@@ -5,6 +5,57 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-10-14
+
+### Fixed
+
+**Der „Open"-Knopf unter „What needs attention" tat nichts.** Ursache gefunden (nicht geraten):
+Der Knopf gehörte zur Aussage *„N projects with uncommitted changes"*, deren Aktion
+`InsightAction.OpenChanges` war — und `execute()` beantwortete sie mit `Unit`. Die Oberfläche
+beschriftete sie zusätzlich mit dem generischen **„Open"**, sodass ein wirkungsloser Knopf wie ein
+kaputter aussah. Zwei Fixes, damit das nicht wieder passiert:
+
+1. **Die Aussage ist jetzt handlungsfähig:** `DirtyProject` trägt die **neueste Session des
+   Projekts** (dort lebt der Changes-Tab), die Aktion öffnet sie, und die Beschriftung heißt
+   ehrlich **„Open changes"**. Ohne Session (Projekt ohne Session) bleibt es eine reine Aussage.
+2. **Kein Knopf ohne Wirkung:** `Insight.canRun` (rein, getestet) prüft, ob die Aktion eine
+   Session hat; die Oberfläche rendert den Knopf nur dann. Genau das war der Fehler — sichtbar,
+   aber wirkungslos.
+
+### Added — die Zentrale handelt direkt
+
+- **Kontextmenü je Session-Zeile** (Long-Press **und** ein „⋮"-Knopf, weil Long-Press unsichtbar
+  ist): **Open · Stop · Steer** (nur bei Warteschlange) **· Compact · Copy session ID · Copy
+  directory**. Läuft/retry entscheidet, welche Einträge erscheinen.
+- **Berechtigungen direkt aus „Needs you" beantworten:** **Allow once · Always · Deny** — ohne die
+  Session zu öffnen. Das ist der eigentliche Zweck der Liste: ein blockierter Turn wird mit einem
+  Tipp freigegeben. `CentreNeed` trägt dafür die Request-ID mit.
+- **Beide Wege laufen durch die zentrale Aktionsschicht:** `CentralActions.replyPermission`
+  (Protokollwerte `once`/`always`/`reject`, Audit-Eintrag `Approved`/`Denied`) und
+  `CentralActions.compact`. Damit haben Zentrale, Chat und Benachrichtigung dieselben Guards,
+  Audit-Einträge und Fehlertexte.
+- **Delete und Archivieren im Menü:** *Delete* löscht die Session **auf dem Server** (permanent —
+  deshalb mit Rückfrage: „… will be permanently deleted from the server. This cannot be undone.")
+  und wird als `Deleted` protokolliert; *Archive (local)* ist die umkehrbare Variante ohne
+  Server-Schreibzugriff. Beide laufen durch `CentralActions`.
+- Neue VM-Aktionen für das Menü: `compact(row)`, `steerFirstQueued(row)`, `answerPermission(...)`,
+  `delete(row)`, `archive(row)`.
+
+### Fixed (2)
+
+**„… 45 more sessions" war eine Sackgasse.** Die Zeile nannte verborgene Sessions, aber es gab
+keinen Weg, sie zu sehen — die Liste der ruhenden Sessions war fest auf fünf gekappt. Jetzt ist
+der Hinweis **anklickbar**: er klappt die vollständige Liste an Ort und Stelle auf
+(„Show less" klappt zurück), mit derselben Wortwahl wie die Datei-Faltung im Chat.
+
+### Added (tests)
+
+- `CentralActionsTest` (8, +1): Freigabe erreicht den Server mit dem richtigen Protokollwert
+  (`once`/`always`/`reject`), eine abgelehnte Antwort wird als `Failed` gemeldet.
+- `CentreInsightsTest` (12, +2): eine schmutzige Projekt-Aussage ist nur handlungsfähig, wenn eine
+  Session sie öffnen kann (`canRun`), und `canRun` verweigert jede Aktion ohne Session.
+- Betroffen geprüft (nur diese Klassen): **35 Tests, 0 Fehler**.
+
 ## [3.5.0] - 2026-10-14
 
 **Feinschliff-Release: die Zentrale wird sparsamer, ehrlicher und barrierefreier — plus die

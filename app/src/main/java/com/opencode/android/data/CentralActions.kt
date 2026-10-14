@@ -21,6 +21,16 @@ sealed interface ActionResult {
     ) : ActionResult
 }
 
+/** The three answers the permission protocol allows. */
+enum class PermissionAnswer(
+    /** The value the server expects. */
+    val wire: String,
+) {
+    Once("once"),
+    Always("always"),
+    Deny("reject"),
+}
+
 /** The switches the central actions respect. */
 enum class CentralSetting {
     /** "Hand decisions to the agent" — the master switch for injections. */
@@ -66,9 +76,58 @@ class CentralActions(
         description: String?,
         directory: String?,
     ) -> Boolean,
+    /** Deletes a session on the server. Permanent - the caller confirms first. */
+    private val deleteSession: suspend (sessionId: String) -> Unit,
+    /**
+     * Answers a pending permission request. The app's helper resolves the global vs.
+     * session-scoped route, so the caller only names the request.
+     */
+    private val replyPermission: suspend (sessionId: String, requestId: String, answer: String) -> Boolean,
     /** Reads a feature switch. Injected so tests can pin both states. */
     private val setting: (CentralSetting) -> Boolean = ::centralSettingValue,
 ) {
+    /**
+     * Deletes a session. Permanent: the caller asks first, this records it.
+     *
+     * Server-side truth only - the id is also archived locally, so a deleted session cannot come
+     * back through a cached list.
+     */
+    suspend fun delete(
+        sessionId: String,
+        title: String,
+    ): ActionResult =
+        run("delete") {
+            deleteSession(sessionId)
+            ArchivedSessionsStore.archive(sessionId)
+            AuditLogStore.record(
+                kind = AuditKind.Delete,
+                title = title.ifBlank { sessionId },
+                sessionId = sessionId,
+                detail = "session deleted on the server",
+            )
+            ActionResult.Ok
+        }
+
+    /**
+     * Archives a session locally (reversible, no server write).
+     *
+     * Kept next to [delete] because the two are the same intent with different severity - and
+     * picking the wrong one is exactly what the confirmation protects against.
+     */
+    fun archive(
+        sessionId: String,
+        title: String,
+    ): ActionResult {
+        ArchivedSessionsStore.archive(sessionId)
+        AuditLogStore.record(
+            kind = AuditKind.Delete,
+            title = title.ifBlank { sessionId },
+            sessionId = sessionId,
+            detail = "archived locally (reversible)",
+        )
+        return ActionResult.Ok
+    }
+
     /**
      * Ends one turn. The agent keeps the work it already did.
      *
@@ -136,6 +195,33 @@ class CentralActions(
                     title = "Steered a queued prompt",
                     sessionId = sessionId,
                     detail = title.take(80).ifBlank { inboxId },
+                )
+                ActionResult.Ok
+            }
+        }
+
+    /**
+     * Answers a pending permission request.
+     *
+     * This is what makes the Centre usable without opening a session: a blocked turn can be
+     * released from the list. Recorded in the audit log (approve vs. deny) because it hands the
+     * agent a capability - exactly the kind of decision that log exists for.
+     */
+    suspend fun replyPermission(
+        sessionId: String,
+        requestId: String,
+        answer: PermissionAnswer,
+        title: String,
+    ): ActionResult =
+        run("permission") {
+            if (!replyPermission(sessionId, requestId, answer.wire)) {
+                ActionResult.Failed("the server rejected the answer")
+            } else {
+                AuditLogStore.record(
+                    kind = if (answer == PermissionAnswer.Deny) AuditKind.Deny else AuditKind.Approve,
+                    title = title.ifBlank { "permission" },
+                    sessionId = sessionId,
+                    detail = answer.wire,
                 )
                 ActionResult.Ok
             }

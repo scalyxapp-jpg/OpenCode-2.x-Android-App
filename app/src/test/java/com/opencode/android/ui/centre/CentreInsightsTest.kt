@@ -144,6 +144,41 @@ class CentreInsightsTest {
     }
 
     @Test
+    fun `a dirty project is actionable only when a session can open it`() {
+        // The Changes tab lives in a session, so the insight carries its newest session id.
+        val withTarget =
+            CentreInsights.evaluate(
+                CentreSignals(
+                    dirtyProjects = listOf(DirtyProject("proj · main · 2 files (+4/−1)", "ses_9")),
+                ),
+            ).first { it.id == "dirty" }
+        assertEquals(InsightAction.OpenChanges, withTarget.action)
+        assertEquals("ses_9", withTarget.sessionId)
+        assertTrue(withTarget.canRun)
+        assertTrue(withTarget.detail.contains("2 files"))
+
+        // Without a session the statement stays, but the button must not appear - a visible
+        // "Open" that does nothing is what made the Centre look broken.
+        val withoutTarget =
+            CentreInsights.evaluate(
+                CentreSignals(dirtyProjects = listOf(DirtyProject("proj · main · 1 file (+1/−0)"))),
+            ).first { it.id == "dirty" }
+        assertEquals(InsightAction.None, withoutTarget.action)
+        assertEquals(false, withoutTarget.canRun)
+    }
+
+    @Test
+    fun `an action without a session is not offered`() {
+        // Belt and braces: canRun is what the screen gates the button on.
+        assertTrue(Insight("a", Severity.Warning, "t", "d", sessionId = "ses_1", action = InsightAction.StopSession).canRun)
+        assertEquals(
+            false,
+            Insight("a", Severity.Warning, "t", "d", sessionId = null, action = InsightAction.StopSession).canRun,
+        )
+        assertEquals(false, Insight("a", Severity.Info, "t", "d", action = InsightAction.None).canRun)
+    }
+
+    @Test
     fun `severity decides the order, and actionable lines come first inside a severity`() {
         val insights =
             CentreInsights.evaluate(

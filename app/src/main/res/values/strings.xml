@@ -634,4 +634,15 @@
     <string name="centre_sev_warning" formatted="false">Warning</string>
     <string name="centre_sev_notice" formatted="false">Notice</string>
     <string name="centre_sev_info" formatted="false">Information</string>
+    <string name="centre_action_open_changes" formatted="false">Open changes</string>
+    <string name="centre_allow_once" formatted="false">Allow once</string>
+    <string name="centre_allow_always" formatted="false">Always</string>
+    <string name="centre_deny" formatted="false">Deny</string>
+    <string name="centre_copy_id" formatted="false">Copy session ID</string>
+    <string name="centre_copy_directory" formatted="false">Copy directory</string>
+    <string name="centre_more_actions" formatted="false">Actions</string>
+    <string name="centre_archive" formatted="false">Archive (local)</string>
+    <string name="centre_delete" formatted="false">Delete</string>
+    <string name="centre_delete_confirm" formatted="false">“%1$s” will be permanently deleted from the server. This cannot be undone.</string>
+    <string name="centre_show_less" formatted="false">Show less</string>
 </resources>

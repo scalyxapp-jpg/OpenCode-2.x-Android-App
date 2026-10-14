@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -45,12 +47,18 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opencode.android.R
 import com.opencode.android.data.AuditEvent
+import com.opencode.android.data.PermissionAnswer
 import com.opencode.android.data.AuditPolicy
 import com.opencode.android.ui.copyToClipboard
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.toast
 import java.text.SimpleDateFormat
 import java.util.Date
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import java.util.Locale
 
 /**
@@ -73,6 +81,11 @@ internal fun CentreScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var confirmStopAll by remember { mutableStateOf(false) }
+    // Deleting a session is permanent (server-side). Everything else in this screen is
+    // reversible, so this is the one action that asks first.
+    var confirmDelete by remember { mutableStateOf<CentreRow?>(null) }
+    // The idle preview folds after a few rows; the hint must open the rest, not just mention it.
+    var showAllSessions by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
     if (confirmStopAll) {
@@ -98,8 +111,30 @@ internal fun CentreScreen(
 
     // Running first (all of them), then a preview of the idle ones.
     val busyRows = state.rows.filter { it.running || it.retrying }
-    val idleRows = state.rows.filterNot { it.running || it.retrying }.take(CentrePolicy.PREVIEW_ROWS)
-    val idleHidden = state.rows.count { !it.running && !it.retrying } - idleRows.size
+    val allIdleRows = state.rows.filterNot { it.running || it.retrying }
+    val idleRows = if (showAllSessions) allIdleRows else allIdleRows.take(CentrePolicy.PREVIEW_ROWS)
+    val idleHidden = allIdleRows.size - idleRows.size
+
+    confirmDelete?.let { target ->
+        AlertDialog(
+            onDismissRequest = { confirmDelete = null },
+            title = { Text(stringResource(R.string.centre_delete)) },
+            text = { Text(stringResource(R.string.centre_delete_confirm, target.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = null
+                    viewModel.delete(target)
+                }) {
+                    Text(stringResource(R.string.centre_delete), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -183,7 +218,11 @@ internal fun CentreScreen(
                     insight = insight,
                     onAct = {
                         when (insight.action) {
-                            InsightAction.OpenSession -> insight.sessionId?.let(onOpenSession)
+                            // Navigation stays navigation: the screen owns the route.
+                            InsightAction.OpenSession,
+                            InsightAction.OpenChanges,
+                            -> insight.sessionId?.let(onOpenSession)
+
                             else -> viewModel.execute(insight)
                         }
                     },
@@ -217,6 +256,22 @@ internal fun CentreScreen(
                     row = row,
                     onClick = { onOpenSession(row.sessionId) },
                     onStop = { viewModel.stop(row) },
+                    onCompact = { viewModel.compact(row) },
+                    onSteer = { viewModel.steerFirstQueued(row) },
+                    onArchive = { viewModel.archive(row) },
+                    onDelete = { confirmDelete = row },
+                    onCopyId = {
+                        copyToClipboard(context, context.getString(R.string.centre_action_open), row.sessionId)
+                        toast(context, context.getString(R.string.copied))
+                    },
+                    onCopyDirectory = {
+                        copyToClipboard(
+                            context,
+                            context.getString(R.string.centre_action_open),
+                            row.directory.orEmpty(),
+                        )
+                        toast(context, context.getString(R.string.copied))
+                    },
                 )
             }
             items(idleRows) { row ->
@@ -224,14 +279,42 @@ internal fun CentreScreen(
                     row = row,
                     onClick = { onOpenSession(row.sessionId) },
                     onStop = { viewModel.stop(row) },
+                    onCompact = { viewModel.compact(row) },
+                    onSteer = { viewModel.steerFirstQueued(row) },
+                    onArchive = { viewModel.archive(row) },
+                    onDelete = { confirmDelete = row },
+                    onCopyId = {
+                        copyToClipboard(context, context.getString(R.string.centre_action_open), row.sessionId)
+                        toast(context, context.getString(R.string.copied))
+                    },
+                    onCopyDirectory = {
+                        copyToClipboard(
+                            context,
+                            context.getString(R.string.centre_action_open),
+                            row.directory.orEmpty(),
+                        )
+                        toast(context, context.getString(R.string.copied))
+                    },
                 )
             }
-            if (idleHidden > 0) {
+            // Folded preview, expandable in place: a line that names N hidden sessions but
+            // cannot show them was a dead end (reported).
+            if (idleHidden > 0 || showAllSessions) {
                 item {
                     Text(
-                        text = stringResource(R.string.centre_more_sessions, idleHidden),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text =
+                            if (idleHidden > 0) {
+                                stringResource(R.string.centre_more_sessions, idleHidden)
+                            } else {
+                                stringResource(R.string.centre_show_less)
+                            },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier =
+                            Modifier
+                                .clickable(role = Role.Button) { showAllSessions = !showAllSessions }
+                                .padding(vertical = MaterialTheme.spacing.extraSmall),
                     )
                 }
             }
@@ -273,6 +356,61 @@ internal fun CentreScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                        }
+                        // A permission is the one waiting item that can be RELEASED right here:
+                        // the whole point of the list is not having to open the session.
+                        val requestId = need.requestId
+                        if (need.kind == NeedKind.Permission && !requestId.isNullOrBlank()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                            ) {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.answerPermission(
+                                            need.sessionId,
+                                            requestId,
+                                            PermissionAnswer.Once,
+                                            need.title,
+                                        )
+                                    },
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.centre_allow_once),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        viewModel.answerPermission(
+                                            need.sessionId,
+                                            requestId,
+                                            PermissionAnswer.Always,
+                                            need.title,
+                                        )
+                                    },
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.centre_allow_always),
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                                TextButton(
+                                    onClick = {
+                                        viewModel.answerPermission(
+                                            need.sessionId,
+                                            requestId,
+                                            PermissionAnswer.Deny,
+                                            need.title,
+                                        )
+                                    },
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.centre_deny),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -440,7 +578,9 @@ private fun InsightRow(
                     )
                 }
             }
-            if (insight.action != InsightAction.None) {
+            // Only when the action can actually run: a visible "Open" that does nothing reads as
+            // a broken app (that was the bug in the dirty-projects insight).
+            if (insight.canRun) {
                 TextButton(onClick = onAct) {
                     Text(
                         text =
@@ -449,6 +589,7 @@ private fun InsightRow(
                                     InsightAction.StopSession -> R.string.centre_stop
                                     InsightAction.SteerQueue -> R.string.centre_action_steer
                                     InsightAction.CompactSession -> R.string.centre_action_compact
+                                    InsightAction.OpenChanges -> R.string.centre_action_open_changes
                                     else -> R.string.centre_action_open
                                 },
                             ),
@@ -497,25 +638,39 @@ private fun EmptyLine(text: String) {
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SessionRow(
     row: CentreRow,
     onClick: () -> Unit,
     onStop: () -> Unit,
+    onCompact: () -> Unit,
+    onSteer: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    onCopyId: () -> Unit,
+    onCopyDirectory: () -> Unit,
 ) {
-    Surface(
-        color =
-            if (row.running || row.retrying) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainerHigh
-            },
-        shape = MaterialTheme.shapes.small,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick),
-    ) {
+    // Long-press AND the overflow button open the same menu: long-press is invisible, and an
+    // action nobody finds is no action.
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            color =
+                if (row.running || row.retrying) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh
+                },
+            shape = MaterialTheme.shapes.small,
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = onClick,
+                        onLongClick = { menuOpen = true },
+                    ),
+        ) {
         Row(
             modifier = Modifier.padding(MaterialTheme.spacing.small),
             verticalAlignment = Alignment.CenterVertically,
@@ -592,6 +747,62 @@ private fun SessionRow(
                 TextButton(onClick = onStop) {
                     Text(stringResource(R.string.centre_stop))
                 }
+            }
+            IconButton(
+                onClick = { menuOpen = true },
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(
+                    Icons.Default.MoreVert,
+                    contentDescription = stringResource(R.string.centre_more_actions),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        } // end Surface
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.centre_action_open)) },
+                onClick = { menuOpen = false; onClick() },
+            )
+            if (row.running || row.retrying) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.centre_stop)) },
+                    onClick = { menuOpen = false; onStop() },
+                )
+            }
+            if (row.queueDepth > 0) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.centre_action_steer)) },
+                    onClick = { menuOpen = false; onSteer() },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.centre_action_compact)) },
+                onClick = { menuOpen = false; onCompact() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.centre_archive)) },
+                onClick = { menuOpen = false; onArchive() },
+            )
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.centre_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                onClick = { menuOpen = false; onDelete() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.centre_copy_id)) },
+                onClick = { menuOpen = false; onCopyId() },
+            )
+            if (!row.directory.isNullOrBlank()) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.centre_copy_directory)) },
+                    onClick = { menuOpen = false; onCopyDirectory() },
+                )
             }
         }
     }

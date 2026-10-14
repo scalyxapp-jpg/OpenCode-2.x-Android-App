@@ -28,6 +28,24 @@ enum class InsightAction {
     OpenChanges,
 }
 
+/**
+ * Whether the shown action can actually run.
+ *
+ * The screen renders the button only when this is true: a visible "Open" that does nothing (the
+ * dirty-projects insight used to have exactly that) reads as a broken app.
+ */
+val Insight.canRun: Boolean
+    get() =
+        when (action) {
+            InsightAction.None -> false
+            InsightAction.OpenSession,
+            InsightAction.OpenChanges,
+            InsightAction.StopSession,
+            InsightAction.SteerQueue,
+            InsightAction.CompactSession,
+            -> !sessionId.isNullOrBlank()
+        }
+
 /** One derived statement about the current state. Never a raw server value. */
 data class Insight(
     val id: String,
@@ -36,6 +54,18 @@ data class Insight(
     val detail: String,
     val sessionId: String? = null,
     val action: InsightAction = InsightAction.None,
+)
+
+/**
+ * A project with uncommitted work.
+ *
+ * [targetSessionId] is the newest session of that project: "open changes" has to land somewhere,
+ * and the Changes tab lives inside a session. Without a session the insight stays informational -
+ * a button that cannot act must not be rendered.
+ */
+data class DirtyProject(
+    val label: String,
+    val targetSessionId: String? = null,
 )
 
 /** One running (or retrying) turn, as far as the rules need it. */
@@ -73,8 +103,8 @@ data class CentreSignals(
     val costBaselinePerDay: Double? = null,
     val mcpTotal: Int = 0,
     val mcpConnected: Int = 0,
-    /** Projects with uncommitted changes, labelled with their branch. */
-    val dirtyProjects: List<String> = emptyList(),
+    /** Projects with uncommitted changes, labelled with branch and counts. */
+    val dirtyProjects: List<DirtyProject> = emptyList(),
 )
 
 /**
@@ -228,6 +258,7 @@ object CentreInsights {
         }
 
         if (signals.dirtyProjects.isNotEmpty()) {
+            val targets = signals.dirtyProjects.mapNotNull { it.targetSessionId }.distinct()
             out +=
                 Insight(
                     id = "dirty",
@@ -235,8 +266,10 @@ object CentreInsights {
                     title =
                         "${signals.dirtyProjects.size} project" + (if (signals.dirtyProjects.size == 1) "" else "s") +
                             " with uncommitted changes",
-                    detail = signals.dirtyProjects.joinToString(", "),
-                    action = InsightAction.OpenChanges,
+                    detail = signals.dirtyProjects.joinToString(", ") { it.label },
+                    sessionId = targets.firstOrNull(),
+                    // Only offer the action when there is a session to land in.
+                    action = if (targets.isEmpty()) InsightAction.None else InsightAction.OpenChanges,
                 )
         }
 

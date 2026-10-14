@@ -23,6 +23,9 @@ class CentralActionsTest {
         var steerSucceeds = true
         var handOverSucceeds = true
         var handOverThrows = false
+        val answers = mutableListOf<String>()
+        var answerSucceeds = true
+        val deleted = mutableListOf<String>()
     }
 
     private fun actions(
@@ -43,6 +46,11 @@ class CentralActionsTest {
             recorder.handOvers += "$sessionId:$text"
             recorder.handOverSucceeds
         },
+        replyPermission = { sessionId, requestId, answer ->
+            recorder.answers += "$sessionId:$requestId:$answer"
+            recorder.answerSucceeds
+        },
+        deleteSession = { sessionId -> recorder.deleted += sessionId },
         setting = { setting ->
             when (setting) {
                 CentralSetting.JournalInjectEnabled -> journalInjectEnabled
@@ -111,6 +119,41 @@ class CentralActionsTest {
         }
 
     @Test
+    fun `deleting a session reaches the server and archives it locally`() =
+        runBlocking {
+            val recorder = Recorder()
+            assertEquals(ActionResult.Ok, actions(recorder).delete("ses_3", "Old session"))
+            assertEquals(listOf("ses_3"), recorder.deleted)
+            // Archiving is the reversible sibling and never touches the server.
+            assertEquals(ActionResult.Ok, actions(recorder).archive("ses_4", "Kept session"))
+            assertEquals(listOf("ses_3"), recorder.deleted)
+        }
+
+    @Test
+    fun `a permission can be answered straight from the list`() =
+        runBlocking {
+            val recorder = Recorder()
+            assertEquals(
+                ActionResult.Ok,
+                actions(recorder).replyPermission("ses_1", "req_7", PermissionAnswer.Once, "Run tests"),
+            )
+            // "Always" and "Deny" travel with the protocol's own values.
+            actions(recorder).replyPermission("ses_1", "req_7", PermissionAnswer.Always, "Run tests")
+            actions(recorder).replyPermission("ses_1", "req_7", PermissionAnswer.Deny, "Run tests")
+            assertEquals(
+                listOf("ses_1:req_7:once", "ses_1:req_7:always", "ses_1:req_7:reject"),
+                recorder.answers,
+            )
+
+            // A refused answer must reach the caller instead of looking like success.
+            val refused = Recorder().apply { answerSucceeds = false }
+            assertTrue(
+                actions(refused).replyPermission("ses_1", "req_7", PermissionAnswer.Once, "t") is
+                    ActionResult.Failed,
+            )
+        }
+
+    @Test
     fun `handing a decision over respects the master switch`() =
         runBlocking {
             var called = false
@@ -124,6 +167,8 @@ class CentralActionsTest {
                         true
                     },
                     setting = { false },
+                    replyPermission = { _, _, _ -> true },
+                    deleteSession = { },
                 )
             val skipped = switchedOff.handOverDecision("ses_1", "Title", entry, null)
             assertTrue(skipped is ActionResult.Skipped)

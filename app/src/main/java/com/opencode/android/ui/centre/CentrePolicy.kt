@@ -27,6 +27,11 @@ data class CentreNeed(
     val sessionId: String,
     val title: String,
     val detail: String? = null,
+    /**
+     * The request to answer, for [NeedKind.Permission]. Lets the Centre release a blocked turn
+     * without opening the session.
+     */
+    val requestId: String? = null,
 )
 
 /** One session row of the cockpit. */
@@ -183,7 +188,13 @@ object CentrePolicy {
                         counts(forms.size, "open form", "open forms").takeIf { forms.isNotEmpty() },
                         counts(waiting, "message waiting", "messages waiting").takeIf { waiting > 0 },
                     ).joinToString(" · ")
-                CentreNeed(kind = kind, sessionId = sessionId, title = title, detail = detail)
+                CentreNeed(
+                    kind = kind,
+                    sessionId = sessionId,
+                    title = title,
+                    detail = detail,
+                    requestId = perms.firstOrNull()?.id,
+                )
             }
         return needs.sortedBy { it.kind.ordinal }
     }

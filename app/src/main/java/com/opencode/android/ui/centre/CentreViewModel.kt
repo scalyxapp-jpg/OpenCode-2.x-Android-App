@@ -9,6 +9,7 @@ import com.opencode.android.data.BackendSession
 import com.opencode.android.data.CentralActions
 import com.opencode.android.data.OpenCodeApi
 import com.opencode.android.data.OutboxStore
+import com.opencode.android.data.PermissionAnswer
 import com.opencode.android.data.ProviderDirectory
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.Session
@@ -124,6 +125,12 @@ class CentreViewModel
                 handDecisionOver = { sessionId, text, description, directory ->
                     api.injectSynthetic(sessionId, text, description, directory)
                 },
+                replyPermission = { sessionId, requestId, answer ->
+                    // Same helper the chat and the notification action use: it resolves the
+                    // global vs. session-scoped route.
+                    com.opencode.android.data.replyPermission(api, sessionId, requestId, answer)
+                },
+                deleteSession = { sessionId -> api.deleteSession(sessionId) },
             )
 
         init {
@@ -231,8 +238,21 @@ class CentreViewModel
                                                 branch = branch?.let { listOf(directory to it) }.orEmpty(),
                                                 dirty =
                                                     CentrePolicy.dirtyProjectLabel(directory, branch, files)
-                                                        ?.let { listOf(it) }
-                                                        .orEmpty(),
+                                                        ?.let { label ->
+                                                            listOf(
+                                                                DirtyProject(
+                                                                    label = label,
+                                                                    // The newest session of this project: the
+                                                                    // Changes tab lives inside a session, and
+                                                                    // the list is ordered newest first.
+                                                                    targetSessionId =
+                                                                        sessions
+                                                                            .firstOrNull {
+                                                                                (it.directory ?: it.path) == directory
+                                                                            }?.id,
+                                                                ),
+                                                            )
+                                                        }.orEmpty(),
                                             )
                                         }
                                 }
@@ -458,8 +478,70 @@ class CentreViewModel
                 }
 
                 InsightAction.OpenChanges -> {
+                    // Navigation: the screen opens the insight's session, where the Changes tab
+                    // lives. Kept here so the mapping "statement -> action" stays in one place and
+                    // a non-UI surface (notification, widget) knows where it leads.
                     Unit
-                } // navigation: the screen handles it
+                }
+            }
+        }
+
+        /**
+         * Answers a permission straight from the Centre's "needs you" list.
+         *
+         * The whole point of the list is not having to open the session: a blocked turn is
+         * released with one tap, through the same central action layer (and audit entry) the
+         * chat uses.
+         */
+        fun answerPermission(
+            sessionId: String,
+            requestId: String,
+            answer: PermissionAnswer,
+            title: String,
+        ) {
+            viewModelScope.launch {
+                report(actions.replyPermission(sessionId, requestId, answer, title), "Answered")
+                refresh()
+            }
+        }
+
+        /**
+         * Deletes a row's session (context menu). The screen asks first - this is permanent.
+         *
+         * The tab/route holding it is not closed here: the chat already explains a session that
+         * no longer exists instead of showing a raw 404 (see `sessionGone`).
+         */
+        fun delete(row: CentreRow) {
+            viewModelScope.launch {
+                report(actions.delete(row.sessionId, row.title), "Deleted ${row.title}")
+                refresh()
+            }
+        }
+
+        /** Archives a row's session locally (reversible, no server write). */
+        fun archive(row: CentreRow) {
+            report(actions.archive(row.sessionId, row.title), "Archived ${row.title}")
+            refresh()
+        }
+
+        /** Compacts a row's session (long-press / overflow menu, and the insight action). */
+        fun compact(row: CentreRow) {
+            viewModelScope.launch {
+                report(actions.compact(row.sessionId, row.title, row.directory), "Compacting…")
+                refresh()
+            }
+        }
+
+        /** Releases the first prompt waiting behind a running turn. */
+        fun steerFirstQueued(row: CentreRow) {
+            viewModelScope.launch {
+                val first =
+                    runCatching { api.getInbox(row.sessionId, row.directory) }
+                        .getOrDefault(emptyList())
+                        .firstOrNull { it.type == "user" && !it.id.isNullOrBlank() }
+                        ?: return@launch
+                report(actions.steer(row.sessionId, first.id!!, first.payload?.text.orEmpty()), "Steered")
+                refresh()
             }
         }
 
@@ -569,7 +651,7 @@ class CentreViewModel
         /** Per-project picture: the branch and any uncommitted work. */
         private data class Projects(
             val branch: List<Pair<String, String>> = emptyList(),
-            val dirty: List<String> = emptyList(),
+            val dirty: List<DirtyProject> = emptyList(),
         )
 
         private companion object {

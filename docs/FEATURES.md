@@ -642,6 +642,19 @@ Live-ness comes from the global event feed (`session.status` folded by the same 
 session list uses), so a turn started by the web or the TUI appears here immediately and
 flips back the moment it ends. One HTTP snapshot per visit/refresh, no polling.
 
+### Acting from the Centre
+
+The Centre is meant to be usable without opening anything:
+
+- **Every session row** has a context menu — long-press it or tap the "⋮": **Open · Stop · Steer**
+  (only when prompts are queued) **· Compact · Copy session ID · Copy directory**.
+- **Permissions are answered right in "Needs you"** (Allow once / Always / Deny): releasing a
+  blocked turn is the reason the list exists. `CentreNeed` carries the request id for that.
+- **Insights carry their action** (Stop / Open / Steer / Compact) and the button only appears when
+  `Insight.canRun` is true — a visible button that does nothing is exactly the bug 3.5.1 fixed.
+- Every write goes through `CentralActions`, so a tap here, in the chat or from a notification has
+  the same guards, audit entry and error text.
+
 ### The derived picture (Central Intelligence)
 
 Above the lists sits **What needs attention**: statements derived from the whole snapshot, not raw
