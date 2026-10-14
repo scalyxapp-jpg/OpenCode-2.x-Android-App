@@ -25,6 +25,9 @@ sealed interface ActionResult {
 enum class CentralSetting {
     /** "Hand decisions to the agent" — the master switch for injections. */
     JournalInjectEnabled,
+
+    /** "Offer compaction from insights" — the switch behind the Centre's Compact action. */
+    InsightCompactEnabled,
 }
 
 /**
@@ -36,6 +39,7 @@ enum class CentralSetting {
 internal fun centralSettingValue(setting: CentralSetting): Boolean =
     when (setting) {
         CentralSetting.JournalInjectEnabled -> AppSettingsStore.state.value.journalInjectEnabled
+        CentralSetting.InsightCompactEnabled -> AppSettingsStore.state.value.insightCompactEnabled
     }
 
 /**
@@ -148,8 +152,11 @@ class CentralActions(
         sessionId: String,
         title: String,
         directory: String? = null,
-    ): ActionResult =
-        run("compact") {
+    ): ActionResult {
+        if (!setting(CentralSetting.InsightCompactEnabled)) {
+            return ActionResult.Skipped("compacting from insights is switched off")
+        }
+        return run("compact") {
             compact(sessionId, directory)
             AuditLogStore.record(
                 kind = AuditKind.Compact,
@@ -159,6 +166,7 @@ class CentralActions(
             )
             ActionResult.Ok
         }
+    }
 
     /**
      * Hands a captured decision to a session's agent (`POST …/synthetic`).

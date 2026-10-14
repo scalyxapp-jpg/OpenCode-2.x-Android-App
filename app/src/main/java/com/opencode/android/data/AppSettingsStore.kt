@@ -107,6 +107,13 @@ object AppSettingsStore {
          * so, with the manual "hand over" action still available.
          */
         val journalAutoInject: Boolean = true,
+        /**
+         * Offer the compaction action on the Centre's "context nearly full" insight.
+         *
+         * Compacting rewrites what the agent remembers, so it stays switchable even though it is
+         * always an explicit tap. Off = the insight still appears, without the action button.
+         */
+        val insightCompactEnabled: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -186,6 +193,7 @@ object AppSettingsStore {
             showContextLines = prefs.getBoolean("showContextLines", true),
             auditLogEnabled = prefs.getBoolean("auditLogEnabled", true),
             journalAutoInject = prefs.getBoolean("journalAutoInject", true),
+            insightCompactEnabled = prefs.getBoolean("insightCompactEnabled", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -261,6 +269,8 @@ object AppSettingsStore {
     fun setAuditLogEnabled(v: Boolean) = update { it.putBoolean("auditLogEnabled", v) }
 
     fun setJournalAutoInject(v: Boolean) = update { it.putBoolean("journalAutoInject", v) }
+
+    fun setInsightCompactEnabled(v: Boolean) = update { it.putBoolean("insightCompactEnabled", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -412,6 +422,7 @@ object AppSettingsStore {
                 putBoolean("showContextLines", parsed.showContextLines)
                 putBoolean("auditLogEnabled", parsed.auditLogEnabled)
                 putBoolean("journalAutoInject", parsed.journalAutoInject)
+                putBoolean("insightCompactEnabled", parsed.insightCompactEnabled)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

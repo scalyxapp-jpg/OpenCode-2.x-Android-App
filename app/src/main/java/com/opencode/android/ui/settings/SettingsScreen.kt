@@ -282,6 +282,14 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_insight_compact),
+                subtitle = stringResource(R.string.settings_insight_compact_sub),
+                checked = settings.insightCompactEnabled,
+                onCheckedChange = { AppSettingsStore.setInsightCompactEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_race),
                 subtitle = stringResource(R.string.settings_race_sub),
                 checked = settings.raceEnabled,

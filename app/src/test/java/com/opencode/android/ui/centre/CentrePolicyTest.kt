@@ -9,6 +9,7 @@ import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.domain.SessionStatus
 import com.opencode.android.domain.SessionTime
+import com.opencode.android.domain.VcsDiffFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -229,6 +230,26 @@ class CentrePolicyTest {
         assertEquals(listOf("ses_alive", "ses_waiting"), visible.map { it.sessionId })
         // Nothing missing: everything stays.
         assertEquals(needs, CentrePolicy.withoutMissing(needs, emptySet()))
+    }
+
+    @Test
+    fun `a dirty project is labelled with branch and counts`() {
+        val files =
+            listOf(
+                VcsDiffFile(file = "a.kt", additions = 40, deletions = 7),
+                VcsDiffFile(file = "b.kt", additions = 2, deletions = 0, status = "added"),
+            )
+        assertEquals(
+            "opencode-android · main · 2 files (+42/−7)",
+            CentrePolicy.dirtyProjectLabel("/home/x/opencode-android", "main", files),
+        )
+        // One file reads in the singular.
+        assertEquals(
+            "proj · 1 file (+1/−0)",
+            CentrePolicy.dirtyProjectLabel("/p/proj/", null, listOf(VcsDiffFile(file = "a", additions = 1, deletions = 0))),
+        )
+        // A clean project has nothing to say - the caller filters on null.
+        assertNull(CentrePolicy.dirtyProjectLabel("/p/proj", "main", emptyList()))
     }
 
     @Test

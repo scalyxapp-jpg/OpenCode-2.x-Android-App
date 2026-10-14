@@ -36,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -396,11 +398,25 @@ private fun InsightRow(
             Severity.Notice -> MaterialTheme.colorScheme.onSecondaryContainer
             Severity.Info -> MaterialTheme.colorScheme.onSurface
         }
+    // TalkBack reads the title and detail as text; the severity is the part a screen reader
+    // cannot see, so it is announced as the state of the row.
+    val severityLabel =
+        stringResource(
+            when (insight.severity) {
+                Severity.Critical -> R.string.centre_sev_critical
+                Severity.Warning -> R.string.centre_sev_warning
+                Severity.Notice -> R.string.centre_sev_notice
+                Severity.Info -> R.string.centre_sev_info
+            },
+        )
     Surface(
         color = container,
         contentColor = onContainer,
         shape = MaterialTheme.shapes.small,
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics { stateDescription = severityLabel },
     ) {
         Row(
             modifier = Modifier.padding(MaterialTheme.spacing.small),

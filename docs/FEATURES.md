@@ -662,7 +662,16 @@ moment it ends. Everything else is ONE parallel snapshot per visit/refresh — d
 polling, no extra background consumer. The queue probes are capped (5 sessions) and the session
 probes for orphan detection too (10), so a refresh cannot turn into a request storm.
 
-**API:** `GET /api/session` · `GET /api/session/active` · `POST /api/session/{id}/interrupt` ·
+Uncommitted work is detected with **`GET /api/vcs/status`** (per-file counts, NO patches) and
+shown as `project · branch · 2 files (+42/−7)` with an **Open changes** action. The expensive
+sibling `/api/vcs/diff` (megabyte patches) is for the Changes tab only.
+
+The snapshot is **budgeted**: three projects scanned, known-gone sessions probed once, and the
+7-day baseline cached for five minutes — a refresh must not turn into a request storm on a phone.
+Compacting from an insight stays switchable (**Settings → Offer compaction in the Centre**); the
+central action layer refuses the call when it is off, so no shortcut bypasses the switch.
+
+**API:** `GET /api/session` · `GET /api/session/active` · `GET /api/vcs` · `GET /api/vcs/status` · `POST /api/session/{id}/interrupt` ·
 `GET /api/permission/request` · `GET /api/form` · `GET /api/session/{id}/inbox` (queues) ·
 `PATCH …/inbox/{id}` (steer) · `POST /api/session/{id}/compact` · `POST …/synthetic` ·
 `GET /api/mcp` · `GET /api/skill` · `GET /api/plugin` · `GET /api/vcs` ·

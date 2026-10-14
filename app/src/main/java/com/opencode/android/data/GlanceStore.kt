@@ -66,7 +66,7 @@ object GlanceStatus {
     }
 
     /** Cost of the day, e.g. `$3.06` — null when unknown (never guessed). */
-    fun cost(costTodayUsd: Double?): String? = costTodayUsd?.let { "$" + String.format(java.util.Locale.ENGLISH, "%.2f", it) }
+    fun cost(costTodayUsd: Double?): String? = com.opencode.android.util.Money.usd(costTodayUsd)
 
     /**
      * True when two fact sets would render the same surface.

@@ -102,6 +102,12 @@ class CentreViewModel
 
         private var feedJob: Job? = null
 
+        /** Sessions the server no longer knows; remembered so they are probed once. */
+        private val knownGone = mutableSetOf<String>()
+
+        /** `(fetchedAt, costOf7Days)` of the last baseline fetch. */
+        private var baselineCache: Pair<Long, Double?>? = null
+
         /**
          * The central action layer. Every write the Centre performs goes through it, so a tap
          * here, in a notification or in the chat has identical guards, audit entries and error
@@ -160,7 +166,9 @@ class CentreViewModel
                 _state.update { it.copy(loading = true) }
                 runCatching {
                     val sessions = api.getSessions(limit = 50, order = "desc").data
-                    val directories = (CentrePolicy.directoriesToScan(sessions) + "").distinct()
+                    // Budget: three projects is what a phone can act on; every extra directory costs a
+                    // permission request, a form request and a status request.
+                    val directories = (CentrePolicy.directoriesToScan(sessions, limit = SCAN_DIRECTORY_LIMIT) + "").distinct()
                     val statuses: Map<String, SessionStatus> =
                         runCatching { api.getSessionStatuses(directories.firstOrNull().orEmpty()) }
                             .getOrDefault(emptyMap())
@@ -192,16 +200,41 @@ class CentreViewModel
                             val today = async { runCatching { api.getStats(fromMs = startOfToday()) }.getOrNull() }
                             val week =
                                 async {
-                                    runCatching { api.getStats(fromMs = startOfToday() - SEVEN_DAYS_MS) }.getOrNull()
-                                }
-                            val branches =
-                                async {
-                                    CentrePolicy.directoriesToScan(sessions, limit = 3).mapNotNull { directory ->
-                                        runCatching { api.getVcs(directory).branch }
-                                            .getOrNull()
-                                            ?.takeIf { it.isNotBlank() }
-                                            ?.let { directory to it }
+                                    // The 7-day baseline moves slowly: caching it keeps a refresh
+                                    // from spending a request on the same number every time.
+                                    val cached = baselineCache
+                                    if (cached != null && System.currentTimeMillis() - cached.first < BASELINE_TTL_MS) {
+                                        com.opencode.android.domain.SessionStats(cost = cached.second)
+                                    } else {
+                                        val fetched =
+                                            runCatching { api.getStats(fromMs = startOfToday() - SEVEN_DAYS_MS) }
+                                                .getOrNull()
+                                        baselineCache = System.currentTimeMillis() to fetched?.cost
+                                        fetched
                                     }
+                                }
+                            // Projects: branch + uncommitted work in one pass per directory.
+                            // `getVcsStatus` is the CHEAP route (per-file counts, no patches) -
+                            // the diff route would ship megabytes for the same answer.
+                            val projects =
+                                async {
+                                    CentrePolicy.directoriesToScan(sessions, limit = SCAN_DIRECTORY_LIMIT)
+                                        .map { directory ->
+                                            val branch =
+                                                runCatching { api.getVcs(directory).branch }
+                                                    .getOrNull()
+                                                    ?.takeIf { it.isNotBlank() }
+                                            val files =
+                                                runCatching { api.getVcsStatus(directory) }
+                                                    .getOrDefault(emptyList())
+                                            Projects(
+                                                branch = branch?.let { listOf(directory to it) }.orEmpty(),
+                                                dirty =
+                                                    CentrePolicy.dirtyProjectLabel(directory, branch, files)
+                                                        ?.let { listOf(it) }
+                                                        .orEmpty(),
+                                            )
+                                        }
                                 }
                             // Server queues: only a running session can hold one, and a queue is
                             // exactly "prompts waiting behind the turn".
@@ -225,7 +258,15 @@ class CentreViewModel
                                 plugins = plugins.await(),
                                 today = today.await(),
                                 week = week.await(),
-                                branches = branches.await(),
+                                projects =
+                                    projects
+                                        .await()
+                                        .fold(Projects()) { acc, next ->
+                                            Projects(
+                                                branch = acc.branch + next.branch,
+                                                dirty = acc.dirty + next.dirty,
+                                            )
+                                        },
                                 queued = queued.await(),
                             )
                         }
@@ -244,19 +285,27 @@ class CentreViewModel
                     // its pending forms behind on the server, so those rows opened a 404 - probe
                     // and drop them. A failed probe keeps the row: never hide what might be
                     // reachable.
-                    val missing =
-                        allNeeds
-                            .map { it.sessionId }
-                            .distinct()
-                            .take(MAX_SESSION_PROBES)
-                            .filter { sessionId ->
+                    // Known-gone sessions are remembered: re-probing them on every refresh was
+                    // one request per orphan, every time.
+                    val missing = mutableSetOf<String>()
+                    allNeeds
+                        .map { it.sessionId }
+                        .distinct()
+                        .take(MAX_SESSION_PROBES)
+                        .forEach { sessionId ->
+                            if (sessionId in knownGone) {
+                                missing += sessionId
+                                return@forEach
+                            }
+                            val gone =
                                 runCatching { api.getSession(sessionId) }
                                     .exceptionOrNull()
-                                    ?.let {
-                                        com.opencode.android.util
-                                            .isGoneError(it)
-                                    } == true
-                            }.toSet()
+                                    ?.let { com.opencode.android.util.isGoneError(it) } == true
+                            if (gone) {
+                                knownGone += sessionId
+                                missing += sessionId
+                            }
+                        }
                     val needs = CentrePolicy.withoutMissing(allNeeds, missing)
 
                     // Context windows: the session list has the tokens, the provider catalog has
@@ -315,6 +364,7 @@ class CentreViewModel
                             costBaselinePerDay = baseline,
                             mcpTotal = mcpPair.second,
                             mcpConnected = mcpPair.first,
+                            dirtyProjects = extras.projects.dirty,
                         )
 
                     _state.update { current ->
@@ -339,7 +389,7 @@ class CentreViewModel
                                     mcpTotal = mcpPair.second,
                                     skills = extras.skills,
                                     plugins = extras.plugins,
-                                    branches = extras.branches,
+                                    branches = extras.projects.branch,
                                 ),
                             costToday = extras.today?.cost,
                             costBaselinePerDay = baseline,
@@ -512,12 +562,24 @@ class CentreViewModel
             val plugins: Int,
             val today: com.opencode.android.domain.SessionStats?,
             val week: com.opencode.android.domain.SessionStats?,
-            val branches: List<Pair<String, String>>,
+            val projects: Projects,
             val queued: Map<String, Int>,
+        )
+
+        /** Per-project picture: the branch and any uncommitted work. */
+        private data class Projects(
+            val branch: List<Pair<String, String>> = emptyList(),
+            val dirty: List<String> = emptyList(),
         )
 
         private companion object {
             const val MAX_SESSION_PROBES = 10
+
+            /** Projects scanned per snapshot (permissions, forms, branch, status). */
+            const val SCAN_DIRECTORY_LIMIT = 3
+
+            /** How long the 7-day baseline is reused before it is fetched again. */
+            const val BASELINE_TTL_MS = 5L * 60L * 1000L
             const val MAX_QUEUE_PROBES = 5
             const val DAY_MS = 24L * 60L * 60L * 1000L
             const val SEVEN_DAYS_MS = 7L * DAY_MS

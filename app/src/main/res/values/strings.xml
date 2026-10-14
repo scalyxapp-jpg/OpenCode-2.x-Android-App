@@ -628,4 +628,10 @@
     <string name="centre_action_open" formatted="false">Open</string>
     <string name="centre_action_steer" formatted="false">Steer</string>
     <string name="centre_action_compact" formatted="false">Compact</string>
+    <string name="settings_insight_compact" formatted="false">Offer compaction in the Centre</string>
+    <string name="settings_insight_compact_sub" formatted="false">The “context nearly full” insight gets a Compact button that asks the server to summarise the session. Off: the insight still appears, without the action. Compacting changes what the agent remembers.</string>
+    <string name="centre_sev_critical" formatted="false">Urgent</string>
+    <string name="centre_sev_warning" formatted="false">Warning</string>
+    <string name="centre_sev_notice" formatted="false">Notice</string>
+    <string name="centre_sev_info" formatted="false">Information</string>
 </resources>

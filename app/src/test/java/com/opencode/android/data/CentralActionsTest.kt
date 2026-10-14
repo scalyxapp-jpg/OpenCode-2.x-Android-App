@@ -46,6 +46,7 @@ class CentralActionsTest {
         setting = { setting ->
             when (setting) {
                 CentralSetting.JournalInjectEnabled -> journalInjectEnabled
+                CentralSetting.InsightCompactEnabled -> true
             }
         },
     )

@@ -636,6 +636,11 @@ class OpenCodeApiAdapter(
         return v2.vcsDiff(mode = v2Mode, directory = directory).data.orEmpty()
     }
 
+    override suspend fun getVcsStatus(directory: String?): List<VcsDiffFile> =
+        // No patch requested: the status route answers with per-file counts only, which is
+        // what a snapshot needs (the diff route ships every patch, ~1 MB on a big session).
+        v2.vcsStatus(directory = directory).data.orEmpty()
+
     // UNSUPPORTED: V2 has no GET /session/{id}/todo, so an empty list here means
     // "no endpoint", never "the session has no todos". Todos arrive exclusively
     // through the `todo.updated` event.

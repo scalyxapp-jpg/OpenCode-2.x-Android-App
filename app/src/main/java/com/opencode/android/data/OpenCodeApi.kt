@@ -237,6 +237,16 @@ interface OpenCodeApi {
         directory: String? = null,
     ): List<VcsDiffFile>
 
+    /**
+     * Uncommitted changes of a directory WITHOUT patches
+     * (`GET /api/vcs/status` -> file, additions, deletions, status).
+     *
+     * The Centre uses this to tell a dirty project from a clean one. The sibling
+     * `getVcsDiff` ships every patch (~1 MB on a big session) and is for the Changes tab,
+     * never for a background snapshot.
+     */
+    suspend fun getVcsStatus(directory: String? = null): List<VcsDiffFile>
+
     suspend fun getTodos(sessionId: String): List<TodoItem>
 
     // --- providers / auth --------------------------------------------------

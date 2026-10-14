@@ -5,6 +5,73 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-10-14
+
+**Feinschliff-Release: die Zentrale wird sparsamer, ehrlicher und barrierefreier — plus die
+„dirty project"-Aussage, für die es jetzt einen billigen Endpunkt gibt.**
+
+### Added — schmutzige Projekte (die offene Lücke aus 3.0 ist geschlossen)
+
+Beim Schema-Nachlesen der lokalen OpenAPI-Kopie gefunden: **`GET /api/vcs/status` liefert
+`[{file, additions, deletions, status}]` — ohne Patches.** Genau das, was gefehlt hat (die
+Alternative `/vcs/diff` schickt Megabyte-Patches):
+
+- Pro gescanntem Verzeichnis **ein** Aufruf, zusammen mit dem Branch in einem Durchlauf.
+- Neue Aussage: *„N projects with uncommitted changes"* mit Detail
+  `projekt · branch · 2 files (+42/−7)` (Form wie in den Referenz-Clients) und Aktion **Open
+  changes**. Saubere Projekte liefern bewusst keine Zeile (`dirtyProjectLabel` gibt `null`).
+- Die neue API-Methode `getVcsStatus` ist bewusst getrennt von `getVcsDiff` dokumentiert, damit
+  niemand versehentlich die teure Route in einen Hintergrund-Schnappschuss einbaut.
+
+### Changed — Request-Budget der Zentrale
+
+Die Zentrale holte pro Aktualisieren bis zu ~35 Anfragen. Jetzt:
+
+- **Scan-Budget 3 Projekte** statt 5 (jedes Verzeichnis kostet Berechtigungen, Formulare, Branch,
+  Status).
+- **Einmal-Erkennung verwaister Sessions:** als „gone" erkannte Session-IDs werden gemerkt; vorher
+  kostete jeder verwaiste Eintrag bei **jedem** Aktualisieren eine Anfrage.
+- **7-Tage-Baseline 5 Minuten zwischengespeichert:** die Zahl bewegt sich langsam, ein zweiter
+  Schnappschuss kurz danach bezahlte sie erneut.
+- Branch und Status stehen in **einem** Durchlauf pro Verzeichnis (vorher zwei Schleifen).
+
+### Changed — eine Quelle für Geld
+
+`util/Money` ist jetzt der **einzige** Formatierer für Kosten; `GlanceStore` und die Zentrale
+delegieren dorthin (vorher formatierten zwei Stellen dieselbe Zahl). Beim Testen fiel dabei auf,
+dass die Prozentrechnung **abgeschnitten** statt gerundet hat: 44,999… % las sich als „+44%", also
+systematisch einen Punkt zu wenig bei jeder Steigerung. Jetzt gerundet (`+45%`).
+
+### Added — Barrierefreiheit
+
+Der Schweregrad einer Aussage ist die Information, die ein Screenreader **nicht** sehen kann
+(Farbe trägt sie sonst allein). Jede Aussagen-Zeile hat deshalb eine `stateDescription`
+(„Urgent" / „Warning" / „Notice" / „Information").
+
+### Added — Schalter für die Compact-Aktion
+
+Die Verdichtung („Compact") ändert, was der Agent sich merkt — sie bleibt damit schaltbar:
+**Settings → „Offer compaction in the Centre"** (Standard an). Aus heißt: die Aussage
+„Kontext fast voll" erscheint weiter, aber ohne Aktionsknopf; die zentrale Aktionsschicht
+verweigert den Aufruf zusätzlich (`ActionResult.Skipped`), damit kein Shortcut daran vorbeikommt.
+
+### Added (tests)
+
+- `MoneyTest` (2 Fälle): Betragsformat und Trend inkl. Rundung sowie „keine Aussage ohne
+  Baseline".
+- `CentrePolicyTest` (14, +1): Beschriftung schmutziger Projekte (Ein-/Mehrzahl, Zählwerte,
+  sauberes Projekt = `null`).
+- `CentralActionsTest` (8, +1): der Schalter **verhindert die Anfrage** bei ausgeschalteter
+  Compact-Aktion, nicht nur die Meldung.
+- Betroffen geprüft (nur diese Klassen): **33 Tests, 0 Fehler**.
+
+### Ehrlich offen
+
+- Die Aussage „Retry-Schleife" nennt den Server-Grund; der nächste Versuch wird nicht
+  heruntergezählt (kein Ticker, die Zentrale aktualisiert nicht im Sekundentakt).
+- Worktrees (`/api/worktree`) bleiben ungenutzt: eine eigene UX pro Aufgabe, kein Nebenprodukt
+  eines Snapshots.
+
 ## [3.0.0] - 2026-10-14
 
 **Die Zentrale wird zur Central Intelligence: Sie zeigt nicht mehr nur Zustände, sie leitet

@@ -5,6 +5,8 @@ import com.opencode.android.domain.McpStatus
 import com.opencode.android.domain.PermissionRequest
 import com.opencode.android.domain.Session
 import com.opencode.android.domain.SessionQuestion
+import com.opencode.android.domain.SessionStatus
+import com.opencode.android.domain.VcsDiffFile
 
 /** Why a session needs the user right now. */
 enum class NeedKind {
@@ -232,15 +234,26 @@ object CentrePolicy {
     /** `180k` / `1.2M` — short enough for a badge, exact enough to reason about. */
     fun formatTokens(tokens: Long): String =
         when {
-            tokens <= 0L -> "0"
-            tokens < 1_000L -> tokens.toString()
-            tokens < 1_000_000L -> {
-                val k = tokens / 1_000.0
-                if (k < 10) String.format(java.util.Locale.ENGLISH, "%.1fk", k)
-                else "${k.toInt()}k"
+            tokens <= 0L -> {
+                "0"
             }
 
-            else -> String.format(java.util.Locale.ENGLISH, "%.1fM", tokens / 1_000_000.0)
+            tokens < 1_000L -> {
+                tokens.toString()
+            }
+
+            tokens < 1_000_000L -> {
+                val k = tokens / 1_000.0
+                if (k < 10) {
+                    String.format(java.util.Locale.ENGLISH, "%.1fk", k)
+                } else {
+                    "${k.toInt()}k"
+                }
+            }
+
+            else -> {
+                String.format(java.util.Locale.ENGLISH, "%.1fM", tokens / 1_000_000.0)
+            }
         }
 
     /**
@@ -253,11 +266,32 @@ object CentrePolicy {
         today: Double?,
         baseline: Double?,
         days: Int = 7,
+    ): String? =
+        com.opencode.android.util.Money
+            .trend(today, baseline, "$days-day average")
+
+    /**
+     * One line for a project with uncommitted work: `project · branch · 3 files (+42/−7)`.
+     *
+     * `null` for a clean project, so the caller only has to filter. Uses
+     * `GET /api/vcs/status`, which reports per-file counts WITHOUT patches - the diff route
+     * would ship megabytes for the same answer.
+     */
+    fun dirtyProjectLabel(
+        directory: String,
+        branch: String?,
+        files: List<VcsDiffFile>,
     ): String? {
-        if (today == null || baseline == null || baseline <= 0.0) return null
-        val percent = ((today - baseline) / baseline * 100.0).toInt()
-        val sign = if (percent > 0) "+" else ""
-        return "$sign$percent% vs. $days-day average"
+        if (files.isEmpty()) return null
+        val added = files.sumOf { it.additions }
+        val removed = files.sumOf { it.deletions }
+        val name = directory.trimEnd('/').substringAfterLast('/').ifBlank { directory }
+        val filesLabel =
+            buildString {
+                append(files.size).append(" file").append(if (files.size == 1) "" else "s")
+                if (added > 0 || removed > 0) append(" (+").append(added).append("/−").append(removed).append(')')
+            }
+        return listOfNotNull(name, branch?.takeIf { it.isNotBlank() }, filesLabel).joinToString(" · ")
     }
 
     /** Connected/total MCP servers from `GET /api/mcp` (status strings vary by build). */
@@ -266,8 +300,10 @@ object CentrePolicy {
         return connected to statuses.size
     }
 
-    /** `$1.23` — the same shape the glance surfaces use. */
-    fun costLabel(cost: Double?): String? = cost?.let { "$" + String.format(java.util.Locale.ENGLISH, "%.2f", it) }
+    /** `$1.23` — delegated to the shared formatter so no surface can disagree. */
+    fun costLabel(cost: Double?): String? =
+        com.opencode.android.util.Money
+            .usd(cost)
 
     /** How many rows a section lists before it folds (the list is a glance, not a report). */
     const val PREVIEW_ROWS = 5
