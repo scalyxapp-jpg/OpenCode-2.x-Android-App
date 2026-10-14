@@ -302,19 +302,6 @@ class ChatViewModel
         private val api: OpenCodeApi get() = apiProvider.get()
 
         init {
-            // The journal is LIVE: the count in the chat menu used to be a snapshot taken
-            // only when the dialog opened (or after add/delete/inject), so it read 0 while
-            // entries existed until the user tapped it. Collecting the store fixes that class
-            // of staleness for every surface that shows the count.
-            viewModelScope.launch {
-                DecisionJournalStore.state.collect { entries ->
-                    journalSource = entries
-                    _uiState.update { it.copy(journal = JournalPolicy.visible(entries, journalProjectKey())) }
-                    // Capture/delete/hand-over must show up on the ambient surfaces at once:
-                    // the tile and the notification line derive from this single count.
-                    com.opencode.android.data.GlanceStore.update(pendingDecisions = ambientDecisionCount(entries))
-                }
-            }
             // Offline outbox: retry as soon as Android reports a usable network. The
             // flow is edge-triggered (no replay), which is exactly right here — the
             // manual "Send now" and the flush on session open cover the rest.
@@ -340,6 +327,39 @@ class ChatViewModel
          * construction; the guard keeps it to one collector.
          */
         private var glanceFeed: Job? = null
+        private var journalFeed: Job? = null
+
+        /**
+         * Watches the decision journal.
+         *
+         * Started from [loadSession], NOT from `init`: `viewModelScope` runs on
+         * `Dispatchers.Main.immediate`, so a collector launched in `init` executes its first
+         * body synchronously during construction. This one touches `_uiState` (declared
+         * further down), which is still `null` at that moment — it crashed the app with
+         * `NullPointerException: Attempt to invoke ... getValue() on a null object reference`
+         * on every chat open (found in the crash log, retraced to the exact line).
+         *
+         * The journal is LIVE: the count in the chat menu used to be a snapshot taken only
+         * when the dialog opened (or after add/delete/inject), so it read 0 while entries
+         * existed until the user tapped it.
+         */
+        private fun startJournalFeed() {
+            if (journalFeed?.isActive == true) return
+            journalFeed =
+                viewModelScope.launch {
+                    DecisionJournalStore.state.collect { entries ->
+                        journalSource = entries
+                        _uiState.update {
+                            it.copy(journal = JournalPolicy.visible(entries, journalProjectKey()))
+                        }
+                        // Capture/delete/hand-over must show up on the ambient surfaces at
+                        // once: the tile and the notification line derive from this count.
+                        com.opencode.android.data.GlanceStore.update(
+                            pendingDecisions = ambientDecisionCount(entries),
+                        )
+                    }
+                }
+        }
 
         private fun startGlanceFeed() {
             if (glanceFeed?.isActive == true) return
@@ -692,6 +712,9 @@ class ChatViewModel
                     // Glance feed: started here (never in init) because it reads
                     // `conversation`, which does not exist until construction finished.
                     startGlanceFeed()
+                    // Same reason: the journal feed touches `_uiState`/`journalSource`, which do
+                    // not exist during construction (Main.immediate would run it too early).
+                    startJournalFeed()
                     loadInbox(sessionId)
                     // The journal is project-scoped: switching sessions re-scopes the list
                     // (and its count) without waiting for a store emission.

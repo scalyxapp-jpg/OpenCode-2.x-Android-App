@@ -5,6 +5,34 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.6] - 2026-10-14
+
+### Fixed
+
+**Absturz beim Öffnen eines Chats** (`java.lang.NullPointerException: Attempt to invoke virtual
+method 'java.lang.Object t43.getValue()' on a null object reference`, 2× direkt hintereinander).
+
+Aus dem Geräte-Crush-Buffer gelesen und mit `mapping.txt` **retraced** — der Absturz zeigte auf
+`ChatViewModel.kt:4788`, aufgerufen aus dem in `init` gestarteten Collector (`ChatViewModel.kt:309`):
+
+- Der Journal-Collector stand im **`init`-Block**, greift aber auf `_uiState` zu — und `_uiState`
+  wird erst **120 Zeilen später** deklariert. `viewModelScope` läuft auf
+  `Dispatchers.Main.immediate`, also läuft der Coroutine-Körper **synchron während der
+  Konstruktion**; die erste Emission eines `StateFlow` kommt dabei **vor** jeder Suspension.
+  Ergebnis: `_uiState` war noch `null` → NPE bei **jedem** Öffnen des Chats (der Crash-Log zeigt
+  zwei Versuche direkt nacheinander, also reproduzierbar).
+- Fix: der Feed startet wie der Glance-Feed aus **`loadSession()`** (`startJournalFeed()`,
+  idempotent) — die Lehre aus dem früheren Glance-Absturz, die ich beim Journal nicht angewandt
+  hatte.
+- **Audit der Fehlerklasse:** alle `init`-Blöcke im `ChatViewModel` gegen die Felddeklarationen
+  geprüft; der Outbox-Feed ist reaktionsgetrieben (keine Emission während der Konstruktion), der
+  Glance-/Journal-Feed läuft jetzt beide nach der Konstruktion. Kein weiterer Fall.
+
+### Verifikation
+
+- Gerät: frisch gestartet, Chat geöffnet, **0 FATAL** im Crash-Buffer (vorher: 2 Crashes pro
+  Start). Journal-Zahl im Chat-Menü zeigt die echte Anzahl ohne Antippen.
+
 ## [2.0.5] - 2026-10-14
 
 ### Fixed
