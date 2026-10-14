@@ -586,4 +586,26 @@
     <string name="settings_show_context_lines_sub" formatted="false">Show the unchanged lines around a change in a diff. Off keeps only the added and removed lines — quicker to read on a phone, and it applies to the chat and the Changes tab.</string>
     <string name="changed_files_more" formatted="false">+%1$d more files</string>
     <string name="show_less" formatted="false">Show less</string>
+    <string name="centre_title" formatted="false">Centre</string>
+    <string name="centre_running" formatted="false">Running now</string>
+    <string name="centre_needs_you" formatted="false">Needs you</string>
+    <string name="centre_today" formatted="false">Today</string>
+    <string name="centre_cost" formatted="false">Cost</string>
+    <string name="centre_sessions" formatted="false">Sessions</string>
+    <string name="centre_prompts" formatted="false">Prompts</string>
+    <string name="centre_steps" formatted="false">Steps</string>
+    <string name="centre_audit" formatted="false">Audit</string>
+    <string name="centre_stop" formatted="false">Stop</string>
+    <string name="centre_stop_all" formatted="false">Stop all</string>
+    <string name="centre_stop_all_confirm" formatted="false">Interrupt every running turn? The agents keep the work already done; the turns end.</string>
+    <string name="centre_running_now" formatted="false">running</string>
+    <string name="centre_retrying" formatted="false">retrying</string>
+    <string name="centre_nothing_running" formatted="false">Nothing is running.</string>
+    <string name="centre_nothing_waiting" formatted="false">Nothing is waiting for you.</string>
+    <string name="centre_no_audit" formatted="false">No events yet. Stopping turns, approvals and reverts show up here.</string>
+    <string name="centre_clear" formatted="false">Clear</string>
+    <string name="centre_audit_more" formatted="false">… %1$d more (all of them are in the copy)</string>
+    <string name="settings_audit_log" formatted="false">Audit log</string>
+    <string name="settings_audit_log_sub" formatted="false">Keep a local list of the actions that change state or spend money — stopping turns, approving or denying, reverting, forking, handing a decision over, MCP toggles. Shown in the Centre and copyable as Markdown. Off = nothing is recorded.</string>
+    <string name="centre_more_sessions" formatted="false">… %1$d more sessions on Home</string>
 </resources>

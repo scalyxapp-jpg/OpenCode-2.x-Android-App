@@ -5,6 +5,62 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-10-14
+
+**Der Sprung auf 2.0 ist kein Etikett: Die App bekommt eine eigene Ebene — die Zentrale —
+plus Sicherheit (Not-Aus) und Nachvollziehbarkeit (Audit).** Bis 1.5.x war die App ein
+vollständiger Client; ab 2.0 ist sie ein Client, der *antwortet*, wenn mehrere Agenten
+gleichzeitig arbeiten — auch wenn sie im Browser oder im TUI gestartet wurden.
+
+### Added — Zentrale (Cockpit)
+
+Neuer Eintrag in der unteren Navigation, ein Bildschirm, drei Antworten:
+
+- **Läuft jetzt:** alle Sessions, die der Server als `busy`/`retry` meldet — laufende zuerst,
+  darin die neuesten. Jede Zeile öffnet die Session und hat **Stop**; die Überschrift bietet
+  bei ≥1 laufender Session **Alle stoppen** (Rückfrage): unterbricht alle laufenden Turns
+  nacheinander und nennt danach, wie viele wirklich gestoppt wurden.
+- **Braucht dich:** blockierte Arbeit über *alle* Sessions — offene Berechtigungen, offene
+  Fragen (V2-Formulare) und Sendungen, die noch im Offline-Postausgang warten. Ein Tipp
+  öffnet die wartende Session.
+- **Heute:** die Server-Aggregate des lokalen Tages (Kosten, Sessions, Prompts, Steps) aus
+  `GET /api/experimental/session/stats`.
+- **Audit:** die letzten 12 Ereignisse, mit **Kopieren** als Markdown-Export.
+
+Die Live-Anzeige kommt aus dem globalen Event-Strom (`session.status`, gefaltet mit
+demselben Reducer wie die Session-Liste): ein im Web oder TUI gestarteter Turn erscheint
+sofort und verschwindet sofort. Ein HTTP-Schnappschuss pro Besuch/Aktualisieren — **kein
+Polling**, also auch kein zusätzlicher Verbraucher im Hintergrund.
+
+### Added — Audit-Protokoll
+
+Lokale, exportierbare Antwort auf „was habe ich wann mit welcher Session gemacht": Stoppen,
+Alle-stoppen, Freigaben/Ablehnungen, Revert, Fork und an den Agenten übergebene
+Entscheidungen. Neueste zuerst, Deckel 400 Einträge, `commit()` auf IO (übersteht einen
+harten Stopp direkt nach der Aktion). **Settings → Audit log** schaltet auf: die Prüfung
+sitzt im Store selbst, damit kein Aufrufort sie vergessen kann — aus heißt wirklich nichts
+aufzeichnen.
+
+### Fixed
+
+- `CentrePolicy.runningIds` sortiert jetzt selbst: die Reihenfolge der Not-Aus-Liste hing
+  sonst davon ab, ob der Aufrufer schon sortiert hatte (vom Test gefunden).
+- Beim Audit-Eintrag einer Berechtigung entscheidet der Protokollwert (`reject` vs.
+  `once`/`always`), nicht ein einzelner Wert — sonst wäre "immer erlauben" als Ablehnung
+  protokolliert worden.
+
+### Added (tests)
+
+- `CentrePolicyTest` (9 Fälle): Reihenfolge (laufend zuerst, dann neueste), Not-Aus-Liste,
+  Status-Abbildung inkl. Titel-Rückfall und Kosten, „Braucht dich" mit Berechtigung/Frage/
+  Postausgang (und ohne Session = übersprungen), Audit-Deckel/Reihenfolge/Summary/Export/
+  Zeitfenster, Kostenformat wie auf den Glance-Flächen.
+- Gesamt im betroffenen Satz: **513 Tests, 0 Fehler**.
+
+### Geändert in der Doku
+
+- `docs/FEATURES.md`: neuer §22 „The Centre (cockpit)" und §23 „Audit log".
+
 ## [1.5.25] - 2026-10-14
 
 Die offene Paritätsliste wurde gegen die **Settings** geprüft — ein Teil war bereits abgedeckt, der

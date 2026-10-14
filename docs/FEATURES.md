@@ -32,6 +32,8 @@ day to day, and where each feature maps onto the OpenCode server API.
 19. [Privacy, security and data](#19-privacy-security-and-data)
 20. [Web/TUI parity notes](#20-webtui-parity-notes)
 21. [Limits and honest caveats](#21-limits-and-honest-caveats)
+22. [The Centre (cockpit)](#22-the-centre-cockpit)
+23. [Audit log](#23-audit-log)
 22. [Feature → API map](#22-feature--api-map)
 
 ---
@@ -596,7 +598,53 @@ instead of faking it.
   a cursor, and page sizes are capped to keep memory in check (a 200-message page
   of a heavy session was measured at 14 MB and caused an `OutOfMemoryError`).
 
-## 22. Feature → API map
+## 22. The Centre (cockpit)
+
+The Centre answers the three questions a phone user has while agents work, and it is the
+only screen that exists purely for them:
+
+1. **Running now** — every session the server reports as `busy` or `retry`, running first
+   and newest first inside each group. A row opens the session; a **Stop** button on it
+   ends that one turn. With at least one running session the section header offers
+   **Stop all**: a confirmed emergency stop that interrupts every running turn
+   sequentially, then records how many actually stopped.
+2. **Needs you** — the blocked work, across all sessions: pending permission requests,
+   unanswered questions (V2 forms) and sends still waiting in the offline outbox. Tapping
+   an entry opens the session that is waiting.
+3. **Today** — the server's own aggregate for the local day (`cost`, `sessions`, `prompts`,
+   `steps`) from `GET /api/experimental/session/stats`.
+4. **Audit** — the local log described below, with a **Copy** action that exports the whole
+   list as Markdown (the list itself shows the newest 12).
+
+Live-ness comes from the global event feed (`session.status` folded by the same reducer the
+session list uses), so a turn started by the web or the TUI appears here immediately and
+flips back the moment it ends. One HTTP snapshot per visit/refresh, no polling.
+
+**API:** `GET /api/session` · `GET /api/session/active` · `POST /api/session/{id}/interrupt` ·
+`GET /api/permission/request` · `GET /api/permission/request` (questions) ·
+`GET /api/experimental/session/stats`.
+
+## 23. Audit log
+
+A local, exportable answer to "what did I do to which session, and when". It records the
+actions that change state or spend money — never anything else:
+
+| Recorded            | Where it comes from                              |
+| ------------------- | ------------------------------------------------ |
+| `Stopped`           | a turn ended by hand (chat or Centre)            |
+| `Stopped all`       | the emergency stop, with how many of how many    |
+| `Approved` / `Denied` | a permission answer (`once`/`always` vs `reject`) |
+| `Reverted`          | reverting the session to a message               |
+| `Forked`            | branching a session from a message               |
+| `Handed to agent`   | a decision injected via `POST …/synthetic`        |
+| `Sent`              | reserved for a prompt leaving the outbox         |
+
+Stored in `SharedPreferences` (newest first, capped at 400 events), written with `commit()`
+on an IO scope so an entry survives a force-stop right after the action. The switch
+**Settings → Audit log** gates recording inside the store itself, so no call site can
+forget it; off means nothing is recorded at all.
+
+## 24. Feature → API map
 
 | Feature | Endpoint(s) |
 | --- | --- |

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -61,6 +62,7 @@ import com.opencode.android.data.BackendStore
 import com.opencode.android.data.HomeCache
 import com.opencode.android.data.LastSessionStore
 import com.opencode.android.data.MessageCache
+import com.opencode.android.ui.centre.CentreScreen
 import com.opencode.android.ui.settings.SettingsScreen
 import com.opencode.android.ui.theme.spacing
 import com.opencode.android.util.APP_LOG_TAG
@@ -71,6 +73,7 @@ import kotlinx.coroutines.launch
 object Routes {
     const val BACKENDS = "backends"
     const val HOME = "home"
+    const val CENTRE = "centre"
     const val CHAT = "chat/{sessionId}"
     const val SETTINGS = "settings"
 
@@ -417,6 +420,20 @@ internal fun OpenCodeApp(
                             label = { Text(stringResource(R.string.home)) },
                         )
                         NavigationBarItem(
+                            selected = currentDestination?.hierarchy?.any { it.route == Routes.CENTRE } == true,
+                            onClick = {
+                                navController.navigate(Routes.CENTRE) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.centre_title)) },
+                            label = { Text(stringResource(R.string.centre_title)) },
+                        )
+                        NavigationBarItem(
                             selected = currentDestination?.hierarchy?.any { it.route == Routes.SETTINGS } == true,
                             onClick = {
                                 navController.navigate(Routes.SETTINGS) {
@@ -696,6 +713,12 @@ internal fun OpenCodeApp(
                                             openSession(subagentSessionId, "Subagent")
                                         }
                                     },
+                                )
+                            }
+                            composable(Routes.CENTRE) {
+                                CentreScreen(
+                                    onBack = { navController.popBackStack() },
+                                    onOpenSession = { sessionId -> openSession(sessionId, "Session") },
                                 )
                             }
                             composable(Routes.SETTINGS) {

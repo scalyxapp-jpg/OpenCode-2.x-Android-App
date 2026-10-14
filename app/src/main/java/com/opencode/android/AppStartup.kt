@@ -83,6 +83,8 @@ object AppStartup {
                 OutboxStore.init(app)
                 PromptHistoryStore.init(app)
                 DecisionJournalStore.init(app)
+                // Local audit log (switchable in Settings).
+                com.opencode.android.data.AuditLogStore.init(app)
             } catch (e: Exception) {
                 AppLog.e(APP_LOG_TAG, "AppStartup init failed: ${e.message}")
                 _lastError.value = e.message ?: e::class.java.simpleName

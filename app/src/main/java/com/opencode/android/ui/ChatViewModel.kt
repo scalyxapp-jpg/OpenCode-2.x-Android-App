@@ -1466,6 +1466,12 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     if (api.injectSynthetic(session.id, entry.text, entry.description, session.directory)) {
+                        com.opencode.android.data.AuditLogStore.record(
+                            kind = com.opencode.android.data.AuditKind.Inject,
+                            title = entry.text.take(80),
+                            sessionId = session.id,
+                            detail = "decision handed to the agent",
+                        )
                         DecisionJournalStore.markInjected(id, session.id)
                         refreshJournal()
                         UserMessages.post(R.string.journal_injected, entry.injectedInto.size + 1)
@@ -2121,6 +2127,9 @@ class ChatViewModel
             reply: String,
         ) {
             val sessionId = _uiState.value.session?.id ?: return
+            // Captured before the prompt is dropped: the audit entry names WHAT was
+            // answered (the action), not just the request id.
+            val answered = _uiState.value.pendingPermissions.firstOrNull { it.id == requestId }
             // Optimistic: drop the prompt immediately so the buttons cannot be
             // double-tapped while the reply is in flight.
             _uiState.update { current ->
@@ -2139,6 +2148,23 @@ class ChatViewModel
                 val ok =
                     com.opencode.android.data
                         .replyPermission(api, sessionId, requestId, reply)
+                if (ok) {
+                    com.opencode.android.data.AuditLogStore.record(
+                        // The protocol's three answers: once/always allow, reject denies.
+                        kind =
+                            if (reply == com.opencode.android.data.Notifier.REPLY_REJECT) {
+                                com.opencode.android.data.AuditKind.Deny
+                            } else {
+                                com.opencode.android.data.AuditKind.Approve
+                            },
+                        title =
+                            answered?.permission?.takeIf { it.isNotBlank() }
+                                ?: answered?.title?.takeIf { it.isNotBlank() }
+                                ?: "permission",
+                        sessionId = sessionId,
+                        detail = reply,
+                    )
+                }
                 if (!ok) {
                     // Was an internal method name ("replyPermission"), which tells
                     // the user nothing.
@@ -3873,6 +3899,12 @@ class ChatViewModel
                         if (wasGenerating) {
                             try {
                                 api.interrupt(session.id)
+                                com.opencode.android.data.AuditLogStore.record(
+                                    kind = com.opencode.android.data.AuditKind.Stop,
+                                    title = session.title?.takeIf { it.isNotBlank() } ?: session.id,
+                                    sessionId = session.id,
+                                    detail = "replaced by a new prompt",
+                                )
                             } catch (e: kotlinx.coroutines.CancellationException) {
                                 throw e
                             } catch (e: Exception) {
@@ -4429,6 +4461,12 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     api.revertMessage(session.id, RevertRequest(messageID = messageId)).close()
+                    com.opencode.android.data.AuditLogStore.record(
+                        kind = com.opencode.android.data.AuditKind.Revert,
+                        title = session.title?.takeIf { it.isNotBlank() } ?: session.id,
+                        sessionId = session.id,
+                        detail = "to message ${messageId.take(8)}",
+                    )
                     refreshMessages(session.id)
                     onDone(true)
                 } catch (e: Exception) {
@@ -4462,6 +4500,12 @@ class ChatViewModel
             viewModelScope.launch {
                 try {
                     val result = api.forkSession(session.id, ForkRequest(messageID = messageId))
+                    com.opencode.android.data.AuditLogStore.record(
+                        kind = com.opencode.android.data.AuditKind.Fork,
+                        title = session.title?.takeIf { it.isNotBlank() } ?: session.id,
+                        sessionId = session.id,
+                        detail = "from message ${messageId.take(8)}",
+                    )
 
                     // Response shape: { id } or { data: { id } } or { sessionID }.
                     // Only accept real string primitives: `toString().trim('"')`

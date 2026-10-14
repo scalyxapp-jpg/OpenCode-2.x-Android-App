@@ -89,6 +89,15 @@ object AppSettingsStore {
          * reduces a diff to its +/- lines when that is what you want.
          */
         val showContextLines: Boolean = true,
+        /**
+         * Keep a local audit log of the actions that change state or spend money
+         * (stopping turns, approvals, reverts, forks, handed-over decisions, MCP toggles).
+         *
+         * Local and exportable, so "what did I do to which session" stays answerable
+         * without asking the server. Off = nothing is recorded (the store checks this
+         * flag itself, so no call site can forget it).
+         */
+        val auditLogEnabled: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -166,6 +175,7 @@ object AppSettingsStore {
             timelineDetail = prefs.getString("timelineDetail", "compact") ?: "compact",
             wrapLines = prefs.getBoolean("wrapLines", false),
             showContextLines = prefs.getBoolean("showContextLines", true),
+            auditLogEnabled = prefs.getBoolean("auditLogEnabled", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -237,6 +247,8 @@ object AppSettingsStore {
     fun setWrapLines(v: Boolean) = update { it.putBoolean("wrapLines", v) }
 
     fun setShowContextLines(v: Boolean) = update { it.putBoolean("showContextLines", v) }
+
+    fun setAuditLogEnabled(v: Boolean) = update { it.putBoolean("auditLogEnabled", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -386,6 +398,7 @@ object AppSettingsStore {
                 putString("timelineDetail", parsed.timelineDetail)
                 putBoolean("wrapLines", parsed.wrapLines)
                 putBoolean("showContextLines", parsed.showContextLines)
+                putBoolean("auditLogEnabled", parsed.auditLogEnabled)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

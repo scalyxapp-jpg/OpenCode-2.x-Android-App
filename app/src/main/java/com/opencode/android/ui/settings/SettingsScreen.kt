@@ -352,6 +352,15 @@ internal fun GeneralTab() {
             )
         }
 
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_audit_log),
+                subtitle = stringResource(R.string.settings_audit_log_sub),
+                checked = settings.auditLogEnabled,
+                onCheckedChange = { AppSettingsStore.setAuditLogEnabled(it) },
+            )
+        }
+
         item { SectionHeader(stringResource(R.string.settings_appearance)) }
         item {
             SettingDropdown(
