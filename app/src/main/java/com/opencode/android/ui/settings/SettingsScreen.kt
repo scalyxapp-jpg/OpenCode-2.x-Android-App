@@ -49,7 +49,8 @@ internal fun SettingsScreen(
     val backendSession = com.opencode.android.ui.LocalBackendSession.current
     // rememberSaveable: see ChatScreen — the selected settings tab survived neither a
     // rotation nor a process restore.
-    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(0) }
+    var tab by androidx.compose.runtime.saveable
+        .rememberSaveable { mutableIntStateOf(0) }
     // Localised tab labels (they were hardcoded English literals).
     val tabs =
         listOf(
@@ -113,10 +114,15 @@ internal fun SettingsScreen(
             }
             when (tab) {
                 0 -> GeneralTab()
+
                 1 -> ServersTab(onSwitchBackend)
+
                 2 -> ProvidersTab()
+
                 3 -> ModelsTab()
+
                 4 -> ExtensionsTab()
+
                 // Defensive: a stale saved index (from a build that still had the
                 // removed "Shortcuts" tab) must not render an empty screen.
                 else -> GeneralTab()
@@ -205,9 +211,11 @@ internal fun GeneralTab() {
                     if (!enabled) {
                         // Clearing the facts keeps the surfaces from showing a stale
                         // "Step 7 · 42s" after the feature is switched off.
-                        com.opencode.android.data.GlanceStore.reset()
+                        com.opencode.android.data.GlanceStore
+                            .reset()
                         com.opencode.android.data.WidgetStateStore.saveGlance(
-                            com.opencode.android.data.GlanceFacts(),
+                            com.opencode.android.data
+                                .GlanceFacts(),
                         )
                     }
                 },
@@ -221,7 +229,8 @@ internal fun GeneralTab() {
                 onCheckedChange = { enabled ->
                     AppSettingsStore.setBackgroundMonitoring(enabled)
                     // Apply immediately: off must stop a RUNNING watcher, not just the next one.
-                    com.opencode.android.data.BackgroundSessionWatcher.applySettings()
+                    com.opencode.android.data.BackgroundSessionWatcher
+                        .applySettings()
                 },
             )
         }
@@ -331,6 +340,15 @@ internal fun GeneralTab() {
                 subtitle = stringResource(R.string.settings_wrap_lines_sub),
                 checked = settings.wrapLines,
                 onCheckedChange = { AppSettingsStore.setWrapLines(it) },
+            )
+        }
+
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_show_context_lines),
+                subtitle = stringResource(R.string.settings_show_context_lines_sub),
+                checked = settings.showContextLines,
+                onCheckedChange = { AppSettingsStore.setShowContextLines(it) },
             )
         }
 

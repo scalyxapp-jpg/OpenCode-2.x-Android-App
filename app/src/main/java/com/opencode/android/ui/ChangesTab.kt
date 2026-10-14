@@ -1,5 +1,7 @@
 package com.opencode.android.ui
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.opencode.android.data.AppSettingsStore
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -87,9 +89,11 @@ internal fun ChangesTab(
     // Web parity for the changed-files panel: a path filter, a single open diff
     // with Previous/Next navigation, and the "Hide non-diff lines" switch.
     var diffFilter by remember { mutableStateOf("") }
-    // Default matches the web: the whole diff is shown, and the toggle offers to
-    // hide the unchanged context.
-    var showAllLines by remember { mutableStateOf(true) }
+    // One concept, one place: Settings → "Show context lines" decides whether the
+    // unchanged context is shown, in the chat AND here. This button is the shortcut
+    // to flip it, so the two views can never disagree.
+    val appSettings by AppSettingsStore.state.collectAsStateWithLifecycle()
+    val showAllLines = appSettings.showContextLines
     var expandedFile by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
 
@@ -277,7 +281,7 @@ internal fun ChangesTab(
                                 .minimumInteractiveComponentSize()
                                 .clickable {
                                     expandedFile = if (isOpen) null else changed.file
-                                    showAllLines = true
+                                    AppSettingsStore.setShowContextLines(true)
                                 }.semantics {
                                     role = Role.Button
                                     stateDescription = if (isOpen) expandedLabel else collapsedLabel
@@ -358,7 +362,7 @@ internal fun ChangesTab(
                                 enabled = index > 0,
                                 onClick = {
                                     expandedFile = filtered.getOrNull(index - 1)?.file
-                                    showAllLines = true
+                                    AppSettingsStore.setShowContextLines(true)
                                 },
                             ) { Text(stringResource(R.string.previous)) }
                             Text(
@@ -372,7 +376,7 @@ internal fun ChangesTab(
                                 enabled = index >= 0 && index < filtered.size - 1,
                                 onClick = {
                                     expandedFile = filtered.getOrNull(index + 1)?.file
-                                    showAllLines = true
+                                    AppSettingsStore.setShowContextLines(true)
                                 },
                             ) { Text(stringResource(R.string.next)) }
                         }
@@ -380,7 +384,7 @@ internal fun ChangesTab(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.End,
                         ) {
-                            TextButton(onClick = { showAllLines = !showAllLines }) {
+                            TextButton(onClick = { AppSettingsStore.setShowContextLines(!showAllLines) }) {
                                 Text(
                                     stringResource(
                                         if (showAllLines) {
@@ -395,7 +399,6 @@ internal fun ChangesTab(
                         DiffBlock(
                             patch = changed.patch.orEmpty(),
                             background = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contextOnly = !showAllLines,
                         )
                     }
                 }

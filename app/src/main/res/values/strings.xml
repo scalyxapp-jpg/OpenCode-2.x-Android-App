@@ -582,4 +582,8 @@
     <string name="diff_too_large_title" formatted="false">Diff too large to render</string>
     <string name="diff_too_large_meta" formatted="false">Limit: %1$d changed lines. Current: %2$d changed lines.</string>
     <string name="diff_render_anyway" formatted="false">Render anyway</string>
+    <string name="settings_show_context_lines" formatted="false">Show context lines</string>
+    <string name="settings_show_context_lines_sub" formatted="false">Show the unchanged lines around a change in a diff. Off keeps only the added and removed lines — quicker to read on a phone, and it applies to the chat and the Changes tab.</string>
+    <string name="changed_files_more" formatted="false">+%1$d more files</string>
+    <string name="show_less" formatted="false">Show less</string>
 </resources>

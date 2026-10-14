@@ -130,27 +130,21 @@ internal fun diffLineNumbers(patch: String): List<DiffRow> {
 internal fun DiffBlock(
     patch: String,
     background: Color,
-    contextOnly: Boolean = false,
 ) {
     // Rows as (line, fileNumber?) pairs. Numbers are parsed from the @@ hunks
     // over ALL lines first, so filtering context lines never shifts them:
     // each row shows the number the line has in the file (removed lines
     // their old-file number, added/context the new-file number, like the TUI).
-    // Web parity: "Hide non-diff lines" drops the unchanged context so only the
-    // hunks remain — the fastest way to read a large diff on a phone. The
-    // truncation count must be based on the SAME (filtered) list that is drawn,
-    // not the raw line total.
+    // The diff shows the unchanged context lines around a change unless
+    // Settings → "Show context lines" is off - the reference clients' "Hide non-diff
+    // lines" (`ui.sessionReviewV2.hideNonDiffLines`). One setting for both the chat
+    // and the Changes tab. The truncation count must be based on the SAME (filtered)
+    // list that is drawn, not the raw line total.
+    val contextSettings by com.opencode.android.data.AppSettingsStore.state
+        .collectAsStateWithLifecycle()
     val rows =
-        remember(patch, contextOnly) {
-            val numbered = diffLineNumbers(patch)
-            if (!contextOnly) {
-                numbered
-            } else {
-                numbered.filter { (line, _, _) ->
-                    line.startsWith("@@") || line.startsWith("+++") || line.startsWith("---") ||
-                        line.startsWith("+") || line.startsWith("-")
-                }
-            }
+        remember(patch, contextSettings.showContextLines) {
+            diffRowsForDisplay(diffLineNumbers(patch), contextSettings.showContextLines)
         }
     // TUI gutter: old number | new number, both right-aligned, one width.
     val gutterWidth =
@@ -358,6 +352,55 @@ internal fun diffTooLarge(
     limit: Int,
 ): Boolean = changedLines > limit
 
+/**
+ * The diff rows a phone should show.
+ *
+ * With "Show context lines" off a diff is reduced to its headers and the changed
+ * lines - the reference clients' "Hide non-diff lines"
+ * (`ui.sessionReviewV2.hideNonDiffLines`). A unified diff writes an unchanged line
+ * with a leading space, so "starts with a sign" identifies a change reliably.
+ */
+internal fun diffRowsForDisplay(
+    rows: List<DiffRow>,
+    showContext: Boolean,
+): List<DiffRow> =
+    if (showContext) {
+        rows
+    } else {
+        rows.filter { row ->
+            val line = row.line
+            line.startsWith("@@") ||
+                // Which file the patch belongs to - a header, not content.
+                line.startsWith("Index:") ||
+                line.startsWith("diff --git") ||
+                line.startsWith("+++") ||
+                line.startsWith("---") ||
+                (line.startsWith("+") && !line.startsWith("+++")) ||
+                (line.startsWith("-") && !line.startsWith("---"))
+        }
+    }
+
+/**
+ * How many of the changed files the card lists before it folds the rest away.
+ *
+ * A turn that touches thirty files would otherwise push everything below it out of
+ * the view; the reference clients fold the same way (`ui.sessionTurn.diffs.more` =
+ * "+N more files", `showAll`/`showLess`).
+ */
+internal const val CHANGED_FILES_PREVIEW = 8
+
+/** The files the card lists: the first [CHANGED_FILES_PREVIEW], or all when expanded. */
+internal fun visibleChangedFiles(
+    files: List<ChangedFile>,
+    showAll: Boolean,
+): List<ChangedFile> = if (showAll) files else files.take(CHANGED_FILES_PREVIEW)
+
+/** How many files the folded list hides - the "+N more files" of the reference clients. */
+internal fun hiddenChangedFileCount(
+    files: List<ChangedFile>,
+    showAll: Boolean,
+): Int = (files.size - visibleChangedFiles(files, showAll).size).coerceAtLeast(0)
+
 // Web "N Changed files" card: aggregate +/- plus one row per file.
 @Composable
 internal fun ChangedFilesCard(files: List<ChangedFile>) {
@@ -365,6 +408,12 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
     val totalAdd = files.sumOf { it.added }
     val totalRem = files.sumOf { it.removed }
     val expandedPaths = remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    // A turn that touches thirty files would push everything below it off the
+    // screen, so the list folds after a few entries - as the reference clients do
+    // ("+N more files", then "Show all"/"Show less").
+    var showAllFiles by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val listedFiles = visibleChangedFiles(files, showAllFiles)
+    val hiddenFiles = hiddenChangedFileCount(files, showAllFiles)
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -406,7 +455,7 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
                     )
                 }
             }
-            files.forEach { file ->
+            listedFiles.forEach { file ->
                 val name = file.path.substringAfterLast('/')
                 val isExpanded = expandedPaths[file.path] == true
                 Column(modifier = Modifier.fillMaxWidth()) {
@@ -454,6 +503,24 @@ internal fun ChangedFilesCard(files: List<ChangedFile>) {
                         }
                     }
                 }
+            }
+            // "+N more files" / "Show all" / "Show less" (ui.sessionTurn.diffs.*).
+            if (hiddenFiles > 0 || showAllFiles) {
+                Text(
+                    text =
+                        if (hiddenFiles > 0) {
+                            stringResource(R.string.changed_files_more, hiddenFiles)
+                        } else {
+                            stringResource(R.string.show_less)
+                        },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier =
+                        Modifier
+                            .clickable(role = Role.Button) { showAllFiles = !showAllFiles }
+                            .padding(vertical = MaterialTheme.spacing.extraSmall),
+                )
             }
         }
     }

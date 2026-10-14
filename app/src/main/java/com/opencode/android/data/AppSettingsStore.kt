@@ -80,6 +80,15 @@ object AppSettingsStore {
          * (web: Preferences → Wrap lines).
          */
         val wrapLines: Boolean = false,
+        /**
+         * Show the unchanged context lines around a change in a diff.
+         *
+         * The reference clients offer the opposite switch ("Hide non-diff lines",
+         * `ui.sessionReviewV2.hideNonDiffLines`). On a phone a long refactor with three
+         * lines of context is mostly noise, so the default stays "show" and the switch
+         * reduces a diff to its +/- lines when that is what you want.
+         */
+        val showContextLines: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -156,6 +165,7 @@ object AppSettingsStore {
             followUpBehavior = prefs.getString("followUpBehavior", "queue") ?: "queue",
             timelineDetail = prefs.getString("timelineDetail", "compact") ?: "compact",
             wrapLines = prefs.getBoolean("wrapLines", false),
+            showContextLines = prefs.getBoolean("showContextLines", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -225,6 +235,8 @@ object AppSettingsStore {
     fun setFollowUpBehavior(v: String) = update { it.putString("followUpBehavior", v) }
 
     fun setWrapLines(v: Boolean) = update { it.putBoolean("wrapLines", v) }
+
+    fun setShowContextLines(v: Boolean) = update { it.putBoolean("showContextLines", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -373,6 +385,7 @@ object AppSettingsStore {
                 putString("followUpBehavior", parsed.followUpBehavior)
                 putString("timelineDetail", parsed.timelineDetail)
                 putBoolean("wrapLines", parsed.wrapLines)
+                putBoolean("showContextLines", parsed.showContextLines)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

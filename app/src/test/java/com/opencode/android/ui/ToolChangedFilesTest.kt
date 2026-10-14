@@ -174,4 +174,38 @@ class ToolChangedFilesTest {
         assertEquals(true, diffTooLarge(changedLines = 3, limit = 2))
         assertEquals(false, diffTooLarge(changedLines = 2, limit = 2))
     }
+
+    // --- context lines / folded file list ---------------------------------
+
+    @Test
+    fun `hiding the context keeps the headers and the changed lines`() {
+        val rows =
+            diffLineNumbers(
+                "Index: a.kt\n--- a/a.kt\n+++ b/a.kt\n@@ -1,4 +1,4 @@\n keep me\n-old\n+new\n keep me too\n",
+            )
+        val full = diffRowsForDisplay(rows, showContext = true)
+        assertEquals(rows.size, full.size)
+        val lean = diffRowsForDisplay(rows, showContext = false)
+        // Header, file headers, hunk header and the two changed lines survive; the two
+        // context lines (" keep me") go.
+        assertEquals(
+            listOf("Index: a.kt", "--- a/a.kt", "+++ b/a.kt", "@@ -1,4 +1,4 @@", "-old", "+new"),
+            lean.map { it.line },
+        )
+        // Line numbers are the file numbers, unaffected by the filter.
+        assertEquals(2, lean.first { it.line == "-old" }.oldNum)
+        assertEquals(2, lean.first { it.line == "+new" }.newNum)
+    }
+
+    @Test
+    fun `the changed-files list folds after a few entries`() {
+        val files = (1..12).map { ChangedFile("f$it.kt", 1, 0) }
+        assertEquals(CHANGED_FILES_PREVIEW, visibleChangedFiles(files, showAll = false).size)
+        assertEquals("f1.kt", visibleChangedFiles(files, showAll = false).first().path)
+        assertEquals(4, hiddenChangedFileCount(files, showAll = false))
+        assertEquals(files.size, visibleChangedFiles(files, showAll = true).size)
+        assertEquals(0, hiddenChangedFileCount(files, showAll = true))
+        // Nothing to fold for a small change.
+        assertEquals(0, hiddenChangedFileCount(files.take(3), showAll = false))
+    }
 }

@@ -5,6 +5,52 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.25] - 2026-10-14
+
+Die offene Paritätsliste wurde gegen die **Settings** geprüft — ein Teil war bereits abgedeckt, der
+Rest wurde auf das gedacht, was auf einem Handy Sinn ergibt, reduziert.
+
+### Already covered (geprüft, nicht geändert)
+
+- **„Hide/Show steps" pro Turn** — die App hat dafür *Timeline detail → Compact/Advanced*
+  (presetzt „Shell-Aufrufe/Werkzeug-Teile/Thinking aufklappen" als Gruppe) plus die drei einzelnen
+  Schalter und aufklappbare Zeilen. Das ist die App-Entsprechung; ein zusätzlicher Turn-Schalter
+  wäre doppelt.
+- **„Hide non-diff lines"** — gab es schon, aber nur im Changes-Tab und mit eigenem lokalem State,
+  während die Chat-Diffs den Kontext immer zeigten. Zwei Bedienwege für eine Sache.
+
+### Changed
+
+- **Eine Einstellung statt zwei Bedienwegen: „Show context lines"** (Settings → Timeline, direkt
+  neben „Wrap lines", Standard an). Sie steuert jetzt **Chat und Changes-Tab**; die Schaltfläche im
+  Changes-Tab ist nur noch der Schnellzugriff darauf. Aus ist ein Diff nur noch die geänderten
+  Zeilen samt Kopfzeilen — auf dem Handy der schnellere Weg durch einen großen Refactor.
+- **Die geänderten Dateien einer Runde falten sich jetzt zusammen**: die ersten 8 Dateien, darunter
+  **„+N more files"** (antippen → alle) bzw. **„Show less"** (Wortlaut der Referenz,
+  `ui.sessionTurn.diffs.more` / `showLess`). Vorher schob eine Runde mit 30 Dateien alles darunter
+  aus dem Bild.
+
+### Fixed
+
+- Beim Ausblenden des Kontexts verschwand die Kopfzeile `Index: <datei>` (der neue Test fand es) —
+  Kopfzeilen (`Index:`, `diff --git`, `+++`, `---`, `@@`) bleiben immer.
+
+### Deliberately not built (mit Begründung)
+
+- **Split/Unified-Diff umschalten** (`ui.sessionReview.diffStyle.*`): Nebeneinander-Diffs auf einem
+  Telefon sind unbrauchbar (zwei Spalten auf 360 px). Die App hat Unified.
+- **„Open file"**: Die Dateien liegen auf dem **Server**, nicht auf dem Handy — ein Öffnen in einem
+  Editor vor Ort ist damit sinnlos.
+- **„Expand all"/„Collapse all"**, Datei-Sidebar, Diff-Byte-Budget: Desktop-Bedienung. Jede Zeile
+  und jeder Turn ist einzeln antippbar, das Byte-Budget ist der Zeilen-Deckel.
+- **Exit-Code** bleibt außen vor (kein Katalog-Schlüssel, kein Client liest `.exit`).
+
+### Added (tests)
+
+- Kontext-Ausblendung (Kopfzeilen + ±-Zeilen bleiben, Nummern stimmen) und das Falten der
+  Dateiliste (8 sichtbar, 4 verborgen, „Show all", kleine Listen unberührt).
+- Gesamt im betroffenen Satz: **504 Tests, 0 Fehler**.
+
 ## [1.5.24] - 2026-10-14
 
 Grundlage: der opencode-Bundle enthält den **kompletten String-Katalog der Referenz-Clients**
