@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.23] - 2026-10-14
+
+### Fixed
+
+- **Werkzeug-Badge sagt wie im TUI „Edit"/„Read"/„Search" statt „Called `edit`".** Die Chat-Zeile
+  nutzte eine eigene Beschriftung, die es nur dort gab; Badge, Live-Zeile, Benachrichtigung und
+  Changes-Karte zeigten jetzt verschiedene Namen für dasselbe Werkzeug. Unbekannte Werkzeuge
+  behalten ihre Roh-ID.
+- **Die ±-Statistik hinter edit/write-Zeilen und die Changes-Karte waren auf diesem Server leer.**
+  Sie lasen `metadata.diff`/`metadata.filepath`; OpenCode 2.0.26 liefert die Daten aber pro Datei in
+  `metadata.files[]` (`file`, `additions`, `deletions`, `patch`) und benutzt im Input `path`
+  statt `filePath`. Jetzt: alle geänderten Dateien einer Operation (Mehrfach-`edit` listet jede
+  Datei), Zählwerte vom Server, sonst aus dem Patch gezählt; `write` liefert Input-Pfad plus alle
+  hinzugefügten Zeilen; fehlt der Pfad, steht er in der Patch-Kopfzeile (`Index:`/`+++ b/`).
+- **Thinking-Block ohne `[REDACTED]`-Marker.** Der Server ersetzt umgedeckte Stellen so; die TUI
+  entfernt die Marker (`replace(/\[REDACTED\]/g,"")`), die App nicht.
+
+### Added
+
+- **„(no output)"** für einen beendeten Shell-Aufruf ohne Ausgabe — die Formulierung des Servers
+  (im Bundle nachgelesen) statt einer leeren Box, die wie ein Fehler aussah. Während der Aufruf
+  läuft, bleibt es still.
+- **Kürzungs-Hinweis mit Speicherort:** „...output truncated…\n\nFull output saved to: `<pfad>`"
+  aus `metadata.truncated` + `metadata.outputPath`, exakt die Server-Schreibweise — und ohne
+  Doppelung, wenn der Server die Notiz schon in die Ausgabe geschrieben hat.
+
+### Verified (TUI-Parität)
+
+- **„Interrupted"** bei abgebrochenen Nachrichten (TUI ordnet `MessageAbortedError` genauso zu).
+- **Keine Schritt-Trenner** zwischen Turns: Der Server sendet `step-start`/`step-finish`, die TUI
+  übergeht sie ohne Ausgabe — die App zeigt ebenfalls nichts an (sie nutzt sie nur intern zum
+  Zurücksetzen des Live-Puffers).
+
+### Added (tests)
+
+- `ToolChangedFilesTest` (10 Fälle): Mehrfach-`edit` mit den echten Server-Feldern, addieren der
+  Zählwerte, Zählen ohne Server-Felder, `write`, ältere Bauform (`metadata.diff`), Pfad aus der
+  Patch-Kopfzeile, Werkzeuge ohne Dateiänderung, Badge-Namen, „(no output)", Kürzungs-Hinweis mit
+  und ohne Server-Doppelung, `[REDACTED]`.
+- Gesamt im betroffenen Satz: **500 Tests, 0 Fehler**.
+
 ## [1.5.22] - 2026-10-14
 
 ### Changed

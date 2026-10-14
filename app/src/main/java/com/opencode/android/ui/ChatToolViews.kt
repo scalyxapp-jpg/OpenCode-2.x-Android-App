@@ -432,8 +432,8 @@ internal fun ToolCallRow(
     val status = toolStatus(part)
     val command = toolCommandText(part)
     val output = toolOutputText(part)
-    // edit/write/patch tools carry the unified diff in metadata.diff; show it
-    // in the expanded view (the row only showed the tool result before).
+    // edit/write/patch tools carry their unified diff (metadata.files[].patch on
+    // 2.0.26); show it in the expanded view (the row only showed the result before).
     val diffText = toolDiffText(part)
     val params = toolInputParams(part)
     val subagent = toolSubagent(part)
@@ -661,6 +661,14 @@ internal fun ToolCallRow(
                                     rememberAutoLinked(
                                         cappedForDisplay(
                                             buildString {
+                                                // The server's own truncation notice comes
+                                                // first, exactly as it writes it into the
+                                                // output ("...output truncated..." followed by
+                                                // "Full output saved to: <path>").
+                                                toolOutputNotice(part)?.let {
+                                                    append(it)
+                                                    append("\n\n")
+                                                }
                                                 command?.let { append("$ ").append(it).append('\n') }
                                                 append(output ?: "")
                                             },

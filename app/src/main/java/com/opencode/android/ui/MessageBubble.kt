@@ -1,8 +1,8 @@
 package com.opencode.android.ui
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,45 +10,44 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.opencode.android.R
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.Part
 import com.opencode.android.domain.SessionQuestion
 import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.flow.filter
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
-import androidx.compose.material3.Icon
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.foundation.layout.size
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -118,59 +117,61 @@ internal fun MessageBubble(
     // Memoised on `message`: this body recomposes on every streaming tick for
     // every visible message, so re-parsing the part lists each time was waste
     // whenever the message itself had not changed.
-    val text = remember(message) {
-        val textBits = mutableListOf<String>()
-        message.text?.takeIf { it.isNotBlank() }?.let { textBits.add(it) }
-        message.parts
-            .filter { it.type.trim() == "text" }
-            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-            .let { textBits.addAll(it) }
-        message.content
-            .filter { it.type?.trim() == "text" }
-            .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
-            .let { textBits.addAll(it) }
-        textBits.fold(mutableListOf<String>()) { acc, s ->
-            if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
-            acc
-        }.joinToString("\n")
-    }
+    val text =
+        remember(message) {
+            val textBits = mutableListOf<String>()
+            message.text?.takeIf { it.isNotBlank() }?.let { textBits.add(it) }
+            message.parts
+                .filter { it.type.trim() == "text" }
+                .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                .let { textBits.addAll(it) }
+            message.content
+                .filter { it.type?.trim() == "text" }
+                .mapNotNull { it.text?.takeIf { t -> t.isNotBlank() } }
+                .let { textBits.addAll(it) }
+            textBits
+                .fold(mutableListOf<String>()) { acc, s ->
+                    if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
+                    acc
+                }.joinToString("\n")
+        }
 
     // Reasoning content renders as a collapsed "Thinking" section. The classic
     // web endpoint delivers parts[] (type=reasoning); the legacy endpoint uses
     // content[]. Reading only content[] meant reasoning NEVER showed for classic
     // sessions — verified live against the server.
-    val reasoningText = remember(message) {
-        (
-            message.parts.filter { it.type.trim() == "reasoning" }.mapNotNull { it.text } +
-                message.content.filter { it.type?.trim() == "reasoning" }.mapNotNull { it.text }
-            )
-            .filter { it.isNotBlank() }
-            .fold(mutableListOf<String>()) { acc, s ->
-                if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
-                acc
-            }
-            .joinToString("\n")
-    }
+    val reasoningText =
+        remember(message) {
+            (
+                message.parts.filter { it.type.trim() == "reasoning" }.mapNotNull { it.text } +
+                    message.content.filter { it.type?.trim() == "reasoning" }.mapNotNull { it.text }
+            ).filter { it.isNotBlank() }
+                .fold(mutableListOf<String>()) { acc, s ->
+                    if (acc.lastOrNull()?.trim() != s.trim()) acc.add(s)
+                    acc
+                }.joinToString("\n")
+        }
 
     // NOTE: no logging here — MessageBubble recomposes on every streaming tick
     // and for every visible message; a Log.d in this body throttles the UI.
 
     // Normalize tool calls from both schemas (remembered: recomputed only when
     // the message itself changes, not on every recomposition).
-    val toolParts = remember(message) {
-        message.parts.filter { it.type.trim() == "tool" } +
-            message.content
-                .filter { it.type?.trim() == "tool" }
-                .map {
-                    Part(
-                        id = it.id ?: "",
-                        type = "tool",
-                        tool = it.name,
-                        name = it.name,
-                        state = it.state,
-                    )
-                }
-    }
+    val toolParts =
+        remember(message) {
+            message.parts.filter { it.type.trim() == "tool" } +
+                message.content
+                    .filter { it.type?.trim() == "tool" }
+                    .map {
+                        Part(
+                            id = it.id ?: "",
+                            type = "tool",
+                            tool = it.name,
+                            name = it.name,
+                            state = it.state,
+                        )
+                    }
+        }
     val questionParts = remember(toolParts) { toolParts.filter { it.toolName() == "question" } }
     val otherToolParts = remember(toolParts) { toolParts.filter { it.toolName() != "question" } }
     // Meta line mirrors web: agent - model - duration - time. Memoised: the
@@ -190,23 +191,25 @@ internal fun MessageBubble(
     ) {
         return
     }
-    val meta = remember(message, errorText) {
-        val agent = message.agent ?: message.info?.agent
-        val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model
-        val created = message.time?.created ?: message.info?.time?.created
-        val completed = message.time?.completed ?: message.info?.time?.completed
-        val duration = formatDuration(
-            if (created != null && completed != null && completed > created) completed - created else null
-        )
-        listOfNotNull(
-            agent,
-            model,
-            duration,
-            created?.let { formatTimestamp(it) },
-            // Web appends "Interrupted" for aborted messages.
-            errorText,
-        ).joinToString(" · ")
-    }
+    val meta =
+        remember(message, errorText) {
+            val agent = message.agent ?: message.info?.agent
+            val model = message.model?.id ?: message.info?.model?.id ?: message.info?.model?.model
+            val created = message.time?.created ?: message.info?.time?.created
+            val completed = message.time?.completed ?: message.info?.time?.completed
+            val duration =
+                formatDuration(
+                    if (created != null && completed != null && completed > created) completed - created else null,
+                )
+            listOfNotNull(
+                agent,
+                model,
+                duration,
+                created?.let { formatTimestamp(it) },
+                // Web appends "Interrupted" for aborted messages.
+                errorText,
+            ).joinToString(" · ")
+        }
     val messageId = message.id ?: message.info?.id
 
     var reasoningExpanded by remember(messageId, reasoningText.length) {
@@ -220,218 +223,230 @@ internal fun MessageBubble(
     // full-width plain text (cards only for tools/questions/reasoning).
     Box {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    onClick = {},
-                    onLongClick = {
-                        haptics.performHapticFeedback(
-                            androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                        )
-                        showContextMenu = true
-                    },
-                ),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            haptics.performHapticFeedback(
+                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
+                            )
+                            showContextMenu = true
+                        },
+                    ),
             horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
         ) {
-        if (isUser) {
-            // A wine veil rather than a filled pink bubble: at full
-            // primaryContainer a screen of user messages turned mostly pink.
-            // A faint diagonal gradient plus a hairline border reads as "mine"
-            // with depth, while keeping the black/white/wine identity and
-            // adapting to light and dark without a second token.
-            val bubbleShape = RoundedCornerShape(
-                topStart = 22.dp,
-                topEnd = 22.dp,
-                bottomStart = 22.dp,
-                bottomEnd = 8.dp,
-            )
-            Box(
-                modifier = Modifier
-                    .clip(bubbleShape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.17f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-                            ),
-                        ),
+            if (isUser) {
+                // A wine veil rather than a filled pink bubble: at full
+                // primaryContainer a screen of user messages turned mostly pink.
+                // A faint diagonal gradient plus a hairline border reads as "mine"
+                // with depth, while keeping the black/white/wine identity and
+                // adapting to light and dark without a second token.
+                val bubbleShape =
+                    RoundedCornerShape(
+                        topStart = 22.dp,
+                        topEnd = 22.dp,
+                        bottomStart = 22.dp,
+                        bottomEnd = 8.dp,
                     )
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                        shape = bubbleShape,
-                    ),
-            ) {
-                androidx.compose.foundation.text.selection.SelectionContainer {
-                    Text(
-                        // Auto-linked: a URL in the user's own prompt was plain text and
-                        // could not be opened at all.
-                        text =
-                            rememberAutoLinked(
-                                text,
-                                com.opencode.android.ui.theme.primaryLinkColor(),
+                Box(
+                    modifier =
+                        Modifier
+                            .clip(bubbleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    colors =
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.17f),
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        ),
+                                ),
+                            ).border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                                shape = bubbleShape,
                             ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(
-                            horizontal = MaterialTheme.spacing.medium,
-                            vertical = MaterialTheme.spacing.medium,
-                        ),
-                    )
-                }
-            }
-            // Also reachable on OWN messages: "Revert message" only exists for user
-            // messages, and that is exactly where the visible button was missing.
-            MessageActionsButton(onClick = { showContextMenu = true })
-        } else {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-            ) {
-                if (text.isNotBlank()) {
-                    // Selectable: fine-grained selection (a word, a phrase) was not
-                    // possible at all — only the whole message via the menu.
+                ) {
                     androidx.compose.foundation.text.selection.SelectionContainer {
-                        // Markdown formatting (headings, lists, code, tables, inline styles).
-                        MarkdownText(
-                            text = text,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-                // "Show reasoning summaries" setting (hoisted from the caller).
-                if (showReasoning && reasoningText.isNotBlank()) {
-                    // Resolved only when the reasoning block is drawn, so a
-                    // streaming tick does not read resources for every bubble.
-                    val expandedLabel = stringResource(R.string.expanded)
-                    val collapsedLabel = stringResource(R.string.collapsed)
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = MaterialTheme.shapes.large,
-                        onClick = { reasoningExpanded = !reasoningExpanded },
-                        // A screen reader would otherwise announce only
-                        // "Thinking ▼" and leave the state to be guessed from
-                        // the arrow glyph.
-                        modifier = Modifier.semantics {
-                            // `this.role` on purpose: MessageBubble already has
-                            // a local `val role` (the message author), which
-                            // would otherwise shadow the semantics property.
-                            this.role = Role.Button
-                            stateDescription = if (reasoningExpanded) expandedLabel else collapsedLabel
-                        },
-                    ) {
-Row(
-                             modifier = Modifier.padding(horizontal = MaterialTheme.spacing.small, vertical = 2.dp),
-                             verticalAlignment = Alignment.CenterVertically,
-                             horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
-                         ) {
-
-                             Text(
-                                 text = stringResource(
-                                     if (reasoningExpanded) {
-                                         R.string.thinking_expanded
-                                     } else {
-                                         R.string.thinking_collapsed
-                                     },
-                                 ),
-                                 style = MaterialTheme.typography.labelSmall,
-                                 color = MaterialTheme.colorScheme.primary,
-                             )
-                         }
-                    }
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = reasoningExpanded,
-                        enter = androidx.compose.animation.expandVertically() +
-                            androidx.compose.animation.fadeIn(),
-                        exit = androidx.compose.animation.shrinkVertically() +
-                            androidx.compose.animation.fadeOut(),
-                    ) {
                         Text(
-                            text = reasoningText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            // Auto-linked: a URL in the user's own prompt was plain text and
+                            // could not be opened at all.
+                            text =
+                                rememberAutoLinked(
+                                    text,
+                                    com.opencode.android.ui.theme
+                                        .primaryLinkColor(),
+                                ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier =
+                                Modifier.padding(
+                                    horizontal = MaterialTheme.spacing.medium,
+                                    vertical = MaterialTheme.spacing.medium,
+                                ),
                         )
                     }
                 }
-                // Web splits tools into two shapes:
-                //  - read/search/list are grouped into an "Explored …" card
-                //  - everything else (bash → "Shell", delegate_task, …) gets
-                //    its own collapsible row.
-                val exploreParts = remember(otherToolParts) {
-                    otherToolParts.filter { isExploreTool(it.toolName()) }
-                }
-                val actionParts = remember(otherToolParts) {
-                    otherToolParts.filterNot { isExploreTool(it.toolName()) }
-                }
-                if (exploreParts.isNotEmpty()) {
-                    ToolSummaryCard(parts = exploreParts)
-                }
-                actionParts.forEach { part ->
-                    ToolCallRow(
-                        part = part,
-                        onOpenSession = onOpenSession,
-                        initiallyExpanded = defaultToolExpanded(
-                            part,
-                            shellExpanded = shellToolPartsExpanded,
-                            editExpanded = editToolPartsExpanded,
-                        ),
-                    )
-                }
-                // Web "N Changed files" summary card (edit/write/patch).
-                ChangedFilesCard(
-                    files = remember(otherToolParts) { changedFiles(otherToolParts) },
-                )
-                // Inline question cards for question tool calls. The matching
-                // pending request (by call id) wires up Submit/Ablehnen.
-                questionParts.forEach { part ->
-                    val match = pendingQuestions.firstOrNull { it.tool?.callID == part.id }
-                    if (match != null) {
-                        // Live request: answer all of its questions together.
-                        QuestionRequestCard(
-                            question = match,
-                            onAnswer = onAnswerQuestion,
-                            onReject = onRejectQuestion,
-                        )
-                    } else {
-                        // No live request → render as a record, not a card with
-                        // a permanently disabled Submit button.
-                        parseToolQuestions(part).forEach { item ->
-                            QuestionCard(
-                                requestId = null,
-                                item = item,
-                                onAnswer = { _, _ -> },
-                                onReject = {},
-                                readOnly = true,
+                // Also reachable on OWN messages: "Revert message" only exists for user
+                // messages, and that is exactly where the visible button was missing.
+                MessageActionsButton(onClick = { showContextMenu = true })
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                ) {
+                    if (text.isNotBlank()) {
+                        // Selectable: fine-grained selection (a word, a phrase) was not
+                        // possible at all — only the whole message via the menu.
+                        androidx.compose.foundation.text.selection.SelectionContainer {
+                            // Markdown formatting (headings, lists, code, tables, inline styles).
+                            MarkdownText(
+                                text = text,
+                                color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
-                }
-                // Error state (mirrors web "Interrupted"/error display)
-                if (!errorText.isNullOrBlank()) {
-                    Text(
-                        text = errorText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                // Meta line (web: "Commander · deepseek-v4-pro · 15s")
-                if (meta.isNotBlank()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = meta,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    // "Show reasoning summaries" setting (hoisted from the caller).
+                    if (showReasoning && reasoningText.isNotBlank()) {
+                        // Resolved only when the reasoning block is drawn, so a
+                        // streaming tick does not read resources for every bubble.
+                        val expandedLabel = stringResource(R.string.expanded)
+                        val collapsedLabel = stringResource(R.string.collapsed)
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = MaterialTheme.shapes.large,
+                            onClick = { reasoningExpanded = !reasoningExpanded },
+                            // A screen reader would otherwise announce only
+                            // "Thinking ▼" and leave the state to be guessed from
+                            // the arrow glyph.
+                            modifier =
+                                Modifier.semantics {
+                                    // `this.role` on purpose: MessageBubble already has
+                                    // a local `val role` (the message author), which
+                                    // would otherwise shadow the semantics property.
+                                    this.role = Role.Button
+                                    stateDescription = if (reasoningExpanded) expandedLabel else collapsedLabel
+                                },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = MaterialTheme.spacing.small, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                            ) {
+                                Text(
+                                    text =
+                                        stringResource(
+                                            if (reasoningExpanded) {
+                                                R.string.thinking_expanded
+                                            } else {
+                                                R.string.thinking_collapsed
+                                            },
+                                        ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = reasoningExpanded,
+                            enter =
+                                androidx.compose.animation.expandVertically() +
+                                    androidx.compose.animation.fadeIn(),
+                            exit =
+                                androidx.compose.animation.shrinkVertically() +
+                                    androidx.compose.animation.fadeOut(),
+                        ) {
+                            Text(
+                                // `[REDACTED]` markers are stripped like the TUI does.
+                                text = tuiReasoningText(reasoningText),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    // Web splits tools into two shapes:
+                    //  - read/search/list are grouped into an "Explored …" card
+                    //  - everything else (bash → "Shell", delegate_task, …) gets
+                    //    its own collapsible row.
+                    val exploreParts =
+                        remember(otherToolParts) {
+                            otherToolParts.filter { isExploreTool(it.toolName()) }
+                        }
+                    val actionParts =
+                        remember(otherToolParts) {
+                            otherToolParts.filterNot { isExploreTool(it.toolName()) }
+                        }
+                    if (exploreParts.isNotEmpty()) {
+                        ToolSummaryCard(parts = exploreParts)
+                    }
+                    actionParts.forEach { part ->
+                        ToolCallRow(
+                            part = part,
+                            onOpenSession = onOpenSession,
+                            initiallyExpanded =
+                                defaultToolExpanded(
+                                    part,
+                                    shellExpanded = shellToolPartsExpanded,
+                                    editExpanded = editToolPartsExpanded,
+                                ),
                         )
-                        // Discoverable entry point for Copy / Regenerate / Fork /
-                        // Revert: without it the only way in was an invisible
-                        // long-press.
-                        MessageActionsButton(onClick = { showContextMenu = true })
+                    }
+                    // Web "N Changed files" summary card (edit/write/patch).
+                    ChangedFilesCard(
+                        files = remember(otherToolParts) { changedFiles(otherToolParts) },
+                    )
+                    // Inline question cards for question tool calls. The matching
+                    // pending request (by call id) wires up Submit/Ablehnen.
+                    questionParts.forEach { part ->
+                        val match = pendingQuestions.firstOrNull { it.tool?.callID == part.id }
+                        if (match != null) {
+                            // Live request: answer all of its questions together.
+                            QuestionRequestCard(
+                                question = match,
+                                onAnswer = onAnswerQuestion,
+                                onReject = onRejectQuestion,
+                            )
+                        } else {
+                            // No live request → render as a record, not a card with
+                            // a permanently disabled Submit button.
+                            parseToolQuestions(part).forEach { item ->
+                                QuestionCard(
+                                    requestId = null,
+                                    item = item,
+                                    onAnswer = { _, _ -> },
+                                    onReject = {},
+                                    readOnly = true,
+                                )
+                            }
+                        }
+                    }
+                    // Error state (mirrors web "Interrupted"/error display)
+                    if (!errorText.isNullOrBlank()) {
+                        Text(
+                            text = errorText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    // Meta line (web: "Commander · deepseek-v4-pro · 15s")
+                    if (meta.isNotBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = meta,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            )
+                            // Discoverable entry point for Copy / Regenerate / Fork /
+                            // Revert: without it the only way in was an invisible
+                            // long-press.
+                            MessageActionsButton(onClick = { showContextMenu = true })
+                        }
                     }
                 }
             }
-        }
-        // All per-message actions (Copy/Fork/Revert) live in the long-press
-        // context menu — no inline buttons under each message.
+            // All per-message actions (Copy/Fork/Revert) live in the long-press
+            // context menu — no inline buttons under each message.
         } // end Column
         // Long-press context menu ("right-click"): per-message actions.
         DropdownMenu(
@@ -595,7 +610,6 @@ private fun SkillMessageRow(message: com.opencode.android.domain.Message) {
         }
     }
 }
-
 
 /**
  * One `synthetic` message (e.g. a decision handed over from the journal). Rendered as its

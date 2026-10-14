@@ -1,7 +1,5 @@
 package com.opencode.android.ui
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,8 +13,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -35,13 +33,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -51,13 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.opencode.android.R
 import com.opencode.android.domain.FileEntry
 import com.opencode.android.domain.VcsDiffFile
-import com.opencode.android.ui.theme.spacing
 import com.opencode.android.ui.settings.SectionHeader
+import com.opencode.android.ui.theme.spacing
 import kotlinx.coroutines.flow.filter
-import androidx.compose.ui.res.stringResource
-import com.opencode.android.R
 
 @Composable
 internal fun ChangesTab(
@@ -114,63 +115,73 @@ internal fun ChangesTab(
         return parent.ifBlank { "/" }
     }
 
-    val filtered = remember(vcsDiff, diffFilter) {
-        if (diffFilter.isBlank()) {
-            vcsDiff
-        } else {
-            vcsDiff.filter { it.file.contains(diffFilter, ignoreCase = true) }
+    val filtered =
+        remember(vcsDiff, diffFilter) {
+            if (diffFilter.isBlank()) {
+                vcsDiff
+            } else {
+                vcsDiff.filter { it.file.contains(diffFilter, ignoreCase = true) }
+            }
         }
-    }
 
     LazyColumn(
         state = listState,
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag("changes-list")
-            .padding(MaterialTheme.spacing.medium),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .testTag("changes-list")
+                .padding(MaterialTheme.spacing.medium),
     ) {
         // Nothing to show (no VCS diff and no browsable directory): render an
         // explicit empty state instead of a blank panel.
         if (vcsDiff.isEmpty()) {
             when {
-                vcsDiffLoading -> item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) { InlineSpinner() }
+                vcsDiffLoading -> {
+                    item {
+                        Box(
+                            modifier = Modifier.fillParentMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) { InlineSpinner() }
+                    }
                 }
-                vcsDiffError != null -> item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+
+                vcsDiffError != null -> {
+                    item {
+                        Box(
+                            modifier = Modifier.fillParentMaxSize(),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                text = vcsDiffError ?: "",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = MaterialTheme.spacing.large),
-                            )
-                            OutlinedButton(onClick = onRetryDiff) {
-                                Text(stringResource(R.string.retry))
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                            ) {
+                                Text(
+                                    text = vcsDiffError ?: "",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(horizontal = MaterialTheme.spacing.large),
+                                )
+                                OutlinedButton(onClick = onRetryDiff) {
+                                    Text(stringResource(R.string.retry))
+                                }
                             }
                         }
                     }
                 }
-                (!showFileTree || currentPath == null) -> item {
-                    Box(
-                        modifier = Modifier.fillParentMaxSize(),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        EmptyState(
-                            title = stringResource(R.string.no_changes),
-                            icon = Icons.Default.CheckCircle,
-                            compact = true,
-                        )
+
+                (!showFileTree || currentPath == null) -> {
+                    item {
+                        Box(
+                            modifier = Modifier.fillParentMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            EmptyState(
+                                title = stringResource(R.string.no_changes),
+                                icon = Icons.Default.CheckCircle,
+                                compact = true,
+                            )
+                        }
                     }
                 }
             }
@@ -185,7 +196,9 @@ internal fun ChangesTab(
             val totalRem = vcsDiff.sumOf { it.deletions }
             item {
                 SectionHeader(
-                    title = "${vcsDiff.size} Files Changed",
+                    // The web/TUI wording "N changed file(s)" from the shared plural, not
+                    // the hardcoded English "N Files Changed" that was inline here.
+                    title = pluralStringResource(R.plurals.changed_files, vcsDiff.size, vcsDiff.size),
                     trailing = {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -258,18 +271,17 @@ internal fun ChangesTab(
                 val collapsedLabel = stringResource(R.string.collapsed)
                 Column(modifier = Modifier.animateContentSize()) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .minimumInteractiveComponentSize()
-                            .clickable {
-                                expandedFile = if (isOpen) null else changed.file
-                                showAllLines = true
-                            }
-                            .semantics {
-                                role = Role.Button
-                                stateDescription = if (isOpen) expandedLabel else collapsedLabel
-                            }
-                            .padding(vertical = MaterialTheme.spacing.extraSmall),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .clickable {
+                                    expandedFile = if (isOpen) null else changed.file
+                                    showAllLines = true
+                                }.semantics {
+                                    role = Role.Button
+                                    stateDescription = if (isOpen) expandedLabel else collapsedLabel
+                                }.padding(vertical = MaterialTheme.spacing.extraSmall),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -325,11 +337,12 @@ internal fun ChangesTab(
                             text = stringResource(R.string.no_diff_available),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(
-                                start = MaterialTheme.spacing.cardPadding,
-                                top = MaterialTheme.spacing.extraSmall,
-                                bottom = MaterialTheme.spacing.small,
-                            ),
+                            modifier =
+                                Modifier.padding(
+                                    start = MaterialTheme.spacing.cardPadding,
+                                    top = MaterialTheme.spacing.extraSmall,
+                                    bottom = MaterialTheme.spacing.small,
+                                ),
                         )
                     }
                     if (isOpen && !changed.patch.isNullOrBlank()) {
@@ -435,9 +448,10 @@ internal fun ChangesTab(
             if (!treeExpanded) {
                 item {
                     Box(
-                        modifier = Modifier
-                            .fillParentMaxSize()
-                            .padding(MaterialTheme.spacing.large),
+                        modifier =
+                            Modifier
+                                .fillParentMaxSize()
+                                .padding(MaterialTheme.spacing.large),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -450,9 +464,10 @@ internal fun ChangesTab(
             } else if (files.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier
-                            .fillParentMaxSize()
-                            .padding(MaterialTheme.spacing.large),
+                        modifier =
+                            Modifier
+                                .fillParentMaxSize()
+                                .padding(MaterialTheme.spacing.large),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -469,24 +484,29 @@ internal fun ChangesTab(
                 ) { file ->
                     val isDir = file.type == "directory"
                     Row(
-                        modifier = Modifier
-                            .animateItem(
-                                placementSpec = com.opencode.android.ui.theme.Motion.spatial(),
-                                fadeInSpec = com.opencode.android.ui.theme.Motion.effects(),
-                                fadeOutSpec = com.opencode.android.ui.theme.Motion.effects(),
-                            )
-                            .fillMaxWidth()
-                            .clickable {
-                                if (isDir) {
-                                    file.path?.let {
-                                        currentPath = it
-                                        onLoadFiles(it)
+                        modifier =
+                            Modifier
+                                .animateItem(
+                                    placementSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .spatial(),
+                                    fadeInSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                    fadeOutSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .effects(),
+                                ).fillMaxWidth()
+                                .clickable {
+                                    if (isDir) {
+                                        file.path?.let {
+                                            currentPath = it
+                                            onLoadFiles(it)
+                                        }
+                                    } else {
+                                        file.path?.let { onOpenFile(it) }
                                     }
-                                } else {
-                                    file.path?.let { onOpenFile(it) }
-                                }
-                            }
-                            .padding(vertical = MaterialTheme.spacing.small),
+                                }.padding(vertical = MaterialTheme.spacing.small),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
@@ -514,7 +534,9 @@ internal fun ChangesTab(
             onDismissRequest = onDismissViewer,
             title = {
                 Text(
-                    text = com.opencode.android.util.lastPathSegment(viewer.path),
+                    text =
+                        com.opencode.android.util
+                            .lastPathSegment(viewer.path),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -530,6 +552,7 @@ internal fun ChangesTab(
                             Text(stringResource(R.string.loading_file), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+
                     viewer.error != null -> {
                         Text(
                             text = stringResource(R.string.error_prefix, viewer.error ?: ""),
@@ -537,6 +560,7 @@ internal fun ChangesTab(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+
                     else -> {
                         LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
                             item {

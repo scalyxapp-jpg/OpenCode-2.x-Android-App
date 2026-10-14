@@ -76,6 +76,13 @@ internal fun kotlinx.serialization.json.JsonElement?.asRawString(): String? {
     return prim.content
 }
 
+/**
+ * A numeric field of a tool's state/metadata, tolerating the number-as-text the
+ * server sometimes sends. `null` when absent — callers then fall back to
+ * counting the patch lines themselves.
+ */
+internal fun kotlinx.serialization.json.JsonElement?.asIntOrNull(): Int? = asRawString()?.trim()?.toIntOrNull()
+
 // Web maps the abort error to a short "Interrupted" label; other errors show
 // their server message. Handles both object and plain-string error payloads.
 internal fun messageErrorText(error: kotlinx.serialization.json.JsonElement?): String? {
@@ -111,13 +118,15 @@ internal fun toolRowTitle(tool: String?): String =
     com.opencode.android.util.ToolText
         .toolTitle(tool)
 
-// Tool ids → web display labels. Web shows "Shell" for bash and
-// "Called `delegate_task`" for anything without a friendly name.
-internal fun toolDisplayName(tool: String): String =
-    when (tool.lowercase()) {
-        "bash", "shell" -> "Shell"
-        else -> "Called `$tool`"
-    }
+/**
+ * The tool badge of a chat row.
+ *
+ * TUI parity: the TUI names the tool ("Edit", "Read", "Shell"), and so does the rest
+ * of the app (live rows, notifications, Changes card). This used to render
+ * "Called `edit`" for every tool that is not bash — the same information in a form
+ * that appears nowhere else in the TUI. Unknown tools keep their raw id.
+ */
+internal fun toolDisplayName(tool: String): String = toolRowTitle(tool)
 
 // Input keys that the web uses as the row title (first non-blank wins).
 internal val TOOL_PRIMARY_KEYS = listOf("command", "filePath", "description", "pattern", "query", "path")
@@ -169,26 +178,95 @@ internal fun toolSubagentSessionId(part: Part): String? {
 
 internal fun toolCommandText(part: Part): String? = part.inputField("command")?.takeIf { it.isNotBlank() }
 
-// Web shows "+20 -1" behind edit/write tool calls. Derived from metadata.diff.
-internal fun toolDiffStat(part: Part): Pair<Int, Int>? {
-    val md =
-        part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
-            ?: return null
-    val diff = (md["diff"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return null
+/**
+ * Tool ids that change files (the ones with a diff and with the "Changed files" card).
+ */
+private val FILE_CHANGING_TOOLS = setOf("edit", "write", "apply_patch", "multiedit", "patch")
+
+/**
+ * One changed file of a tool call, as far as the app needs it.
+ *
+ * OpenCode 2.0.26 reports these in `state.metadata.files[]`
+ * (`file`, `additions`, `deletions`, `patch`) — a single `edit` can change several files,
+ * so this is a list and not a single value.
+ */
+internal data class ChangedFileMeta(
+    val path: String,
+    val added: Int,
+    val removed: Int,
+    val patch: String? = null,
+)
+
+private val RE_PATCH_FILE_HEADER =
+    Regex("""^(?:Index:\s*|\+\+\+ b/|\-\-\- a/)(.+?)\s*$""", RegexOption.MULTILINE)
+
+/** The file a unified diff belongs to, taken from its `Index:`/`+++`/`---` header. */
+internal fun patchHeaderPath(patch: String?): String? =
+    patch
+        ?.lineSequence()
+        ?.mapNotNull { RE_PATCH_FILE_HEADER.find(it.trim())?.groupValues?.get(1) }
+        ?.firstOrNull { it.isNotBlank() && it != "/dev/null" }
+
+/**
+ * The changed files of an edit/write/patch call, with their +/- counts.
+ *
+ * Source order follows the server: `metadata.files[]` (2.0.26, per file, carries the
+ * counts) first; older builds only have `metadata.filepath`/`metadata.diff`, and a
+ * `write` has just the input path plus the content it wrote. Empty for every other tool.
+ */
+internal fun changedFileMeta(part: Part): List<ChangedFileMeta> {
+    if (part.toolName()?.lowercase() !in FILE_CHANGING_TOOLS) return emptyList()
+    val md = part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
+    val fromFiles =
+        (md?.get("files") as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { item ->
+                val entry = item as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+                val patch = entry["patch"].asRawString()?.takeIf { it.isNotBlank() }
+                val path =
+                    entry["file"].asRawString()?.takeIf { it.isNotBlank() }
+                        ?: entry["path"].asRawString()?.takeIf { it.isNotBlank() }
+                        ?: patchHeaderPath(patch)
+                        ?: return@mapNotNull null
+                ChangedFileMeta(
+                    path = path,
+                    added = entry["additions"].asIntOrNull() ?: 0,
+                    removed = entry["deletions"].asIntOrNull() ?: 0,
+                    patch = patch,
+                )
+            }.orEmpty()
+    if (fromFiles.isNotEmpty()) return fromFiles
+    // No metadata.files: derive the single path from the older shapes.
+    val patch =
+        md?.get("diff").asRawString()?.takeIf { it.isNotBlank() }
+            ?: part.inputField("patch")?.takeIf { it.isNotBlank() }
+            ?: writtenContentPatch(part)
+    val path =
+        md?.get("filepath").asRawString()?.takeIf { it.isNotBlank() }
+            ?: part.inputField("filePath")?.takeIf { it.isNotBlank() }
+            ?: part.inputField("path")?.takeIf { it.isNotBlank() }
+            ?: patchHeaderPath(patch)
+            ?: return emptyList()
+    return listOf(ChangedFileMeta(path, 0, 0, patch))
+}
+
+/** `+added`/`-removed` of a unified diff, ignoring the `+++`/`---` file headers. */
+internal fun countDiffLines(diff: String?): Pair<Int, Int> {
     var added = 0
     var removed = 0
-    diff.lineSequence().forEach { line ->
+    diff?.lineSequence()?.forEach { line ->
         when {
             line.startsWith("+++") || line.startsWith("---") -> Unit
             line.startsWith("+") -> added++
             line.startsWith("-") -> removed++
         }
     }
-    return if (added == 0 && removed == 0) null else added to removed
+    return added to removed
 }
 
-// Web "Changed files" summary: per-file +/- stats + unified diff for
-// edit/write/patch tools.
+/**
+ * Web "Changed files" summary: per-file +/- stats + unified diff for
+ * edit/write/patch tools.
+ */
 @Immutable
 data class ChangedFile(
     val path: String,
@@ -196,6 +274,55 @@ data class ChangedFile(
     val removed: Int,
     val diff: String? = null,
 )
+
+/**
+ * "+20 -1" behind edit/write rows and in the Changes card.
+ *
+ * The counts come from the server when it sent them (`metadata.files[].additions` /
+ * `deletions`); otherwise they are counted from the patch, so a build without those
+ * fields still shows a correct stat.
+ */
+internal fun toolDiffStat(part: Part): Pair<Int, Int>? {
+    val files = changedFileMeta(part)
+    if (files.isEmpty()) {
+        // A diff whose file could not be named (e.g. a `patch` passed as input) still
+        // gets its stat counted, so the row never loses the "+N -M" suffix.
+        val md = part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
+        val looseDiff =
+            md?.get("diff").asRawString()?.takeIf { it.isNotBlank() }
+                ?: part.inputField("patch")?.takeIf { it.isNotBlank() }
+                ?: writtenContentPatch(part)
+        val (looseAdded, looseRemoved) = countDiffLines(looseDiff)
+        return if (looseAdded == 0 && looseRemoved == 0) null else looseAdded to looseRemoved
+    }
+    var added = 0
+    var removed = 0
+    files.forEach { file ->
+        if (file.added != 0 || file.removed != 0) {
+            added += file.added
+            removed += file.removed
+        } else {
+            val (a, r) = countDiffLines(file.patch)
+            added += a
+            removed += r
+        }
+    }
+    return if (added == 0 && removed == 0) null else added to removed
+}
+
+internal fun changedFiles(parts: List<Part>): List<ChangedFile> =
+    parts
+        .flatMap { part ->
+            changedFileMeta(part).map { meta ->
+                val (countedAdded, countedRemoved) = countDiffLines(meta.patch)
+                ChangedFile(
+                    path = meta.path,
+                    added = if (meta.added != 0) meta.added else countedAdded,
+                    removed = if (meta.removed != 0) meta.removed else countedRemoved,
+                    diff = meta.patch,
+                )
+            }
+        }.distinctBy { it.path }
 
 /**
  * The unified diff of an edit/patch tool call.
@@ -248,22 +375,6 @@ internal fun writtenContentPatch(part: Part): String? {
     }
 }
 
-internal fun changedFiles(parts: List<Part>): List<ChangedFile> =
-    parts
-        .mapNotNull { part ->
-            val tool = part.toolName()?.lowercase() ?: return@mapNotNull null
-            if (tool !in setOf("edit", "write", "apply_patch", "multiedit", "patch")) {
-                return@mapNotNull null
-            }
-            val md = part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
-            val path =
-                (md?.get("filepath") as? kotlinx.serialization.json.JsonPrimitive)?.content
-                    ?: part.inputField("filePath")
-                    ?: return@mapNotNull null
-            val (added, removed) = toolDiffStat(part) ?: (0 to 0)
-            ChangedFile(path, added, removed, toolDiffText(part))
-        }.distinctBy { it.path }
-
 internal fun toolOutputText(part: Part): String? {
     part.stateField("output")?.takeIf { it.isNotBlank() }?.let { return it }
     // OpenCode 2.x tool state carries its output as `content: [{type,text}]`.
@@ -279,8 +390,48 @@ internal fun toolOutputText(part: Part): String? {
             ?.takeIf { it.isNotBlank() }
     if (fromContent != null) return fromContent
     val meta = part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject
-    return meta?.get("output").asRawString()?.takeIf { it.isNotBlank() }
+    meta
+        ?.get("output")
+        .asRawString()
+        ?.takeIf { it.isNotBlank() }
+        ?.let { return it }
+    // A finished shell call without output says so, like the server/TUI ("(no output)")
+    // — an empty box would look like a row that failed to load. Only once the call is
+    // done: while it runs there is simply nothing yet.
+    if (part.toolName()?.lowercase() in SHELL_TOOLS && part.stateField("status") == "completed") {
+        return NO_OUTPUT
+    }
+    return null
 }
+
+private val SHELL_TOOLS = setOf("bash", "shell", "execute")
+
+/** The server's own placeholder for a command that printed nothing. */
+internal const val NO_OUTPUT = "(no output)"
+
+/**
+ * The truncation notice for a result the server itself cut short, in the server's
+ * wording (`...output truncated...` / `Full output saved to: <path>`, read out of the
+ * opencode bundle). `null` when the server did not truncate anything or when its own
+ * output text already carries the notice — a second copy would just be noise.
+ */
+internal fun toolOutputNotice(part: Part): String? {
+    val md =
+        part.stateObject()?.get("metadata") as? kotlinx.serialization.json.JsonObject ?: return null
+    if (md["truncated"] != kotlinx.serialization.json.JsonPrimitive(true)) return null
+    val savedTo = md["outputPath"].asRawString()?.takeIf { it.isNotBlank() } ?: return null
+    if (toolOutputText(part).orEmpty().contains("output truncated")) return null
+    return "...output truncated...\n\nFull output saved to: $savedTo"
+}
+
+/**
+ * Reasoning text as the TUI prints it.
+ *
+ * The server replaces redacted stretches with `[REDACTED]`; the TUI strips those
+ * markers before showing the text, so the app does the same instead of leaking
+ * placeholder brackets into the thinking block.
+ */
+internal fun tuiReasoningText(raw: String): String = raw.replace("[REDACTED]", "").trim()
 
 // Hard cap on rendered diff lines. Every diff line used to become its own Text
 // composable inside a plain (non-lazy) Column, so a large edit — a generated
