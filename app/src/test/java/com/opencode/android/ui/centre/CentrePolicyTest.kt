@@ -210,6 +210,28 @@ class CentrePolicyTest {
     }
 
     @Test
+    fun `a need whose session is gone is not offered`() {
+        // Live case: a deleted session left five pending forms behind; every request for that
+        // session answers 404, so the row opened a 404. The session is the only thing a need
+        // can act on - without it the row is a dead end.
+        val needs =
+            CentrePolicy.needs(
+                permissions = listOf(PermissionRequest(id = "p1", sessionId = "ses_alive", title = "Run tests")),
+                questions =
+                    listOf(
+                        SessionQuestion(id = "frm1", sessionId = "ses_dead", title = "num"),
+                        SessionQuestion(id = "frm2", sessionId = "ses_dead", title = "bool"),
+                    ),
+                outboxCounts = mapOf("ses_waiting" to 1),
+            )
+        assertEquals(3, needs.size)
+        val visible = CentrePolicy.withoutMissing(needs, setOf("ses_dead"))
+        assertEquals(listOf("ses_alive", "ses_waiting"), visible.map { it.sessionId })
+        // Nothing missing: everything stays.
+        assertEquals(needs, CentrePolicy.withoutMissing(needs, emptySet()))
+    }
+
+    @Test
     fun `the cost label matches the glance surfaces`() {
         assertEquals("$1.23", CentrePolicy.costLabel(1.234))
         assertEquals("$0.00", CentrePolicy.costLabel(0.0))

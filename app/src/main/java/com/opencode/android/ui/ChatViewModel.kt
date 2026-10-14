@@ -237,6 +237,14 @@ data class ChatUiState(
     val canLoadOlder: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
+    /**
+     * The session itself is gone (HTTP 404/410) - not a transient load failure.
+     *
+     * The screen then explains it in words instead of showing the raw status code, and no
+     * snackbar repeats it. Reachable from the Centre's "needs you" when a deleted session
+     * left pending work behind, or from an old notification/deep link.
+     */
+    val sessionGone: Boolean = false,
     // Provider/usage error shown under the composer (e.g. "Free usage exceeded…").
     val statusError: String? = null,
     // Session todo list (GET /session/{id}/todo), shown above the composer.
@@ -605,7 +613,7 @@ class ChatViewModel
             sessionJob?.cancel()
             sessionJob =
                 viewModelScope.launch {
-                    _uiState.update { it.copy(isLoading = true, error = null) }
+                    _uiState.update { it.copy(isLoading = true, error = null, sessionGone = false) }
                     // Paint the cached tail first so a cold start shows the conversation
                     // immediately instead of a blank screen while the network answers.
                     // The authoritative load below replaces it a moment later. On a
@@ -935,11 +943,17 @@ class ChatViewModel
                     } catch (e: Exception) {
                         // Message only: a cancelled request surfaces as
                         // "Socket closed" and a full stack is pure noise here.
+                        val gone = com.opencode.android.util.isGoneError(e)
                         AppLog.e(APP_LOG_TAG, "loadSession ERROR: ${e.message}")
-                        UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                        if (!gone) {
+                            // A gone session is explained inline (the card below); a snackbar
+                            // repeating "HTTP 404" on top of it would just be noise.
+                            UserMessages.post(R.string.could_not_load_session, "${e.message}")
+                        }
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
+                                sessionGone = gone,
                                 error = e.message ?: "Session could not be loaded",
                             )
                         }

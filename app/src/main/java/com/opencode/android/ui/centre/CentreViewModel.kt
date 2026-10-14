@@ -63,6 +63,15 @@ class CentreViewModel
     ) : ViewModel() {
         private val api: OpenCodeApi get() = apiProvider.get()
 
+        /**
+         * Upper bound of session probes per refresh. Each need costs one request; the list is
+         * a handful in practice, and the cap keeps a pathological server from turning one
+         * refresh into a request storm.
+         */
+        private companion object {
+            const val MAX_SESSION_PROBES = 10
+        }
+
         private val _state = MutableStateFlow(CentreUiState())
         val state: StateFlow<CentreUiState> = _state.asStateFlow()
 
@@ -140,11 +149,27 @@ class CentreViewModel
                             .groupingBy { it.sessionId }
                             .eachCount()
                     val titles = sessions.associate { it.id to it.title.orEmpty() }
+                    val needs = CentrePolicy.needs(permissions, questions, outbox, titles)
+                    // A need can only be acted on through its session. A deleted session
+                    // leaves its pending forms behind on the server (verified live: five
+                    // forms, session 404 everywhere), so those rows opened a 404 - probe the
+                    // referenced sessions and drop the ones that are gone. A failed probe
+                    // (network) keeps the row: never hide what might be reachable.
+                    val missing =
+                        needs
+                            .map { it.sessionId }
+                            .distinct()
+                            .take(MAX_SESSION_PROBES)
+                            .filter { sessionId ->
+                                runCatching { api.getSession(sessionId) }
+                                    .exceptionOrNull()
+                                    ?.let { com.opencode.android.util.isGoneError(it) } == true
+                            }.toSet()
                     _state.update { current ->
                         current.copy(
                             loading = false,
                             rows = CentrePolicy.rows(sessions, statuses),
-                            needs = CentrePolicy.needs(permissions, questions, outbox, titles),
+                            needs = CentrePolicy.withoutMissing(needs, missing),
                             costToday = stats?.cost,
                             sessionsToday = stats?.sessions,
                             promptsToday = stats?.prompts,

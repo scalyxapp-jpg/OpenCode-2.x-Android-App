@@ -52,3 +52,16 @@ fun serverErrorMessage(
     if (message != null) return message
     return if (body.startsWith("{")) fallback else body.take(300)
 }
+
+/**
+ * Whether a failure means "this thing is GONE" rather than "it failed".
+ *
+ * The server answers 404 for a session, form or file that no longer exists (verified live: a
+ * deleted session's pending forms still show up in `GET /api/form`, and every request for
+ * that session answers 404). Callers use this to stop offering what can never open and to
+ * explain it instead of printing a bare status code. 410 is included: "gone" by definition.
+ */
+fun isGoneError(e: Throwable): Boolean {
+    val code = (e as? retrofit2.HttpException)?.code() ?: return false
+    return code == 404 || code == 410
+}

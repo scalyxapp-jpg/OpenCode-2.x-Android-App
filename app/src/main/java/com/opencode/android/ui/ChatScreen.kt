@@ -1982,7 +1982,9 @@ internal fun SessionTab(
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                 ) {
                     Text(
-                        text = error,
+                        // A session that no longer exists gets an explanation instead of the
+                        // raw status code ("HTTP 404 …" told the user nothing).
+                        text = if (uiState.sessionGone) stringResource(R.string.session_gone) else error,
                         modifier =
                             Modifier
                                 .weight(1f)

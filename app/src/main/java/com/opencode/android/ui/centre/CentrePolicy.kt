@@ -174,6 +174,19 @@ object CentrePolicy {
     }
 
     /**
+     * Drops the needs whose session no longer exists on the server.
+     *
+     * Proven live: a deleted session left five pending forms behind, so "Needs you" offered
+     * entries that opened a 404. The session is the only thing a need can act on — without it
+     * the row is a dead end and must not be shown. [missing] is filled by the caller, which
+     * is the only place that can ask the server.
+     */
+    fun withoutMissing(
+        needs: List<CentreNeed>,
+        missing: Set<String>,
+    ): List<CentreNeed> = needs.filterNot { it.sessionId in missing }
+
+    /**
      * Directories to ask for pending work, most recent first.
      *
      * `GET /api/form` and `GET /api/permission/request` are scoped per directory, so asking

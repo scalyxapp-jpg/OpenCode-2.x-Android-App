@@ -5,6 +5,41 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.5] - 2026-10-14
+
+### Fixed
+
+**„Braucht dich": Ein Tippen öffnete eine Session mit 404.**
+
+Live belegt, nicht vermutet: Die fünf wartenden Formulare verwiesen alle auf
+`ses_eca7e402bffeVhHvhJUBoWeCNK`, und diese Session **existiert nicht mehr** — `GET
+/api/session/<id>` antwortet mit **jedem** Verzeichnis 404 (auch global). Im Server-Store sind
+also **verwaiste Formulare** liegen geblieben; die App bot sie an, und ein Tippen öffnete eine
+Session, die es nicht gibt. Aufräumen ist serverseitig nicht möglich
+(`DELETE /api/session/<id>/form/<fid>` antwortet für die tote Session ebenfalls 404 — getestet).
+
+Zwei Fixes, damit das nicht wieder passiert:
+
+1. **„Braucht dich" bietet nichts an, was nicht erreichbar ist.** Beim Aktualisieren werden die
+   referenzierten Sessions geprüft (max. 10 Anfragen je Aktualisierung); die, die mit 404/410
+   antworten, fallen aus der Liste (`CentrePolicy.withoutMissing`, reine Regel, getestet). Ein
+   **fehlgeschlagener** Test (Netz) lässt den Eintrag stehen — es wird nie etwas versteckt, das
+   erreichbar sein könnte. Ergebnis im Live-Fall: der Abschnitt ist leer statt fünf Zeilen mit
+   toten Verweisen.
+2. **Ein 404 im Chat wird erklärt statt angezeigt.** Bisher stand dort `HTTP 404 …` (der rohe
+   Statuscode). Jetzt erkennt der Ladevorgang „gone" (404/410) und zeigt einen Satz, den man
+   versteht: *„This session no longer exists on the server — it was probably deleted or cleaned
+   up. Close it and pick another session."* Der zusätzliche Snackbar entfällt in diesem Fall
+   (er hätte den Code nur wiederholt); die Wiederholen-Aktion bleibt. Betrifft auch Deep Links
+   und alte Benachrichtigungen.
+
+### Added (tests)
+
+- `CentrePolicyTest` (13 Fälle, +1): Einträge mit toter Session fallen raus, lebende und
+  wartende bleiben, ein leeres „missing"-Set ändert nichts.
+- Betroffen geprüft (nur diese Klassen): `CentrePolicyTest` 13, `JournalPolicyTest` 9,
+  `QueuePolicyTest` 4 → **26 Tests, 0 Fehler**.
+
 ## [2.0.4] - 2026-10-14
 
 ### Fixed (Decisions)

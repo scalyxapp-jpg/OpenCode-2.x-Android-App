@@ -617,4 +617,5 @@
         <item quantity="one">… %1$d session</item>
         <item quantity="other">… %1$d sessions</item>
     </plurals>
+    <string name="session_gone" formatted="false">This session no longer exists on the server — it was probably deleted or cleaned up. Close it and pick another session.</string>
 </resources>
