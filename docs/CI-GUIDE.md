@@ -6,6 +6,9 @@ möglich gegen eine **Messung am Gerät** geprüft (Methode und Vorbehalt in §1
 
 > Grundsatz: **Der Code ist die Wahrheit.** Wenn eine Grafik einem Wert hier widerspricht, ist die
 > Grafik falsch — nicht die Doku.
+>
+> **Messbasis (§12):** SM-A176B, 1080 × 2340 px bei **450 dpi** → **1 dp = 2,8125 px**, Bildschirm
+> **384 × 832 dp**. Gemessene Anker stehen mit „gemessen" markiert, alles andere kommt aus dem Code.
 
 ---
 
@@ -259,7 +262,7 @@ Home/Centre/Settings als untere Navigation (`NavigationBar`), Chat als eigene Ro
 │ TopAppBar 64 dp: Zurück · Titel · Kontext % │
 │              · ⋮                            │
 ├─────────────────────────────────────────────┤
-│ TabRow 48 dp: Session | Session info | Ch…  │
+│ TabRow 48 dp: Session | Session info | Ch…  │  ← Labels gemessen y 140,1–147,9 dp
 ├─────────────────────────────────────────────┤
 │ Transkript (LazyColumn, reverseLayout)      │
 │   Textblasen · Werkzeug-Zeilen (Radius 10)  │
@@ -267,8 +270,8 @@ Home/Centre/Settings als untere Navigation (`NavigationBar`), Chat als eigene Ro
 │   Live-Bereich: „Waiting for the model…"    │
 ├─────────────────────────────────────────────┤
 │ Composer (Radius 28 dp, 4 dp Abstand)       │
-│  [Mic 48] [＋ 48]  Eingabefeld … [Verlauf]  │
-│  [Agent ▾] [Modell ▾] [Effort ▾]   [Send 48]│
+│  [Mic 48] [＋ 48]  Eingabefeld … [Verlauf]  │  ← Glyphen gemessen: Höhe 24,2 dp,
+│  [Agent ▾] [Modell ▾] [Effort ▾]   [Send 48]│    Zentren 52 dp auseinander, Zeile y≈677 dp
 └─────────────────────────────────────────────┘
 ```
 
@@ -350,19 +353,50 @@ Lesbarkeit schlägt Effekt. Keine zwei Deko-Ebenen gleichzeitig.
 | Screenshots     | mind. 1080 × 2340 px              | Direkt aus der App; dunkles Theme zeigt die Identität am besten |
 | Adaptive Icon   | 108 dp Fläche, 66 dp sichere Zone | Marke muss in der 66-dp-Kreiszone stehen                        |
 
-## 12. Messung & Vorbehalt
+## 12. Messung am Gerät (vollzogen)
 
-- **Code-Quellen** (autoritativ): `ui/theme/Dimens.kt`, `ui/theme/Type.kt`, `ui/theme/Theme.kt`,
-  `ui/Splash.kt`, `res/mipmap-anydpi-v26/ic_launcher.xml`, `res/drawable/ic_launcher_foreground.xml`,
-  `res/drawable/ic_notification.xml`, `res/values/colors.xml`, `res/xml/session_widget_info.xml`,
-  `ui/widget/SessionWidget.kt`.
-- **Gerätemessung:** Eine Auswertung eines Screenshots (1080 × 2340 px, ~2,75× Dichte ≈ 393 dp
-  breit → **1 dp ≈ 2,75 px**) ergab: Composer-Panel ≈ 1030 px breit (≈ 375 dp), Composer-Zeile
-  ≈ 130–150 px (≈ 47–54 dp), Stop-Knopf ≈ 130–140 px (≈ 48–52 dp), Leisten-Icons ≈ 60 px (≈ 22 dp),
-  Composer-Radius ≈ 90 px (≈ 33 dp). Das deckt sich mit den Code-Werten (48 dp Ziele, 24 dp Glyphen,
-  28 dp Radius) — **die Code-Werte gelten**, die Messung dient als Gegenprobe.
-- **Offen:** Bei fehlendem Gerät sind TopAppBar/NavigationBar-Höhen die Material-3-Defaults
-  (**64 dp** / **80 dp**), weil die App sie nicht überschreibt (`TopAppBar(...)` ohne
-  `expandedHeight`, `NavigationBar { }` ohne Höhe). Der Chat ergänzt nur `WindowInsets.statusBars`.
-- **Nicht enthalten:** konkrete Marketing-Claims/Sprache — dieser Guide beschreibt nur die visuelle
-  Identität.
+Gemessen mit `adb` auf dem Referenzgerät **Samsung SM-A176B** (Android 17), App **3.8.3**:
+
+| Basiswert | Wert |
+| --- | --- |
+| Auflösung | **1080 × 2340 px** (`wm size`) |
+| Dichte | **450 dpi** (`wm density`) → **1 dp = 2,8125 px** |
+| Bildschirm in dp | **384 × 832 dp** |
+| Statusleiste | **≈ 100 px ≈ 35,6 dp** (Systeminset) |
+
+> Die Dichte ist **nicht** die oft angenommene 2,75×: wer aus Pixeln rechnet, muss **2,8125** nutzen
+> (sonst sind alle Werte ~2 % zu klein).
+
+### 12.1 Gemessene Regionen (Chat, `Session`-Tab)
+
+| Element | Gemessen | Deckt sich mit |
+| --- | --- | --- |
+| Tab-Beschriftungen („Session info", „Changes") | y **140,1–147,9 dp**, Textband 7,8 dp | `TabRow` (Material, 48 dp) direkt unter der TopAppBar |
+| Composer-Glyphen (Mic, „+", Verlauf, Stop) | y **665,2–689,4 dp**, Höhe **24,2 dp** | §7: Glyphe 24 dp |
+| Abstand der Composer-Ziele | Glyphen-Zentren **52 dp** auseinander | 48 dp Ziel + **4 dp** `spacing.extraSmall` |
+| Mic / „+" horizontal | x **28,1–52,3** / **80,0–104,2** dp | Mic ist das **linke** Element (seit 3.8.2) |
+| Composer-Zeile (Mitte) | **≈ 677 dp** von 832 dp | unteres Zehntel, über der Chip-Zeile |
+| Eingabefeld-Text („Ask anything…") | y **668,8–685,5 dp** (16,7 dp) | `bodyLarge`/`bodyMedium` (16/14 sp) |
+
+### 12.2 Gemessene Regionen (Home, Sitzungsliste)
+
+| Element | Gemessen |
+| --- | --- |
+| Touch-Ziele Suchfeld / Filter-Chips („Running", „Archived") | **48,0 dp** hoch (Suchfeld 158,9 dp breit) |
+| Sitzungszeilen-Abstand (Pitch) | **≈ 64,4 dp** (→ Karte ≈ 56 dp + `listGap` 8 dp) |
+| Navigations-Beschriftungen (Home · Centre · Settings) | y **752,0–768,0 dp** |
+| Sektionskopf („TODAY", „OLDER") | 13,2 dp Textband (`labelSmall`) |
+
+### 12.3 Was aus dem Code kommt (weil nicht messbar)
+
+Containerhöhen wie `TopAppBar` und `NavigationBar` werden von der App **nicht überschrieben** —
+es gelten die Material-3-Defaults **64 dp** bzw. **80 dp**. Der Chat ergänzt nur
+`WindowInsets.statusBars`. Ebenso sind **Radien** (28 dp Composer, 20 dp Splash-Kachel) aus dem Code
+übernommen: eine Pixelmessung an Ecken ist unzuverlässig, der Token ist exakt.
+
+### 12.4 Vorbehalt
+
+`uiautomator dump` liefert **Ankerpositionen** (Text, Icons, beschriftete Ziele) und markierte
+Touch-Ziele. Nicht jeder Compose-Container erscheint als eigener Knoten, deshalb wurden Regionen
+über ihre Anker gemessen (z. B. Composer-Zeile über die vier Glyphen) und gegen die Code-Werte
+geprüft — wo beides vorlag, stimmten sie überein.
