@@ -5,6 +5,50 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.1] - 2026-10-15
+
+### Changed
+
+**Diktat ist jetzt Push-to-Talk.** Aufnahme läuft **ausschließlich, solange der Knopf gehalten
+wird**; beim Loslassen wird der Text in den Composer geschrieben. Es gibt **keinen** Weg mehr, der
+von selbst aufnimmt:
+
+- Der Knopf startet nur über den **Press-Handler**, und das Loslassen (auch ein abgebrochener
+  Gestus — Finger weggezogen, App in den Hintergrund) beendet die Aufnahme. Ein vergessenes
+  Mikrofon ist damit ausgeschlossen.
+- Der **fortlaufende Modus ist entfernt** — samt Schalter, Text und Einstellung. Er war die einzige
+  Stelle, die ohne Halten weiterlief.
+- Die **Pegelanzeige** ist entfernt.
+- Die **„Dictated: …"-Meldung ist entfernt**: der Text landet direkt und sauber im Composer, ohne
+  Zwischenfenster.
+
+### Fixed
+
+**„Speech recognition failed" kam zufällig, obwohl das Diktat lief.** Ursache: Das Loslassen (und
+ein abgelöstes Attempt) erzeugt beim Erkenner **erwartetes** Rauschen (`ERROR_CLIENT`/„no match"),
+und ein vorheriger Versuch konnte noch nachträglich antworten. Das wurde gemeldet, obwohl der Nutzer
+seine Aufnahme selbst beendet hatte.
+
+Jetzt filtert eine **getestete Regel** (`SpeechErrorPolicy.shouldReport`):
+- Versuch ist nicht mehr der aktuelle (**stale**) → still,
+- der Nutzer hat beendet (**stoppedByUser**, z. B. Loslassen) → still,
+- es wurde schon Text geliefert (**delivered**) → still,
+- „nichts gehört" → still (wie bisher).
+
+Gemeldet wird nur ein **echter** Fehler, während der Knopf noch gehalten wird (Netz, Berechtigung,
+„kein Erkenner erzeugbar", „beschäftigt"). Dafür zählt jede Aufnahme eine **Generation**; das
+Endergebnis nach dem Loslassen wird weiterhin angenommen (sonst käme nie Text an), spätes Rauschen
+aus alten Versuchen nicht mehr.
+
+### Added (tests)
+
+- `SpeechErrorPolicyTest` (6, +2): erwartetes Rauschen nach dem Loslassen / nach geliefertem Text /
+  aus einem alten Versuch wird **nicht** gemeldet, „nichts gehört" bleibt still, und ein echter
+  Fehler während des Haltens wird weiterhin gemeldet.
+- `DictationPolicyTest` (4): nur noch Anhängen und Politur (die Undo-/Vorschau-Helfer waren mit dem
+  Wegfall der Zwischenmeldung ungenutzt — tote Helfer sind entfernt).
+- Betroffen geprüft (nur diese Klassen): **45 Tests, 0 Fehler**.
+
 ## [3.7.0] - 2026-10-15
 
 ### Fixed

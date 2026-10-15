@@ -306,14 +306,6 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
-                title = stringResource(R.string.settings_speech_continuous),
-                subtitle = stringResource(R.string.settings_speech_continuous_sub),
-                checked = settings.speechContinuous,
-                onCheckedChange = { AppSettingsStore.setSpeechContinuous(it) },
-            )
-        }
-        item {
-            SettingSwitch(
                 title = stringResource(R.string.settings_quick_prompts),
                 subtitle = stringResource(R.string.settings_quick_prompts_sub),
                 checked = settings.quickPromptsEnabled,

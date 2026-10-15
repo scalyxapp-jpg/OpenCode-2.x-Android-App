@@ -2103,7 +2103,6 @@ internal fun SessionTab(
             speechInputEnabled = appSettings.speechInputEnabled,
             speechQuality = appSettings.speechQuality,
             speechOfflinePreferred = appSettings.speechOfflinePreferred,
-            speechContinuous = appSettings.speechContinuous,
             speechSessionTitle = uiState.session?.title,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,

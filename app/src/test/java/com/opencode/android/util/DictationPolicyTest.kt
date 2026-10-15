@@ -51,20 +51,4 @@ class DictationPolicyTest {
         // A leading path or flag is not capitalised into nonsense.
         assertEquals("/compact now", DictationPolicy.polish("/compact now"))
     }
-
-    @Test
-    fun `undo removes exactly what dictation appended`() {
-        assertEquals("Please", DictationPolicy.undoAppend("Please wrote the tests", "wrote the tests"))
-        assertEquals("", DictationPolicy.undoAppend("wrote the tests", " wrote the tests "))
-        assertEquals("First line", DictationPolicy.undoAppend("First line\nsecond line", "second line"))
-        // Typed text that merely looks similar is left alone.
-        assertEquals("my own note", DictationPolicy.undoAppend("my own note", "something else"))
-    }
-
-    @Test
-    fun `the preview shows what would be sent, without touching the field`() {
-        assertEquals("Run the tests now", DictationPolicy.preview("Run the tests", "now"))
-        assertEquals(null, DictationPolicy.listeningLabel("   "))
-        assertEquals("so far", DictationPolicy.listeningLabel(" so far "))
-    }
 }

@@ -33,6 +33,71 @@ class SpeechErrorPolicyTest {
     }
 
     @Test
+    fun `expected noise after releasing the button is not reported`() {
+        // Reported bug: "speech recognition failed" appeared although the dictation had worked.
+        // The engine emits exactly these after a release, after a result, and from a stale
+        // attempt - none of it is worth a message.
+        assertEquals(
+            false,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.Failed,
+                stale = false,
+                stoppedByUser = true,
+                delivered = false,
+            ),
+        )
+        assertEquals(
+            false,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.Failed,
+                stale = false,
+                stoppedByUser = false,
+                delivered = true,
+            ),
+        )
+        assertEquals(
+            false,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.Failed,
+                stale = true,
+                stoppedByUser = false,
+                delivered = false,
+            ),
+        )
+        assertEquals(
+            false,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.NoSpeech,
+                stale = false,
+                stoppedByUser = false,
+                delivered = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a real failure while the button is held still speaks up`() {
+        assertEquals(
+            true,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.Network,
+                stale = false,
+                stoppedByUser = false,
+                delivered = false,
+            ),
+        )
+        assertEquals(
+            true,
+            SpeechErrorPolicy.shouldReport(
+                error = SpeechError.Unavailable,
+                stale = false,
+                stoppedByUser = false,
+                delivered = false,
+            ),
+        )
+    }
+
+    @Test
     fun `everything else keeps the recognizer's own reason`() {
         assertEquals(SpeechError.Failed, SpeechErrorPolicy.classify(SpeechErrorPolicy.AUDIO))
         assertEquals(SpeechError.Failed, SpeechErrorPolicy.classify(SpeechErrorPolicy.SERVER))

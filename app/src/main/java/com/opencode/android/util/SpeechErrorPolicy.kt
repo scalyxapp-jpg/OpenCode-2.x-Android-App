@@ -65,4 +65,22 @@ object SpeechErrorPolicy {
 
     /** Only the reportable cases get a message; [SpeechError.NoSpeech] never does. */
     fun isReportable(error: SpeechError): Boolean = error != SpeechError.NoSpeech
+
+    /**
+     * Whether a reported error should actually reach the user.
+     *
+     * The "speech recognition failed although it worked" report came from noise that is *expected*:
+     * releasing the button makes the engine emit `ERROR_CLIENT` (or "no match") for the attempt the
+     * user just ended, and a stale attempt can answer after a new one started. None of that is
+     * worth a message.
+     *
+     * Reported only when the attempt is still the current one, the user did NOT end it, nothing was
+     * delivered yet, and the reason is worth telling ([isReportable]).
+     */
+    fun shouldReport(
+        error: SpeechError,
+        stale: Boolean,
+        stoppedByUser: Boolean,
+        delivered: Boolean,
+    ): Boolean = !stale && !stoppedByUser && !delivered && isReportable(error)
 }

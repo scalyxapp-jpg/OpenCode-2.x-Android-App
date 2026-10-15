@@ -130,8 +130,6 @@ object AppSettingsStore {
         val speechQuality: Boolean = true,
         /** Prefer on-device recognition: no network round trip, sometimes less accurate. */
         val speechOfflinePreferred: Boolean = false,
-        /** Keep listening after each sentence, so a dictation can be spoken in one go. */
-        val speechContinuous: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -216,7 +214,6 @@ object AppSettingsStore {
             speechInputEnabled = prefs.getBoolean("speechInputEnabled", true),
             speechQuality = prefs.getBoolean("speechQuality", true),
             speechOfflinePreferred = prefs.getBoolean("speechOfflinePreferred", false),
-            speechContinuous = prefs.getBoolean("speechContinuous", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -303,7 +300,6 @@ object AppSettingsStore {
 
     fun setSpeechOfflinePreferred(v: Boolean) = update { it.putBoolean("speechOfflinePreferred", v) }
 
-    fun setSpeechContinuous(v: Boolean) = update { it.putBoolean("speechContinuous", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -460,7 +456,6 @@ object AppSettingsStore {
                 putBoolean("speechInputEnabled", parsed.speechInputEnabled)
                 putBoolean("speechQuality", parsed.speechQuality)
                 putBoolean("speechOfflinePreferred", parsed.speechOfflinePreferred)
-                putBoolean("speechContinuous", parsed.speechContinuous)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

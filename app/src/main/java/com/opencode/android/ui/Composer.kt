@@ -232,7 +232,6 @@ internal fun Composer(
     /** Settings → dictation quality/behaviour (passed through to the request policy). */
     speechQuality: Boolean = true,
     speechOfflinePreferred: Boolean = false,
-    speechContinuous: Boolean = true,
     /** Title of the open session: supplies the vocabulary hint for dictation. */
     speechSessionTitle: String? = null,
     /** Prompts waiting in the offline outbox for this session. */
@@ -257,25 +256,34 @@ internal fun Composer(
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
 
-    // --- speech-to-text ---------------------------------------------------
-    // In place, not via the system dialog: the words belong in the field the user is looking at.
-    // Partials are only PREVIEWED - the field is written on the final result, so a misheard
-    // partial can never overwrite what was typed.
+    // --- speech-to-text (push to talk) ------------------------------------
+    // Hold the button to talk, release to get the text. Nothing records on its own: the only
+    // place that starts listening is the press handler below, and the release ends it - so a
+    // forgotten microphone cannot happen. Recognition runs on the device's own service.
     val speechContext = androidx.compose.ui.platform.LocalContext.current
     val speech = remember { SpeechInput(speechContext) }
     var listening by remember { mutableStateOf(false) }
-    var partial by remember { mutableStateOf("") }
-    var level by remember { mutableStateOf(0f) }
     DisposableEffect(Unit) { onDispose { speech.destroy() } }
     val speechToast = com.opencode.android.util.UserMessages
+    val micPermission =
+        rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (!granted) speechToast.post(R.string.speech_permission_denied)
+        }
+
+    /** Records until [stopDictation]; the final result lands in the composer. */
+    /**
+     * Starts recording. Called ONLY from the press handler of the microphone button, and always
+     * followed by [stopDictation] on release - nothing starts a recording by itself.
+     */
     fun startDictation() {
-        partial = ""
         val options =
             com.opencode.android.util.SpeechOptions(
                 preferOffline = speechOfflinePreferred,
                 optimizeQuality = speechQuality,
                 // The device's language, made explicit: an engine that guesses wrong costs whole
-                // words. The tag is only sent when the platform has one.
+                // words.
                 languageTag =
                     if (android.os.Build.VERSION.SDK_INT >= 24) {
                         java.util.Locale.getDefault().toLanguageTag()
@@ -288,81 +296,43 @@ internal fun Composer(
             )
         speech.start(
             options = options,
-            onPartial = { partial = it },
+            onPartial = { },
             onFinal = { text ->
-                partial = ""
-                level = 0f
+                listening = false
+                // Straight into the composer: polished and merged, no intermediate window, no
+                // notification about it.
                 val polished = com.opencode.android.util.DictationPolicy.polish(text)
-                val merged = com.opencode.android.util.DictationPolicy.appendFinal(inputText, polished)
-                if (merged != inputText) {
-                    onInputChange(merged)
-                    // Undo puts back exactly what dictation added - the engine's mistakes are
-                    // usually one phrase, not the whole field.
-                    speechToast.postWithAction(
-                        R.string.speech_added,
-                        speechContext.getString(R.string.speech_undo),
-                        { onInputChange(com.opencode.android.util.DictationPolicy.undoAppend(merged, polished)) },
-                        polished,
-                    )
-                }
-                // Continuous dictation: keep listening for the next sentence (the user still stops
-                // it with the button). Only after a real result - restarting on an error would loop.
-                if (speechContinuous && listening) {
-                    startDictation()
-                } else {
-                    listening = false
+                if (polished.isNotEmpty()) {
+                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, polished))
                 }
             },
             onError = { error, message ->
-                level = 0f
-                // Only reportable reasons get a message: "heard nothing" is an everyday event
-                // (a pause, a quiet room) and must NOT claim the device cannot dictate - that
-                // conflation was the reported bug.
-                if (com.opencode.android.util.SpeechErrorPolicy.isReportable(error)) {
-                    listening = false
-                    partial = ""
-                    when (error) {
-                        com.opencode.android.util.SpeechError.Unavailable ->
-                            speechToast.post(R.string.speech_unavailable)
+                listening = false
+                // The policy already filtered the expected noise (release, stale attempt, nothing
+                // heard); what arrives here is worth telling.
+                when (error) {
+                    com.opencode.android.util.SpeechError.Unavailable ->
+                        speechToast.post(R.string.speech_unavailable)
 
-                        com.opencode.android.util.SpeechError.Busy ->
-                            speechToast.post(R.string.speech_busy)
+                    com.opencode.android.util.SpeechError.Busy ->
+                        speechToast.post(R.string.speech_busy)
 
-                        com.opencode.android.util.SpeechError.Permission ->
-                            speechToast.post(R.string.speech_permission_denied)
+                    com.opencode.android.util.SpeechError.Permission ->
+                        speechToast.post(R.string.speech_permission_denied)
 
-                        else -> speechToast.post(R.string.speech_failed, message.orEmpty())
-                    }
-                } else if (!speechContinuous) {
-                    listening = false
-                } else {
-                    // "Nothing heard" while continuous: keep the microphone open, that is the
-                    // point of the mode - a pause must not end the dictation.
-                    startDictation()
+                    else -> speechToast.post(R.string.speech_failed, message.orEmpty())
                 }
             },
-            onLevel = { level = it },
         )
         listening = true
     }
 
+    /** Ends the recording because the button was released. */
     fun stopDictation() {
         speech.stop()
         listening = false
-        partial = ""
-        level = 0f
     }
 
-    val micPermission =
-        rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
-        ) { granted ->
-            if (granted) {
-                startDictation()
-            } else {
-                speechToast.post(R.string.speech_permission_denied)
-            }
-        }
     val onRemoveAttachment = actions.onRemoveAttachment
     val onClearAttachments = actions.onClearAttachments
     val onPickCommand = actions.onPickCommand
@@ -702,63 +672,38 @@ internal fun Composer(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    // Speech-to-text: only when the switch is on AND the device can recognise.
-                    // Shown whenever the setting is on: `isRecognitionAvailable()` answers false
-                    // on some builds while a recognizer can be created fine, and a mic that
-                    // disappears is worse than one that explains itself once.
+                    // Push to talk: listening lasts exactly as long as the button is held. The
+                    // gesture ends on release AND on cancel (finger slid off, app backgrounded), so
+                    // no recording can survive the button.
                     if (speechInputEnabled) {
-                        IconButton(
-                            onClick = {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = stringResource(R.string.speech_hold_to_talk),
+                            tint =
                                 if (listening) {
-                                    stopDictation()
-                                } else if (speech.hasPermission()) {
-                                    startDictation()
+                                    MaterialTheme.colorScheme.error
                                 } else {
-                                    micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            Icon(
-                                if (listening) Icons.Default.Mic else Icons.Default.MicNone,
-                                contentDescription =
-                                    stringResource(
-                                        if (listening) R.string.speech_stop else R.string.speech_start,
-                                    ),
-                                tint =
-                                    if (listening) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                            )
-                        }
-                    }
-                    // Live preview of the running dictation: it shows what WOULD be appended
-                    // without writing into the field.
-                    if (listening) {
-                        // Level meter: visible feedback that the microphone hears something, which
-                        // is also how a user notices they are too quiet.
-                        androidx.compose.material3.LinearProgressIndicator(
-                            progress = { level },
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             modifier =
                                 Modifier
-                                    .width(64.dp)
-                                    .height(4.dp),
-                        )
-                        Text(
-                            text =
-                                (stringResource(R.string.speech_listening) +
-                                    (
-                                        com.opencode.android.util.DictationPolicy
-                                            .listeningLabel(partial)
-                                            ?.let { " $it" }
-                                            ?: ""
-                                    )),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                                    .size(48.dp)
+                                    .pointerInput(speechInputEnabled) {
+                                        detectTapGestures(
+                                            onPress = {
+                                                if (speech.hasPermission()) {
+                                                    startDictation()
+                                                } else {
+                                                    micPermission.launch(
+                                                        android.Manifest.permission.RECORD_AUDIO,
+                                                    )
+                                                }
+                                                // Suspends until release or cancel.
+                                                tryAwaitRelease()
+                                                stopDictation()
+                                            },
+                                        )
+                                    },
                         )
                     }
                     BasicTextField(

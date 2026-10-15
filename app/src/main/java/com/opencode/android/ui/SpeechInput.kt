@@ -25,9 +25,16 @@ internal class SpeechInput(
     private var recognizer: SpeechRecognizer? = null
     private var listening = false
 
-    /** Whether the device offers a recognition service at all. */
-    fun available(): Boolean = runCatching { SpeechRecognizer.isRecognitionAvailable(context) }.getOrDefault(false)
+    /** Incremented per attempt: a stale attempt's callbacks are dropped instead of reported. */
+    private var generation = 0
 
+    /** The user released the button: whatever the engine says now is noise. */
+    private var stoppedByUser = false
+
+    /** A final result was already delivered for the current attempt. */
+    private var delivered = false
+
+    /** Whether the device offers a recognition service at all. */
     /** Whether the app may record audio right now. */
     fun hasPermission(): Boolean =
         context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
@@ -45,10 +52,12 @@ internal class SpeechInput(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
         onError: (com.opencode.android.util.SpeechError, String?) -> Unit,
-        /** 0..1 input level while the user speaks, for a level meter. */
-        onLevel: (Float) -> Unit = {},
     ) {
         if (listening) return
+        generation += 1
+        val mine = generation
+        stoppedByUser = false
+        delivered = false
         // Fresh engine per attempt. Reusing one instance after an error or a cancel is what made
         // dictation work "sometimes": a wedged recognizer accepts no further start.
         releaseEngine()
@@ -67,10 +76,7 @@ internal class SpeechInput(
 
                 override fun onBeginningOfSpeech() = Unit
 
-                override fun onRmsChanged(rmsdB: Float) {
-                    // The platform reports roughly -2..10 dBFS; normalise for a meter.
-                    onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
-                }
+                override fun onRmsChanged(rmsdB: Float) = Unit
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
@@ -90,7 +96,11 @@ internal class SpeechInput(
                 }
 
                 override fun onResults(results: Bundle?) {
+                    if (mine != generation) return
                     listening = false
+                    // The final result is the POINT of a press-and-hold: it is delivered even after
+                    // the user released, so the words land in the composer.
+                    delivered = true
                     val text =
                         results
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -100,6 +110,7 @@ internal class SpeechInput(
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
+                    if (mine != generation) return
                     partialResults
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
@@ -185,8 +196,15 @@ internal class SpeechInput(
         recognizer = null
     }
 
-    /** Stops listening; a result may still arrive (the recognizer returns what it heard). */
+    /**
+     * Ends the attempt because the user released the button.
+     *
+     * `stopListening()` (not `cancel()`) asks the engine for what it heard - that result still
+     * arrives and becomes the composer text. Everything else from this attempt (errors about the
+     * ended session) is suppressed.
+     */
     fun stop() {
+        stoppedByUser = true
         if (!listening) return
         listening = false
         runCatching { recognizer?.stopListening() }
@@ -195,6 +213,7 @@ internal class SpeechInput(
     /** Releases the recognizer. Must be called when the composer leaves the composition. */
     fun destroy() {
         listening = false
+        generation += 1
         releaseEngine()
     }
 }
