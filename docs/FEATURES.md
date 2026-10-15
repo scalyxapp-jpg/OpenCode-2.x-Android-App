@@ -170,6 +170,24 @@ One calm row: attachments, input, pickers, then the action buttons.
 - **IME aware** — the keyboard inset is consumed once, so the composer does not
   jump; the send key is wired to send.
 
+## 4b. Speech-to-text (dictation)
+
+The microphone button left of the input dictates straight into the composer, in place — not via the
+system dialog, so the words land in the field you are already looking at. Recognition runs on the
+device's own service (`SpeechRecognizer`; the app never sends audio anywhere) and the microphone is
+live only between start and stop.
+
+Partial results are **previewed** above the field and never written into it: a misheard partial
+cannot overwrite your typing. Only the final result is appended, merged by
+`DictationPolicy.appendFinal` — exactly one space between the pieces, never two, an explicit line
+break stays a line break, and a whitespace-only result changes nothing.
+
+`RECORD_AUDIO` is requested the first time you tap the microphone; the error wording covers the
+everyday causes ("network problem", "microphone permission missing", "the recognizer is busy"), and
+the "nothing was said" cases stay silent — the button simply stops. Settings → **"Speech input in
+the composer"** (default on) hides and disables it, and a device without a recognition service never
+shows the button.
+
 ## 5. The message queue (Ctrl+Enter)
 
 The web composer queues a follow-up with **Ctrl+Enter** instead of interrupting

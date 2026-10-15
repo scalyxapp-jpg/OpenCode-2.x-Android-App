@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Speech-to-text in the composer. Requested at runtime only when the mic is tapped. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Keeps the process (and the session SSE connection) alive while the app
          is open, so backgrounding does not force a reconnect. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -106,4 +108,11 @@
         </service>
     </application>
 
+
+    <!-- SpeechRecognizer needs the recognition service to be visible on API 30+. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
 </manifest>

@@ -654,4 +654,12 @@
     <string name="centre_quick_prompt" formatted="false">Quick prompt</string>
     <string name="centre_all_sessions" formatted="false">All sessions &amp; search →</string>
     <string name="explain_this" formatted="false">Explain this (I want to learn)</string>
+    <string name="settings_speech_input" formatted="false">Speech input in the composer</string>
+    <string name="settings_speech_input_sub" formatted="false">Show the microphone button and dictate prompts with the device\'s speech recognition. The microphone is only active while listening; a health/medical app prompt is never involved.</string>
+    <string name="speech_start" formatted="false">Dictate</string>
+    <string name="speech_stop" formatted="false">Stop dictating</string>
+    <string name="speech_listening" formatted="false">Listening…</string>
+    <string name="speech_unavailable" formatted="false">No speech recognition available on this device.</string>
+    <string name="speech_permission_denied" formatted="false">Microphone permission is needed for dictation.</string>
+    <string name="speech_failed" formatted="false">Speech recognition failed: %1$s</string>
 </resources>

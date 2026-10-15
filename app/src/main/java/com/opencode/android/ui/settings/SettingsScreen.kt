@@ -282,6 +282,14 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_speech_input),
+                subtitle = stringResource(R.string.settings_speech_input_sub),
+                checked = settings.speechInputEnabled,
+                onCheckedChange = { AppSettingsStore.setSpeechInputEnabled(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_quick_prompts),
                 subtitle = stringResource(R.string.settings_quick_prompts_sub),
                 checked = settings.quickPromptsEnabled,

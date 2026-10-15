@@ -14,6 +14,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicNone
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -222,6 +226,8 @@ internal fun Composer(
     queuedCount: Int = 0,
     /** "queue" or "steer" — what the follow-up button does (Preferences). */
     followUpBehavior: String = "queue",
+    /** Settings → "Speech input in the composer": show and allow the microphone. */
+    speechInputEnabled: Boolean = false,
     /** Prompts waiting in the offline outbox for this session. */
     outboxCount: Int = 0,
     outboxFlushing: Boolean = false,
@@ -243,6 +249,56 @@ internal fun Composer(
     val onClearOutbox = actions.onClearOutbox
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
+
+    // --- speech-to-text ---------------------------------------------------
+    // In place, not via the system dialog: the words belong in the field the user is looking at.
+    // Partials are only PREVIEWED - the field is written on the final result, so a misheard
+    // partial can never overwrite what was typed.
+    val speechContext = androidx.compose.ui.platform.LocalContext.current
+    val speech = remember { SpeechInput(speechContext) }
+    var listening by remember { mutableStateOf(false) }
+    var partial by remember { mutableStateOf("") }
+    DisposableEffect(Unit) { onDispose { speech.destroy() } }
+    val speechToast = com.opencode.android.util.UserMessages
+    fun startDictation() {
+        partial = ""
+        speech.start(
+            onPartial = { partial = it },
+            onFinal = { text ->
+                listening = false
+                partial = ""
+                // Merge through the shared rule: one space, no swallowed blank line, and an empty
+                // result changes nothing.
+                val merged = com.opencode.android.util.DictationPolicy.appendFinal(inputText, text)
+                if (merged != inputText) onInputChange(merged)
+            },
+            onError = { message ->
+                listening = false
+                partial = ""
+                speechToast.post(
+                    if (message == null) R.string.speech_unavailable else R.string.speech_failed,
+                    message ?: "",
+                )
+            },
+        )
+        listening = true
+    }
+    fun stopDictation() {
+        speech.stop()
+        listening = false
+        partial = ""
+    }
+
+    val micPermission =
+        rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            if (granted) {
+                startDictation()
+            } else {
+                speechToast.post(R.string.speech_permission_denied)
+            }
+        }
     val onRemoveAttachment = actions.onRemoveAttachment
     val onClearAttachments = actions.onClearAttachments
     val onPickCommand = actions.onPickCommand
@@ -580,6 +636,53 @@ internal fun Composer(
                             Icons.Default.Add,
                             contentDescription = stringResource(R.string.add_images_and_files),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // Speech-to-text: only when the switch is on AND the device can recognise.
+                    if (speechInputEnabled && speech.available()) {
+                        IconButton(
+                            onClick = {
+                                if (listening) {
+                                    stopDictation()
+                                } else if (speech.hasPermission()) {
+                                    startDictation()
+                                } else {
+                                    micPermission.launch(android.Manifest.permission.RECORD_AUDIO)
+                                }
+                            },
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(
+                                if (listening) Icons.Default.Mic else Icons.Default.MicNone,
+                                contentDescription =
+                                    stringResource(
+                                        if (listening) R.string.speech_stop else R.string.speech_start,
+                                    ),
+                                tint =
+                                    if (listening) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                            )
+                        }
+                    }
+                    // Live preview of the running dictation: it shows what WOULD be appended
+                    // without writing into the field.
+                    if (listening) {
+                        Text(
+                            text =
+                                (stringResource(R.string.speech_listening) +
+                                    (
+                                        com.opencode.android.util.DictationPolicy
+                                            .listeningLabel(partial)
+                                            ?.let { " $it" }
+                                            ?: ""
+                                    )),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                     BasicTextField(

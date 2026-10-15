@@ -119,6 +119,13 @@ object AppSettingsStore {
          * the session. Talks to a model, so it stays switchable.
          */
         val quickPromptsEnabled: Boolean = true,
+        /**
+         * Speech-to-text in the composer (microphone button).
+         *
+         * Uses the device's recognition service, so it stays switchable: off hides the control and
+         * refuses to start listening.
+         */
+        val speechInputEnabled: Boolean = true,
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -200,6 +207,7 @@ object AppSettingsStore {
             journalAutoInject = prefs.getBoolean("journalAutoInject", true),
             insightCompactEnabled = prefs.getBoolean("insightCompactEnabled", true),
             quickPromptsEnabled = prefs.getBoolean("quickPromptsEnabled", true),
+            speechInputEnabled = prefs.getBoolean("speechInputEnabled", true),
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -279,6 +287,8 @@ object AppSettingsStore {
     fun setInsightCompactEnabled(v: Boolean) = update { it.putBoolean("insightCompactEnabled", v) }
 
     fun setQuickPromptsEnabled(v: Boolean) = update { it.putBoolean("quickPromptsEnabled", v) }
+
+    fun setSpeechInputEnabled(v: Boolean) = update { it.putBoolean("speechInputEnabled", v) }
 
     /**
      * Sets the timeline detail AND the three switches it presets, so the control
@@ -432,6 +442,7 @@ object AppSettingsStore {
                 putBoolean("journalAutoInject", parsed.journalAutoInject)
                 putBoolean("insightCompactEnabled", parsed.insightCompactEnabled)
                 putBoolean("quickPromptsEnabled", parsed.quickPromptsEnabled)
+                putBoolean("speechInputEnabled", parsed.speechInputEnabled)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

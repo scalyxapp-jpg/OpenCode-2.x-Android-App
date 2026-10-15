@@ -2100,6 +2100,7 @@ internal fun SessionTab(
             outboxCount = uiState.outbox.size,
             outboxFlushing = uiState.outboxFlushing,
             followUpBehavior = appSettings.followUpBehavior,
+            speechInputEnabled = appSettings.speechInputEnabled,
             showAgent = appSettings.showCustomAgents,
             agents = uiState.agents,
             models = uiState.models,

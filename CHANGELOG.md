@@ -5,6 +5,49 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-10-15
+
+### Added
+
+**Speech-to-text im Composer.** Ein Mikrofon-Knopf links neben dem Eingabefeld diktiert direkt
+hinein — **an Ort und Stelle**, nicht über den Systemdialog: die Worte landen in dem Feld, das man
+ohnehin ansieht.
+
+- **In-Place-Erkennung** über `SpeechRecognizer` (der Dienst des Geräts macht die Arbeit; die App
+  schickt selbst kein Audio irgendwohin). Das Mikrofon ist **nur zwischen Start und Stopp** aktiv.
+- **Teilergebnisse werden nur VORSCHAUT**, nie ins Feld geschrieben: eine verhörte Zwischenstufe
+  kann die eigene Eingabe nicht überschreiben. Erst das **Endergebnis** wird angehängt.
+- **Zusammenfügen nach einer getesteten Regel** (`DictationPolicy`): genau ein Leerzeichen zwischen
+  den Teilen, nie zwei; ein bewusst gesetzter Zeilenumbruch bleibt ein Umbruch; ein leeres Ergebnis
+  (nur Leerzeichen) ändert **nichts** — eine stille Erkennung darf den Text nicht fressen.
+- **Zustand sichtbar:** während des Zuhörens steht über dem Feld „Listening… <Vorschau>", der Knopf
+  färbt sich rot und wird zum Stopp.
+- **Berechtigung**: `RECORD_AUDIO` wird erst beim ersten Tippen erfragt (Manifest + `<queries>` für
+  den Erkennungsdienst, damit er ab API 30 sichtbar ist). Verweigert = verständliche Meldung, kein
+  stiller Fehlschlag. Fehler des Dienstes werden übersetzt („Netzwerkproblem", „Mikrofon-Berechtigung
+  fehlt", „der Erkennungsdienst ist beschäftigt"); die Alltagsfälle „nichts gesagt"
+  (`ERROR_NO_MATCH`/`SPEECH_TIMEOUT`) melden bewusst **nichts** — der Knopf hört einfach auf.
+- **Schalter**: **Settings → „Speech input in the composer"** (Standard an). Aus = kein Mikrofon-
+  Knopf **und** kein Start; das Gerät ohne Erkennungsdienst zeigt den Knopf ebenfalls nicht
+  (`SpeechInput.available()`).
+- Aufgeräumt wird im `onDispose` des Composers (`destroy()`), damit der Erkennungsdienst nicht
+  weiterläuft, wenn der Chat verlassen wird.
+
+### Added (tests)
+
+- `DictationPolicyTest` (4 Fälle): leeres Feld, Anhängen mit genau einem Leerzeichen, ein
+  Whitespace-Ergebnis ändert nichts, Zeilenumbruch bleibt Umbruch, Vorschau == was gesendet würde.
+- Betroffen geprüft (nur diese Klassen): **40 Tests, 0 Fehler** (`DictationPolicyTest`,
+  `SessionMetaPolicyTest`, `CentrePolicyTest`, `CentralActionsTest`, `ExplainPolicyTest`).
+
+### Ehrlich offen
+
+- Die Erkennungsqualität kommt vom Dienst des Geräts (offline/online je nach Gerät) — die App
+  beeinflusst sie nicht und schickt selbst nichts.
+- Wird während des Zuhörens gesendet, läuft die Erkennung weiter und das Endergebnis füllt das
+  (dann leere) Feld. Bewusst nicht abgeschnitten: ein unterbrochener Diktat-Vorgang soll nicht
+  ohne Ergebnis verpuffen.
+
 ## [3.5.3] - 2026-10-15
 
 ### Fixed
