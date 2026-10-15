@@ -76,6 +76,16 @@ class SpeechErrorPolicyTest {
     }
 
     @Test
+    fun `what was already heard is rescued instead of reporting a failure`() {
+        // An engine that fails at the end usually heard most of the sentence: use it.
+        assertEquals(true, SpeechErrorPolicy.shouldRescuePartial("die letzten Worte fehlen", delivered = false))
+        // Nothing heard -> the failure stands (and gets reported).
+        assertEquals(false, SpeechErrorPolicy.shouldRescuePartial("   ", delivered = false))
+        // Already delivered -> no duplicate insert.
+        assertEquals(false, SpeechErrorPolicy.shouldRescuePartial("schon drin", delivered = true))
+    }
+
+    @Test
     fun `a real failure while the button is held still speaks up`() {
         assertEquals(
             true,

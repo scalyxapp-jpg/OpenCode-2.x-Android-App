@@ -313,6 +313,14 @@ internal fun Composer(
         speech.start(
             options = options,
             onPartial = { lastPartial = it },
+            // A chunk the engine finalised while the finger STAYS on the button: insert it now and
+            // keep recording, so the rest of the sentence is not cut off (reported).
+            onChunk = { chunk ->
+                val text = com.opencode.android.util.DictationPolicy.finalize(chunk, speechPunctuation)
+                if (text.isNotEmpty()) {
+                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, text))
+                }
+            },
             onFinal = { text ->
                 listening = false
                 // Spoke, released, engine returned nothing: use the last partial it already heard

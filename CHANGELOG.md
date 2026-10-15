@@ -5,6 +5,48 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.3] - 2026-10-15
+
+### Fixed
+
+**Die letzten Worte waren abgeschnitten.** Ursache: Erkenner beenden eine Äußerung **selbst** an
+ihrer eigenen Stille-Schwelle — *während* der Knopf noch gehalten wird. Bisher nahm die App dieses
+Ergebnis entgegen und hörte auf: alles, was danach gesprochen wurde, war verloren. Jetzt wird ein
+solches Ergebnis **eingefügt und die Aufnahme läuft weiter, solange der Finger auf dem Knopf
+bleibt** (`onChunk`). Push-to-Talk bleibt unangetastet — es wird nur weiter aufgenommen, während
+gehalten wird. Der Test pinnt die Rettungsregel.
+
+**„speech recognition failed" trotz erkannter Worte.** Scheitert der Erkenner am Ende, hat er
+meist **den größten Teil schon gehört**. Bisher wurde das weggeworfen und eine Meldung gezeigt —
+das Schlechteste aus beidem. Neu (`SpeechErrorPolicy.shouldRescuePartial`): Ist ein Teilergebnis da
+und wurde noch nichts eingefügt, wird **das Teilergebnis gerettet** und **keine** Meldung gezeigt.
+Eine Meldung kommt nur noch, wenn wirklich **nichts** gehört wurde.
+
+**Die Diagnose erreichte im Release nie das Log.** `AppLog` ist absichtlich stumm, wenn der Build
+nicht debuggable ist (`FLAG_DEBUGGABLE`) — richtig für Entwickler-Rauschen, aber es machte die
+letzte Fehlermeldung **undiagnostizierbar**: das Log war leer. Neu: `DictationLog` schreibt
+**immer** (Tag `OpenCodeDictation`) — Fehler mit **Rohcode**, Zustand (gehalten?), Anzahl
+eingefügter Zeichen und Länge des Teilergebnisses. **Kein Nutzertext** wird protokolliert (Diktat
+ist privat, für die Diagnose genügen Zahlen).
+
+### Diagnose am Gerät (aus dem Logcat des Nutzers)
+
+```
+SodaSpeechRecognizer: Failed to get language pack of required locale: error 13
+```
+Der On-Device-Erkenner (SODA/S3) hatte **kein Sprachpaket** für die eingestellte Sprache. Alle drei
+Vorkommen gehörten zu **`locale: de-DE`** — also zu **meiner** Sprachumstellung aus der letzten
+Runde; mit dem Geräte-Locale (`de-CH`) trat der Fehler nicht auf. Die Einstellung steht deshalb
+wieder auf **„System (device setting)"**, und die Doku sagt jetzt ehrlich: Eine Sprache nur wählen,
+wenn das Gerät dafür ein **On-Device-Paket** hat — sonst scheitert die Erkennung, und weder
+Abschneiden noch Fehlermeldung sind dann App-Fehler.
+
+### Added (tests)
+
+- `SpeechErrorPolicyTest` (7, +1): Teilergebnis wird gerettet statt zu melden — aber nur, wenn etwas
+  gehört wurde und noch nichts eingefügt ist.
+- Betroffen geprüft (nur diese Klassen): **21 Tests, 0 Fehler**.
+
 ## [3.8.2] - 2026-10-15
 
 ### Fixed

@@ -77,6 +77,18 @@ object SpeechErrorPolicy {
      * Reported only when the attempt is still the current one, the user did NOT end it, nothing was
      * delivered yet, and the reason is worth telling ([isReportable]).
      */
+    /**
+     * Whether the partial the engine already produced should be used instead of reporting a failure.
+     *
+     * An engine that fails at the END of an utterance has usually heard most of it. Throwing that
+     * away to print "failed" is the worst of both worlds: the user gets neither their words nor a
+     * useful message. Only when nothing was heard does the failure stand.
+     */
+    fun shouldRescuePartial(
+        partial: String,
+        delivered: Boolean,
+    ): Boolean = !delivered && partial.trim().isNotEmpty()
+
     fun shouldReport(
         error: SpeechError,
         stale: Boolean,

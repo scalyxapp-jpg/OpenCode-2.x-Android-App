@@ -58,6 +58,13 @@ internal class SpeechInput(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
         onError: (com.opencode.android.util.SpeechError, String?) -> Unit,
+        /**
+         * Text the engine finalised WHILE the button is still held.
+         *
+         * Engines end an utterance on their own silence threshold even mid-hold; without this the
+         * words spoken afterwards were lost - the reported "the last words are cut off".
+         */
+        onChunk: (String) -> Unit = {},
     ) {
         if (listening) return
         // Bump BEFORE touching the old engine: its callbacks must not be attributed to this attempt.
@@ -69,6 +76,10 @@ internal class SpeechInput(
         // arrived while the previous attempt was still tearing down) is not worth a message while
         // the user is holding the button.
         var retried = false
+        // Everything delivered for this attempt, so an error can tell "nothing at all" from "some
+        // words already arrived" (the latter must never produce a failure message).
+        var deliveredChars = 0
+        var lastPartial = ""
 
         fun begin() {
             releaseEngine()
@@ -98,19 +109,35 @@ internal class SpeechInput(
                     override fun onError(error: Int) {
                         if (mine != generation) return
                         val classified = com.opencode.android.util.SpeechErrorPolicy.classify(error)
-                        // Every failure is logged WITH its raw code: the log is the only way to tell
-                        // "the engine was busy" from "the network conked out" afterwards.
-                        com.opencode.android.util.AppLog.w(
-                            com.opencode.android.util.APP_LOG_TAG,
-                        ) { "dictation: $classified (raw code $error, held=${!stoppedByUser})" }
+                        // Always-on diagnostics with the raw code: the app's own logger is silent in
+                        // release builds, which is why the last report had an EMPTY log.
+                        com.opencode.android.util.DictationLog.failure(
+                            error = classified,
+                            rawCode = error,
+                            held = !stoppedByUser,
+                            deliveredChars = deliveredChars,
+                            partialChars = lastPartial.length,
+                        )
+                        // Rescue what was already heard: an engine that fails at the end must not
+                        // throw away the words it produced (and must not shout "failed" when it has
+                        // something to show).
+                        val rescue = lastPartial.trim()
+                        if (com.opencode.android.util.SpeechErrorPolicy.shouldRescuePartial(lastPartial, delivered)) {
+                            delivered = true
+                            com.opencode.android.util.DictationLog.state(
+                                "error ${error}, rescuing the ${rescue.length}-char partial",
+                            )
+                            onChunk(rescue)
+                            listening = false
+                            onFinal("")
+                            return
+                        }
                         val retryable =
                             classified == com.opencode.android.util.SpeechError.Busy ||
                                 error == CLIENT_ERROR
                         if (!retried && !stoppedByUser && !delivered && retryable) {
                             retried = true
-                            com.opencode.android.util.AppLog.d(
-                                com.opencode.android.util.APP_LOG_TAG,
-                            ) { "dictation: retrying once after $classified" }
+                            com.opencode.android.util.DictationLog.state("retrying once after $classified")
                             begin()
                             return
                         }
@@ -129,16 +156,35 @@ internal class SpeechInput(
 
                     override fun onResults(results: Bundle?) {
                         if (mine != generation) return
-                        listening = false
-                        delivered = true
                         val text =
                             results
                                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                                 ?.firstOrNull()
                                 .orEmpty()
-                        com.opencode.android.util.AppLog.d(
-                            com.opencode.android.util.APP_LOG_TAG,
-                        ) { "dictation: final result with ${text.length} chars" }
+                                .trim()
+                        if (text.isEmpty() && lastPartial.trim().isEmpty()) {
+                            delivered = true
+                            listening = false
+                            onFinal("")
+                            return
+                        }
+                        // Still holding? The engine just ended an utterance on its own threshold -
+                        // insert what it heard and KEEP RECORDING, so the rest of the sentence is
+                        // not lost (the reported truncation).
+                        if (!stoppedByUser) {
+                            val chunk = text.ifEmpty { lastPartial.trim() }
+                            deliveredChars += chunk.length
+                            com.opencode.android.util.DictationLog.chunk(chunk.length)
+                            if (chunk.isNotEmpty()) onChunk(chunk)
+                            lastPartial = ""
+                            if (text.isNotEmpty()) {
+                                // A fresh engine for the next utterance; the attempt stays the same.
+                                begin()
+                                return
+                            }
+                        }
+                        delivered = true
+                        listening = false
                         onFinal(text)
                     }
 
@@ -148,7 +194,10 @@ internal class SpeechInput(
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.firstOrNull()
                             ?.takeIf { it.isNotBlank() }
-                            ?.let(onPartial)
+                            ?.let {
+                                lastPartial = it
+                                onPartial(it)
+                            }
                     }
 
                     override fun onEvent(eventType: Int, params: Bundle?) = Unit
