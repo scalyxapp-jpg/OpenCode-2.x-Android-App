@@ -5,6 +5,41 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.3] - 2026-10-15
+
+### Fixed
+
+**Eine neue Session behielt den Namen „new session", obwohl der Server sie längst benannt hatte.**
+
+Live gegen den laufenden Server reproduziert: Eine Session **ohne** Titel angelegt, erster Prompt
+gesendet — nach **~3 Sekunden** stand serverseitig der generierte Titel
+(`„Berechtigungsprüfung im Login korrigieren"`). Der Server ist also in Ordnung.
+
+Der Fehler saß im Poller der App: Er las die Session alle 5 s neu, refreshte die Metadaten
+(Titel!) aber **nur wenn sich `time.updated` geändert hatte**. Genau das tut das Benennen einer
+Session **nicht** — der Server setzt den Titel, ohne den Zeitstempel anzufassen. Also lief der
+Refresh nie, `uiState.session.title` blieb der Platzhalter, und der Titel kam erst nach einem
+kompletten Neuladen an. Der Mechanismus war übrigens schon richtig gebaut
+(`refreshSessionModel` kopiert den Titel, samt Kommentar „the server names a session from its
+first turn") — er wurde nur nie ausgelöst.
+
+**Fix (getestete Regel statt Bedingung im Poller):** `SessionMetaPolicy.needsMetaRefresh` — ein
+**abweichender, nicht-leerer** Server-Titel ist sein eigener Auslöser. Bewusst konservativ:
+Ein leerer Titel (Server generiert noch, oder ein Build, der Sessions nie benennt) **löscht nie**
+den angezeigten Namen, und ohne Änderung wird nichts gelesen.
+
+**Plus:** Der 5-s-Poller pausiert bei ausgeschaltetem Bildschirm — kehrt man zurück, wird die
+Meta **einmal sofort** nachgezogen (`setScreenVisible`, nur beim Übergang von unsichtbar →
+sichtbar), damit ein im Hintergrund vergebener Titel nicht einen weiteren Tick wartet.
+
+### Added (tests)
+
+- `SessionMetaPolicyTest` (3 Fälle): ankommender Titel ist ein eigener Auslöser, nichts passiert
+  ohne Änderung, ein leerer/whitespace Server-Titel ändert nichts, neue Inhalte refreshen
+  unabhängig vom Titel.
+- Betroffen geprüft (nur diese Klassen): **36 Tests, 0 Fehler** (`SessionMetaPolicyTest`,
+  `CentrePolicyTest`, `CentralActionsTest`, `ExplainPolicyTest`).
+
 ## [3.5.2] - 2026-10-14
 
 **Die Zentrale wird alltagstauglich: sie zeigt nicht mehr nur, sie lässt einen sofort weitermachen.**

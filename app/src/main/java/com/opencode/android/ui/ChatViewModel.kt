@@ -966,7 +966,9 @@ class ChatViewModel
                     } catch (e: Exception) {
                         // Message only: a cancelled request surfaces as
                         // "Socket closed" and a full stack is pure noise here.
-                        val gone = com.opencode.android.util.isGoneError(e)
+                        val gone =
+                            com.opencode.android.util
+                                .isGoneError(e)
                         AppLog.e(APP_LOG_TAG, "loadSession ERROR: ${e.message}")
                         if (!gone) {
                             // A gone session is explained inline (the card below); a snackbar
@@ -1422,7 +1424,9 @@ class ChatViewModel
          * [com.opencode.android.ui.explain.ExplainPolicy.target] (pure, tested).
          */
         fun explainPart(part: Part) {
-            val target = com.opencode.android.ui.explain.ExplainPolicy.target(part) ?: return
+            val target =
+                com.opencode.android.ui.explain.ExplainPolicy
+                    .target(part) ?: return
             if (target.snippet.isBlank()) return
             explain(target.kind, target.snippet, target.label)
         }
@@ -2727,7 +2731,16 @@ class ChatViewModel
         private var screenVisible: Boolean = true
 
         fun setScreenVisible(visible: Boolean) {
+            val becameVisible = visible && !screenVisible
             screenVisible = visible
+            // The 5 s poll pauses while the screen is off, so a title the server generated in
+            // the meantime (it names a session without touching `time.updated`) would only
+            // arrive on the next tick. One refresh on the way back makes it immediate.
+            if (becameVisible) {
+                _uiState.value.session
+                    ?.id
+                    ?.let { sessionId -> refreshSessionModel(sessionId) }
+            }
         }
 
         private fun startPolling(sessionId: String) {
@@ -2761,8 +2774,21 @@ class ChatViewModel
                                 // running is cheap insurance against that.
                                 conversationPort.resyncSessionStatus()
                             }
-                            val updated = repo.session(sessionId).time?.updated
-                            if (updated != null && updated != lastPollUpdated) {
+                            val fresh = repo.session(sessionId)
+                            val updated = fresh.time?.updated
+                            val contentChanged = updated != null && updated != lastPollUpdated
+                            // The server names a session from its first turn WITHOUT bumping
+                            // `time.updated`, so a title change has to be its own trigger -
+                            // otherwise the generated title never reached the app and the
+                            // session kept its placeholder name (reported).
+                            val titleArrived =
+                                com.opencode.android.ui.session.SessionMetaPolicy.needsMetaRefresh(
+                                    serverTitle = fresh.title,
+                                    currentTitle = _uiState.value.session?.title,
+                                    contentChanged = false,
+                                )
+                            if (titleArrived) refreshSessionModel(sessionId)
+                            if (contentChanged) {
                                 lastPollUpdated = updated
                                 refreshSessionModel(sessionId)
                                 refreshMessages(sessionId)
