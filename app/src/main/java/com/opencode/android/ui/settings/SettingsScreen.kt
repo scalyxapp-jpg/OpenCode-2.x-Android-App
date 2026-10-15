@@ -290,6 +290,36 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_speech_punctuation),
+                subtitle = stringResource(R.string.settings_speech_punctuation_sub),
+                checked = settings.speechPunctuation,
+                onCheckedChange = { AppSettingsStore.setSpeechPunctuation(it) },
+            )
+        }
+        item {
+            SettingDropdown(
+                title = stringResource(R.string.settings_speech_language),
+                subtitle = stringResource(R.string.settings_speech_language_sub),
+                value = settings.speechLanguage,
+                options =
+                    listOf(
+                        "" to stringResource(R.string.settings_speech_language_system),
+                        "de-DE" to "Deutsch (de-DE)",
+                        "en-US" to "English (en-US)",
+                        "en-GB" to "English (en-GB)",
+                        "fr-FR" to "Français (fr-FR)",
+                        "es-ES" to "Español (es-ES)",
+                        "it-IT" to "Italiano (it-IT)",
+                        "nl-NL" to "Nederlands (nl-NL)",
+                        "pl-PL" to "Polski (pl-PL)",
+                        "tr-TR" to "Türkçe (tr-TR)",
+                        "ru-RU" to "Русский (ru-RU)",
+                    ),
+                onSelect = { AppSettingsStore.setSpeechLanguage(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_speech_quality),
                 subtitle = stringResource(R.string.settings_speech_quality_sub),
                 checked = settings.speechQuality,

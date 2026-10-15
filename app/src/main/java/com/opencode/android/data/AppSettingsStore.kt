@@ -130,6 +130,18 @@ object AppSettingsStore {
         val speechQuality: Boolean = true,
         /** Prefer on-device recognition: no network round trip, sometimes less accurate. */
         val speechOfflinePreferred: Boolean = false,
+        /**
+         * Convert spoken punctuation and line commands ("… Punkt", "neue Zeile") into the real
+         * thing. Sentence marks only at the end of a phrase - they are ambiguous in natural speech.
+         */
+        val speechPunctuation: Boolean = true,
+        /**
+         * Language the recognizer should expect; empty = the device's own choice.
+         *
+         * A bilingual user (German sentences, English tool names) gets whole words wrong when the
+         * engine guesses, so this is worth being explicit about.
+         */
+        val speechLanguage: String = "",
         // appearance
         val colorScheme: String = "system",
         val theme: String = "default",
@@ -214,6 +226,8 @@ object AppSettingsStore {
             speechInputEnabled = prefs.getBoolean("speechInputEnabled", true),
             speechQuality = prefs.getBoolean("speechQuality", true),
             speechOfflinePreferred = prefs.getBoolean("speechOfflinePreferred", false),
+            speechPunctuation = prefs.getBoolean("speechPunctuation", true),
+            speechLanguage = prefs.getString("speechLanguage", "") ?: "",
             colorScheme = prefs.getString("colorScheme", "system") ?: "system",
             theme = prefs.getString("theme", "default") ?: "default",
             fontSize = prefs.getInt("fontSize", 14),
@@ -299,6 +313,10 @@ object AppSettingsStore {
     fun setSpeechQuality(v: Boolean) = update { it.putBoolean("speechQuality", v) }
 
     fun setSpeechOfflinePreferred(v: Boolean) = update { it.putBoolean("speechOfflinePreferred", v) }
+
+    fun setSpeechPunctuation(v: Boolean) = update { it.putBoolean("speechPunctuation", v) }
+
+    fun setSpeechLanguage(v: String) = update { it.putString("speechLanguage", v) }
 
 
     /**
@@ -456,6 +474,8 @@ object AppSettingsStore {
                 putBoolean("speechInputEnabled", parsed.speechInputEnabled)
                 putBoolean("speechQuality", parsed.speechQuality)
                 putBoolean("speechOfflinePreferred", parsed.speechOfflinePreferred)
+                putBoolean("speechPunctuation", parsed.speechPunctuation)
+                putString("speechLanguage", parsed.speechLanguage)
                 putString("colorScheme", parsed.colorScheme)
                 putString("theme", parsed.theme)
                 putInt("fontSize", parsed.fontSize)

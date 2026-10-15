@@ -232,6 +232,9 @@ internal fun Composer(
     /** Settings → dictation quality/behaviour (passed through to the request policy). */
     speechQuality: Boolean = true,
     speechOfflinePreferred: Boolean = false,
+    /** Settings → spoken punctuation and dictation language. */
+    speechPunctuation: Boolean = true,
+    speechLanguage: String = "",
     /** Title of the open session: supplies the vocabulary hint for dictation. */
     speechSessionTitle: String? = null,
     /** Prompts waiting in the offline outbox for this session. */
@@ -263,13 +266,19 @@ internal fun Composer(
     val speechContext = androidx.compose.ui.platform.LocalContext.current
     val speech = remember { SpeechInput(speechContext) }
     var listening by remember { mutableStateOf(false) }
+    /** Last partial of the running attempt: the fallback when the engine returns nothing. */
+    var lastPartial by remember { mutableStateOf("") }
     DisposableEffect(Unit) { onDispose { speech.destroy() } }
     val speechToast = com.opencode.android.util.UserMessages
     val micPermission =
         rememberLauncherForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
         ) { granted ->
-            if (!granted) speechToast.post(R.string.speech_permission_denied)
+            // Granting must NOT start a recording by itself: the finger is already off the button,
+            // and nothing may record without it. Say what to do instead.
+            speechToast.post(
+                if (granted) R.string.speech_permission_granted else R.string.speech_permission_denied,
+            )
         }
 
     /** Records until [stopDictation]; the final result lands in the composer. */
@@ -284,26 +293,37 @@ internal fun Composer(
                 optimizeQuality = speechQuality,
                 // The device's language, made explicit: an engine that guesses wrong costs whole
                 // words.
+                // An explicit choice wins; otherwise the device's own language, sent
+                // explicitly because an engine that guesses costs whole words.
                 languageTag =
-                    if (android.os.Build.VERSION.SDK_INT >= 24) {
-                        java.util.Locale.getDefault().toLanguageTag()
-                    } else {
-                        null
-                    },
+                    speechLanguage.takeIf { it.isNotBlank() }
+                        ?: if (android.os.Build.VERSION.SDK_INT >= 24) {
+                            java.util.Locale.getDefault().toLanguageTag()
+                        } else {
+                            null
+                        },
                 biasing =
                     com.opencode.android.util.SpeechRequestPolicy.biasingFor(speechSessionTitle) +
                         (if (speechQuality) com.opencode.android.util.SpeechRequestPolicy.DOMAIN_WORDS else emptyList()),
             )
+        lastPartial = ""
         speech.start(
             options = options,
-            onPartial = { },
+            onPartial = { lastPartial = it },
             onFinal = { text ->
                 listening = false
-                // Straight into the composer: polished and merged, no intermediate window, no
-                // notification about it.
-                val polished = com.opencode.android.util.DictationPolicy.polish(text)
-                if (polished.isNotEmpty()) {
-                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, polished))
+                // Spoke, released, engine returned nothing: use the last partial it already heard
+                // instead of dropping the words (on-device engines do this regularly).
+                val source =
+                    text.ifBlank {
+                        com.opencode.android.util.DictationPolicy.fallbackFromPartial(lastPartial)
+                    }
+                lastPartial = ""
+                // Straight into the composer: finalised text, no intermediate window, no message.
+                val finalText =
+                    com.opencode.android.util.DictationPolicy.finalize(source, speechPunctuation)
+                if (finalText.isNotEmpty()) {
+                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, finalText))
                 }
             },
             onError = { error, message ->

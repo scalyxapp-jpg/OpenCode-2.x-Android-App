@@ -665,4 +665,10 @@
     <string name="settings_speech_offline" formatted="false">Dictate on-device only</string>
     <string name="settings_speech_offline_sub" formatted="false">No network round trip for recognition — faster and private, occasionally less accurate than the online model.</string>
     <string name="speech_hold_to_talk" formatted="false">Hold to dictate — release to insert the text</string>
+    <string name="settings_speech_punctuation" formatted="false">Spoken punctuation</string>
+    <string name="settings_speech_punctuation_sub" formatted="false">Turn “… Punkt”, “… question mark” and “neue Zeile” into real punctuation. Sentence marks only count at the END of a phrase, because “der Punkt ist wichtig” means the point, not a full stop.</string>
+    <string name="settings_speech_language" formatted="false">Dictation language</string>
+    <string name="settings_speech_language_sub" formatted="false">Which language the recognizer expects. “System” lets the device decide; naming it helps when you speak one language and dictate tool names from another.</string>
+    <string name="settings_speech_language_system" formatted="false">System (device setting)</string>
+    <string name="speech_permission_granted" formatted="false">Microphone allowed — hold the button again to dictate.</string>
 </resources>

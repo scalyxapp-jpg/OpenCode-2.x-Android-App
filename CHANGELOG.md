@@ -5,6 +5,39 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-10-15
+
+**Diktat, zweite Ausbaustufe: saubere Sätze, verlässliche Wörter, nichts geht verloren.**
+
+### Added
+
+- **Gesprochene Satzzeichen.** „… Punkt" / „… period" → `.`, „… Fragezeichen" / „… question mark" →
+  `?`, `!`, `:`, `;` — und Zeilenbefehle („neue Zeile", „new line", „neuer Absatz") werden ein
+  echter Umbruch. **Bewusst konservativ:** ein Satzzeichen zählt **nur am Ende** der Phrase, denn
+  „der Punkt ist wichtig" meint *den Punkt*. Zeilenbefehle sind eindeutig und wirken überall.
+  Doppelte Umbrüche werden zusammengezogen (`DictationPolicy.applySpokenPunctuation`, getestet).
+- **Fallback auf das letzte Teilergebnis.** „Gesprochen, losgelassen, nichts passiert" ist der
+  ärgerlichste Diktat-Fall — und auf Geräten kommt genau das vor: der Erkenner liefert ein **leeres**
+  Endergebnis, obwohl er beim Halten saubere Zwischenergebnisse hatte. Jetzt wird das letzte
+  Teilergebnis benutzt, statt die Worte wegzuwerfen.
+- **Sprachwahl** (Settings → „Dictation language": System + 10 gängige Sprachen). Ein Erkenner, der
+  die Sprache raten muss, kostet ganze Wörter — besonders wenn man deutsche Sätze mit englischen
+  Werkzeugnamen diktiert. Ein expliziter Eintrag schlägt die Geräteeinstellung, sonst bleibt es beim
+  Gerät (aber **explizit** gesendet).
+- **Politur über den ganzen Text:** nicht mehr nur der erste Buchstabe, sondern **jeder Satz- und
+  Zeilenanfang** wird groß („erste zeile. zweite zeile" → „Erste zeile. Zweite zeile"). Rein
+  orthografisch, kein Wort wird verändert.
+- **Ehrlicher Hinweis nach der Berechtigung.** Wird das Mikrofon erstmals erlaubt, **startet keine
+  Aufnahme von selbst** (das würde die Push-to-Talk-Regel brechen): es steht da, dass man den Knopf
+  erneut halten soll. Vorher passierte nach dem Erlauben schlicht nichts.
+
+### Added (tests)
+
+- `DictationPolicyTest` (9, +5): Satzzeichen am Ende, **kein** Umbau mitten im Satz („der Punkt ist
+  wichtig", „ein Komma setzen"), Zeilenbefehle (auch doppelt → ein Umbruch), die Pipeline
+  (Punctuation → Politur), Mehrsatz-Politur und der Teilergebnis-Fallback.
+- Betroffen geprüft (nur diese Klassen): **51 Tests, 0 Fehler**.
+
 ## [3.7.1] - 2026-10-15
 
 ### Changed
