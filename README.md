@@ -52,6 +52,7 @@ After installing, open the app and enter your OpenCode server address — see
 - [Download](#download)
 - [Features](#features)
 - [Feature documentation (detailed)](docs/FEATURES.md)
+- [Design & corporate identity guide](docs/CI-GUIDE.md)
 - [Requirements](#requirements)
 - [Getting started](#getting-started)
 - [Configuration](#configuration)
