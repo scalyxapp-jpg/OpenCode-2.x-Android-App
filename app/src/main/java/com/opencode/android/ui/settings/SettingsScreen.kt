@@ -290,6 +290,30 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_speech_quality),
+                subtitle = stringResource(R.string.settings_speech_quality_sub),
+                checked = settings.speechQuality,
+                onCheckedChange = { AppSettingsStore.setSpeechQuality(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_speech_offline),
+                subtitle = stringResource(R.string.settings_speech_offline_sub),
+                checked = settings.speechOfflinePreferred,
+                onCheckedChange = { AppSettingsStore.setSpeechOfflinePreferred(it) },
+            )
+        }
+        item {
+            SettingSwitch(
+                title = stringResource(R.string.settings_speech_continuous),
+                subtitle = stringResource(R.string.settings_speech_continuous_sub),
+                checked = settings.speechContinuous,
+                onCheckedChange = { AppSettingsStore.setSpeechContinuous(it) },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_quick_prompts),
                 subtitle = stringResource(R.string.settings_quick_prompts_sub),
                 checked = settings.quickPromptsEnabled,

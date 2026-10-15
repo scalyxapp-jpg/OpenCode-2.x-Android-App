@@ -662,4 +662,13 @@
     <string name="speech_unavailable" formatted="false">No speech recognition available on this device.</string>
     <string name="speech_permission_denied" formatted="false">Microphone permission is needed for dictation.</string>
     <string name="speech_failed" formatted="false">Speech recognition failed: %1$s</string>
+    <string name="speech_busy" formatted="false">The recognizer was still finishing the last attempt — tap the microphone again.</string>
+    <string name="settings_speech_quality" formatted="false">Accurate dictation</string>
+    <string name="settings_speech_quality_sub" formatted="false">Ask the recognizer for punctuation and casing quality, and bias it towards the words of your work (domain vocabulary plus the current session title).</string>
+    <string name="settings_speech_offline" formatted="false">Dictate on-device only</string>
+    <string name="settings_speech_offline_sub" formatted="false">No network round trip for recognition — faster and private, occasionally less accurate than the online model.</string>
+    <string name="settings_speech_continuous" formatted="false">Keep listening between sentences</string>
+    <string name="settings_speech_continuous_sub" formatted="false">After each recognized sentence the microphone stays on, so you can dictate a whole prompt without tapping again. The level bar shows it is still hearing you.</string>
+    <string name="speech_undo" formatted="false">Undo</string>
+    <string name="speech_added" formatted="false">Dictated: %1$s</string>
 </resources>

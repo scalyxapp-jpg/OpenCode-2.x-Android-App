@@ -40,6 +40,45 @@ object DictationPolicy {
         partial: String,
     ): String = appendFinal(current, partial)
 
+    /**
+     * Cleans a recognized phrase before it is appended.
+     *
+     * Recognition returns lowercase run-on text ("wrote the tests") while the field may open a
+     * sentence — so the first letter is capitalised. Runs of spaces inside the phrase are collapsed
+     * (engines emit them around pauses), line breaks are left alone, and a code-ish token like
+     * `AppSettingsStore` is not touched beyond that.
+     */
+    fun polish(recognized: String): String {
+        val collapsed =
+            recognized
+                .trim()
+                .replace(Regex("[ \t]{2,}"), " ")
+        if (collapsed.isEmpty()) return collapsed
+        val first = collapsed.first()
+        return if (first.isLetter()) collapsed.replaceFirstChar { it.uppercaseChar() } else collapsed
+    }
+
+    /**
+     * Removes exactly what dictation appended, for the "Undo" action.
+     *
+     * Only the tail is touched, and only when it really ends with the appended text: an undo must
+     * never eat what the user typed by hand.
+     */
+    fun undoAppend(
+        current: String,
+        appended: String,
+    ): String {
+        val tail = appended.trim()
+        if (tail.isEmpty()) return current
+        val trimmed = current.trimEnd()
+        return when {
+            trimmed == tail -> ""
+            trimmed.endsWith(" $tail") -> trimmed.dropLast(tail.length + 1)
+            trimmed.endsWith("\n$tail") -> trimmed.dropLast(tail.length + 1)
+            else -> current
+        }
+    }
+
     /** Short status line for the listening state, so the control says what it is doing. */
     fun listeningLabel(partial: String?): String? = partial?.trim()?.takeIf { it.isNotEmpty() }
 }

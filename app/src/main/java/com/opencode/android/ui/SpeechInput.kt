@@ -41,31 +41,36 @@ internal class SpeechInput(
      * Calling it while already listening is a no-op.
      */
     fun start(
+        options: com.opencode.android.util.SpeechOptions,
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit,
-        onError: (String?) -> Unit,
+        onError: (com.opencode.android.util.SpeechError, String?) -> Unit,
+        /** 0..1 input level while the user speaks, for a level meter. */
+        onLevel: (Float) -> Unit = {},
     ) {
         if (listening) return
-        if (!available()) {
-            onError(null)
+        // Fresh engine per attempt. Reusing one instance after an error or a cancel is what made
+        // dictation work "sometimes": a wedged recognizer accepts no further start.
+        releaseEngine()
+        // `isRecognitionAvailable()` is deliberately NOT a gate: on some builds (Samsung in
+        // particular) it answers false while a recognizer can be created fine. It is only used for
+        // the wording when creation genuinely fails.
+        val engine = createEngine() ?: createEngine()
+        if (engine == null) {
+            onError(com.opencode.android.util.SpeechError.Unavailable, null)
             return
         }
-        val engine =
-            recognizer
-                ?: runCatching { SpeechRecognizer.createSpeechRecognizer(context) }
-                    .getOrNull()
-                    ?.also { recognizer = it }
-                ?: run {
-                    onError(null)
-                    return
-                }
+        recognizer = engine
         engine.setRecognitionListener(
             object : RecognitionListener {
                 override fun onReadyForSpeech(params: Bundle?) = Unit
 
                 override fun onBeginningOfSpeech() = Unit
 
-                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onRmsChanged(rmsdB: Float) {
+                    // The platform reports roughly -2..10 dBFS; normalise for a meter.
+                    onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
+                }
 
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
 
@@ -73,10 +78,15 @@ internal class SpeechInput(
 
                 override fun onError(error: Int) {
                     listening = false
-                    // ERROR_NO_MATCH / SPEECH_TIMEOUT are the everyday "nothing was said": no
-                    // message spam for those, the button simply stops.
-                    val silent = error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
-                    onError(if (silent) null else errorLabel(error))
+                    // Classified, not guessed: "heard nothing" stays silent, "still busy" invites a
+                    // retry, and only a real failure talks about the service. The previous version
+                    // collapsed the silent case into "no recognition available" - which told users
+                    // their device cannot dictate when it can.
+                    onError(
+                        com.opencode.android.util.SpeechErrorPolicy
+                            .classify(error),
+                        errorLabel(error),
+                    )
                 }
 
                 override fun onResults(results: Bundle?) {
@@ -103,18 +113,76 @@ internal class SpeechInput(
                 ) = Unit
             },
         )
-        val intent =
-            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-            }
         listening = true
-        runCatching { engine.startListening(intent) }
-            .onFailure {
+        runCatching { engine.startListening(recognitionIntent(options)) }
+            .onFailure { failure ->
                 listening = false
-                onError(it.message)
+                releaseEngine()
+                onError(com.opencode.android.util.SpeechError.Failed, failure.message)
             }
+    }
+
+    /** The recognizer's own wording for an error code, used as the detail of a failure. */
+    fun errorLabel(error: Int): String? =
+        when (error) {
+            SpeechRecognizer.ERROR_AUDIO -> "audio problem"
+            SpeechRecognizer.ERROR_CLIENT -> "client error"
+            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "microphone permission missing"
+            SpeechRecognizer.ERROR_NETWORK -> "network problem"
+            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
+            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "the recognizer is busy"
+            SpeechRecognizer.ERROR_SERVER -> "the recognition service failed"
+            else -> null
+        }
+
+    /**
+     * The recognition request.
+     *
+     * Every flag comes from [com.opencode.android.util.SpeechRequestPolicy] (pure, tested): shorter
+     * silence thresholds, explicit language, optional offline/quality/vocabulary hints. Nothing is
+     * decided here.
+     */
+    private fun recognitionIntent(options: com.opencode.android.util.SpeechOptions): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            com.opencode.android.util.SpeechRequestPolicy
+                .extras(options, android.os.Build.VERSION.SDK_INT)
+                .forEach { (key, value) ->
+                    // `Intent` has no `putExtra(String, Any)`: the platform's own overloads decide
+                    // the wire type, so the policy's values are dispatched by type here.
+                    when (value) {
+                        is String -> {
+                            putExtra(key, value)
+                        }
+
+                        is Int -> {
+                            putExtra(key, value)
+                        }
+
+                        is Long -> {
+                            putExtra(key, value)
+                        }
+
+                        is Boolean -> {
+                            putExtra(key, value)
+                        }
+
+                        is Float -> {
+                            putExtra(key, value)
+                        }
+
+                        is ArrayList<*> -> {
+                            @Suppress("UNCHECKED_CAST")
+                            putExtra(key, value as ArrayList<String>)
+                        }
+                    }
+                }
+        }
+
+    private fun createEngine(): SpeechRecognizer? = runCatching { SpeechRecognizer.createSpeechRecognizer(context) }.getOrNull()
+
+    private fun releaseEngine() {
+        runCatching { recognizer?.destroy() }
+        recognizer = null
     }
 
     /** Stops listening; a result may still arrive (the recognizer returns what it heard). */
@@ -127,20 +195,6 @@ internal class SpeechInput(
     /** Releases the recognizer. Must be called when the composer leaves the composition. */
     fun destroy() {
         listening = false
-        runCatching { recognizer?.destroy() }
-        recognizer = null
+        releaseEngine()
     }
-
-    /** Human wording for the recognizer's error codes. */
-    private fun errorLabel(error: Int): String =
-        when (error) {
-            SpeechRecognizer.ERROR_AUDIO -> "audio problem"
-            SpeechRecognizer.ERROR_CLIENT -> "client error"
-            SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "microphone permission missing"
-            SpeechRecognizer.ERROR_NETWORK -> "network problem"
-            SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
-            SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "the recognizer is busy"
-            SpeechRecognizer.ERROR_SERVER -> "the recognition service failed"
-            else -> "error $error"
-        }
 }

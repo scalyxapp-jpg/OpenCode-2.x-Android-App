@@ -5,6 +5,72 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-10-15
+
+### Fixed
+
+**„No speech recognition available on this device" — obwohl das Gerät Diktat kann.** Gemeldet als
+„manchmal funktioniert es, manchmal kommt die Meldung". Es war **mein** Fehler, an drei Stellen:
+
+1. **Der Alltagsfall wurde als Hardware-Urteil gemeldet.** „Nichts gesagt" kommt als
+   `ERROR_NO_MATCH`/`ERROR_SPEECH_TIMEOUT` — genau das passiert bei einer Pause, in einem stillen
+   Raum oder bei einem Fehltipper. Mein Code meldete dafür `null` … und der Composer mappte `null`
+   auf **„No speech recognition available"**. Das erklärt das „manchmal": das Diktat hatte einfach
+   nichts gehört, und die App behauptete, das Telefon könne es nicht.
+2. **Ein flakiges `isRecognitionAvailable()` entschied über den Start** (und über die Sichtbarkeit
+   des Knopfes). Auf manchen Builds — Samsung besonders — antwortet es **false**, während sich ein
+   Erkennungsdienst problemlos erzeugen lässt.
+3. **DerErkenner wurde wiederverwendet.** Nach einem Fehler oder Abbruch kann eine Instanz „klemmen"
+   und keinen weiteren Start annehmen — auch das machte es unzuverlässig.
+
+**Fix:**
+- Neue, **getestete Klassifikation** `SpeechErrorPolicy` (`NoSpeech`, `Unavailable`, `Busy`,
+  `Network`, `Permission`, `Failed`). `NoSpeech` ist ausdrücklich **nicht meldbar** — der Knopf hört
+  einfach auf. `Unavailable` ist jetzt ausschließlich „es ließ sich wirklich kein Erkenner
+  erzeugen".
+- **Kein Vorverurteilen mehr:** `isRecognitionAvailable()` ist nur noch Wortwahl-Hinweis, kein Tor.
+  Der Knopf erscheint, wenn der Schalter an ist (ein verschwindendes Mikrofon ist schlimmer als
+  eines, das sich einmal erklärt).
+- **Pro Versuch ein frischer Erkenner** (`releaseEngine()` + Erzeugen, ein Wiederholungsversuch) —
+  das behebt das „klemmende" Verhalten.
+- **Passende Meldungen:** „beschäftigt, tippe nochmal" statt Geräteurteil: `Busy` → eigener Text,
+  `Network`/`Permission` eigene Texte, sonst die Meldung des Dienstes.
+
+### Added / Changed — Diktat-Qualität (massgebend ausgebaut)
+
+Diktieren war ein Knopf mit Plattform-Standards. Jetzt entscheidet eine **reine, getestete
+Request-Politik** (`SpeechRequestPolicy`), was der Erkenner bekommt — und der Nutzer kann die
+Abwägung selbst treffen:
+
+| Hebel | Wirkung |
+| --- | --- |
+| **Kürzere Stille-Schwellen** (850 ms „fertig", 1300 ms „wahrscheinlich fertig", 400 ms Mindestlänge — Plattform-Default ist ~2 s, je Build anders) | **spürbar schnelleres Reagieren**: die Erkennung schließt ab, sobald man kurz Luft holt, statt zwei Sekunden zu warten |
+| **Sprache explizit** (`EXTRA_LANGUAGE` aus dem Geräte-Locale) | ein Erkenner, der die Sprache raten muss, kostet ganze Wörter |
+| **Punctuation/Casing-Qualität** (`EXTRA_ENABLE_FORMATTING = FORMATTING_OPTIMIZE_QUALITY`, ab API 33) | sauberere Sätze, Groß-/Kleinschreibung |
+| **Vokabular-Bias** (`EXTRA_BIASING_STRINGS`, ab API 33): Domänenwörter des Clients (`opencode`, `Gradle`, `Kotlin`, `commit`, `Refactor`, …) **plus die Wörter des offenen Session-Titels** | genau die Wörter werden zuverlässiger, die man in einem Coding-Client täglich diktiert — der Titel nennt die aktuelle Arbeit |
+| **Fortlaufendes Diktat** (Schalter): nach jedem erkannten Satz bleibt das Mikrofon offen; eine Pause beendet es **nicht**, nur ein echter Fehler | einen ganzen Prompt in einem Zug sprechen, ohne neu zu tippen |
+| **Pegelanzeige** (aus `onRmsChanged`) | sichtbares Feedback, dass das Mikrofon hört — und ob man zu leise ist |
+| **Text-Politur** (`DictationPolicy.polish`): erste Buchstabe groß, Mehrfach-Leerzeichen zusammengezogen | „wrote the tests" wird „Wrote the tests", ohne Codebegriffe anzufassen |
+| **Undo** nach jedem Diktat (`postWithAction`) | die falsch erkannte Phrase ist mit **einem Tipp** zurückgenommen — und zwar **nur** diese Phrase, nie selbst Getipptes (`undoAppend`) |
+
+**Neue Schalter** (jeder ist eine echte Abwägung, nicht Kosmetik):
+**Settings → „Accurate dictation"** (Punctuation-Bias, Standard an) · **„Dictate on-device only"**
+(kein Netz-Roundtrip, schneller + privat, gelegentlich weniger genau — Standard aus) ·
+**„Keep listening between sentences"** (Standard an) — zusätzlich zum bestehenden
+„Speech input in the composer".
+
+### Added (tests)
+
+- `SpeechErrorPolicyTest` (4 Fälle): „nichts gehört" bleibt still (und ist nicht meldbar),
+  `Busy` lädt zum Wiederholen ein, Netzwerk/Berechtigung werden benannt, alles andere behält den
+  Grund des Dienstes, und `Unavailable` bleibt dem echten Fall vorbehalten.
+- `SpeechRequestPolicyTest` (5 Fälle): kürzere Stille-Schwellen, API-Gating (Formatting/Bias erst
+  ab 33), Offline/Sprache nur wenn gewünscht, Vokabular bleibt ein Hint (leer/Duplikate fallen
+  raus), Titel liefert die Wörter der aktuellen Arbeit.
+- `DictationPolicyTest` (6, +2): Politur (Großbuchstabe, Mehrfach-Leerzeichen, kein Unsinn bei
+  `/pfaden`) und Undo (genau die angehängte Phrase, selbst Getipptes bleibt).
+- Betroffen geprüft (nur diese Klassen): **51 Tests, 0 Fehler**.
+
 ## [3.6.0] - 2026-10-15
 
 ### Added

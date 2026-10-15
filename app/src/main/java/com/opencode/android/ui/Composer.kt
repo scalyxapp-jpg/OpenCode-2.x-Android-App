@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -228,6 +229,12 @@ internal fun Composer(
     followUpBehavior: String = "queue",
     /** Settings → "Speech input in the composer": show and allow the microphone. */
     speechInputEnabled: Boolean = false,
+    /** Settings → dictation quality/behaviour (passed through to the request policy). */
+    speechQuality: Boolean = true,
+    speechOfflinePreferred: Boolean = false,
+    speechContinuous: Boolean = true,
+    /** Title of the open session: supplies the vocabulary hint for dictation. */
+    speechSessionTitle: String? = null,
     /** Prompts waiting in the offline outbox for this session. */
     outboxCount: Int = 0,
     outboxFlushing: Boolean = false,
@@ -258,35 +265,92 @@ internal fun Composer(
     val speech = remember { SpeechInput(speechContext) }
     var listening by remember { mutableStateOf(false) }
     var partial by remember { mutableStateOf("") }
+    var level by remember { mutableStateOf(0f) }
     DisposableEffect(Unit) { onDispose { speech.destroy() } }
     val speechToast = com.opencode.android.util.UserMessages
     fun startDictation() {
         partial = ""
+        val options =
+            com.opencode.android.util.SpeechOptions(
+                preferOffline = speechOfflinePreferred,
+                optimizeQuality = speechQuality,
+                // The device's language, made explicit: an engine that guesses wrong costs whole
+                // words. The tag is only sent when the platform has one.
+                languageTag =
+                    if (android.os.Build.VERSION.SDK_INT >= 24) {
+                        java.util.Locale.getDefault().toLanguageTag()
+                    } else {
+                        null
+                    },
+                biasing =
+                    com.opencode.android.util.SpeechRequestPolicy.biasingFor(speechSessionTitle) +
+                        (if (speechQuality) com.opencode.android.util.SpeechRequestPolicy.DOMAIN_WORDS else emptyList()),
+            )
         speech.start(
+            options = options,
             onPartial = { partial = it },
             onFinal = { text ->
-                listening = false
                 partial = ""
-                // Merge through the shared rule: one space, no swallowed blank line, and an empty
-                // result changes nothing.
-                val merged = com.opencode.android.util.DictationPolicy.appendFinal(inputText, text)
-                if (merged != inputText) onInputChange(merged)
+                level = 0f
+                val polished = com.opencode.android.util.DictationPolicy.polish(text)
+                val merged = com.opencode.android.util.DictationPolicy.appendFinal(inputText, polished)
+                if (merged != inputText) {
+                    onInputChange(merged)
+                    // Undo puts back exactly what dictation added - the engine's mistakes are
+                    // usually one phrase, not the whole field.
+                    speechToast.postWithAction(
+                        R.string.speech_added,
+                        speechContext.getString(R.string.speech_undo),
+                        { onInputChange(com.opencode.android.util.DictationPolicy.undoAppend(merged, polished)) },
+                        polished,
+                    )
+                }
+                // Continuous dictation: keep listening for the next sentence (the user still stops
+                // it with the button). Only after a real result - restarting on an error would loop.
+                if (speechContinuous && listening) {
+                    startDictation()
+                } else {
+                    listening = false
+                }
             },
-            onError = { message ->
-                listening = false
-                partial = ""
-                speechToast.post(
-                    if (message == null) R.string.speech_unavailable else R.string.speech_failed,
-                    message ?: "",
-                )
+            onError = { error, message ->
+                level = 0f
+                // Only reportable reasons get a message: "heard nothing" is an everyday event
+                // (a pause, a quiet room) and must NOT claim the device cannot dictate - that
+                // conflation was the reported bug.
+                if (com.opencode.android.util.SpeechErrorPolicy.isReportable(error)) {
+                    listening = false
+                    partial = ""
+                    when (error) {
+                        com.opencode.android.util.SpeechError.Unavailable ->
+                            speechToast.post(R.string.speech_unavailable)
+
+                        com.opencode.android.util.SpeechError.Busy ->
+                            speechToast.post(R.string.speech_busy)
+
+                        com.opencode.android.util.SpeechError.Permission ->
+                            speechToast.post(R.string.speech_permission_denied)
+
+                        else -> speechToast.post(R.string.speech_failed, message.orEmpty())
+                    }
+                } else if (!speechContinuous) {
+                    listening = false
+                } else {
+                    // "Nothing heard" while continuous: keep the microphone open, that is the
+                    // point of the mode - a pause must not end the dictation.
+                    startDictation()
+                }
             },
+            onLevel = { level = it },
         )
         listening = true
     }
+
     fun stopDictation() {
         speech.stop()
         listening = false
         partial = ""
+        level = 0f
     }
 
     val micPermission =
@@ -639,7 +703,10 @@ internal fun Composer(
                         )
                     }
                     // Speech-to-text: only when the switch is on AND the device can recognise.
-                    if (speechInputEnabled && speech.available()) {
+                    // Shown whenever the setting is on: `isRecognitionAvailable()` answers false
+                    // on some builds while a recognizer can be created fine, and a mic that
+                    // disappears is worse than one that explains itself once.
+                    if (speechInputEnabled) {
                         IconButton(
                             onClick = {
                                 if (listening) {
@@ -670,6 +737,15 @@ internal fun Composer(
                     // Live preview of the running dictation: it shows what WOULD be appended
                     // without writing into the field.
                     if (listening) {
+                        // Level meter: visible feedback that the microphone hears something, which
+                        // is also how a user notices they are too quiet.
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { level },
+                            modifier =
+                                Modifier
+                                    .width(64.dp)
+                                    .height(4.dp),
+                        )
                         Text(
                             text =
                                 (stringResource(R.string.speech_listening) +
