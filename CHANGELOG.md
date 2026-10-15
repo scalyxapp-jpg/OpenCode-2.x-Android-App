@@ -5,6 +5,23 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.1] - 2026-10-15
+
+### Fixed
+
+**Das Mikrofon-Symbol war viel zu groß.** Gemeldet mit Screenshot; die Auswertung bestätigte es
+messbar: das Glyph nahm **55–60 %** der Composer-Zeilenhöhe ein, die Nachbarn („+", Verlauf) nur
+**35 %** — rund **1,7×** so groß.
+
+Ursache: Ich hatte die **Tippfläche** (48 dp) auf das **Icon** selbst gelegt. Damit wurde auch das
+Glyph mit 48 dp gezeichnet, während ein Icon normalerweise mit 24 dp in einer 48-dp-Tippfläche
+sitzt. Jetzt ist es genau wie die anderen Knöpfe: `Box` mit **48 dp Tippfläche** und das Icon in
+seiner **Standardgröße** darin (`contentAlignment = Center`). Zusätzlich `role = Button` für
+TalkBack, damit die Taste auch als Taste angesagt wird.
+
+Rein visuelle Änderung — dafür gibt es keinen sinnvollen Unit-Test; sie ist mit dem Screenshot
+belegt und nach dem Installieren mit einem Blick zu prüfen.
+
 ## [3.8.0] - 2026-10-15
 
 **Diktat, zweite Ausbaustufe: saubere Sätze, verlässliche Wörter, nichts geht verloren.**

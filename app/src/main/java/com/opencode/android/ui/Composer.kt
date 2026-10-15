@@ -71,6 +71,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -696,15 +699,10 @@ internal fun Composer(
                     // gesture ends on release AND on cancel (finger slid off, app backgrounded), so
                     // no recording can survive the button.
                     if (speechInputEnabled) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = stringResource(R.string.speech_hold_to_talk),
-                            tint =
-                                if (listening) {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
+                        // Same box as the other controls: a 48 dp touch target with a GLYPH at the
+                        // icon size. Drawing the icon itself at 48 dp made it roughly 1.7x the
+                        // neighbouring "+" (reported with a screenshot).
+                        Box(
                             modifier =
                                 Modifier
                                     .size(48.dp)
@@ -723,8 +721,20 @@ internal fun Composer(
                                                 stopDictation()
                                             },
                                         )
+                                    }.semantics { this.role = Role.Button },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                contentDescription = stringResource(R.string.speech_hold_to_talk),
+                                tint =
+                                    if (listening) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
                                     },
-                        )
+                            )
+                        }
                     }
                     BasicTextField(
                         value = inputText,
