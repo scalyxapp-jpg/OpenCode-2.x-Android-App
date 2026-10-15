@@ -20,17 +20,15 @@ class SpeechRequestPolicyTest {
     ) = SpeechRequestPolicy.extras(options, apiLevel)
 
     @Test
-    fun `silence thresholds are shorter than the platform default`() {
+    fun `silence thresholds are not sent, so the engine cannot end a dictation early`() {
         val map = extras()
         assertEquals(true, map[RecognizerIntent.EXTRA_PARTIAL_RESULTS])
         assertEquals(1, map[RecognizerIntent.EXTRA_MAX_RESULTS])
-        assertEquals(SpeechRequestPolicy.COMPLETE_SILENCE_MS, map[RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS])
-        assertEquals(
-            SpeechRequestPolicy.POSSIBLY_COMPLETE_SILENCE_MS,
-            map[RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS],
-        )
-        assertEquals(SpeechRequestPolicy.MINIMUM_LENGTH_MS, map[RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS])
-        assertTrue(SpeechRequestPolicy.COMPLETE_SILENCE_MS < 1_000L)
+        // The old 850 ms "complete" threshold cut sentences off mid-dictation; with push-to-talk the
+        // release ends the recording, so the platform defaults stay untouched.
+        assertEquals(null, map[RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS])
+        assertEquals(null, map[RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS])
+        assertEquals(null, map[RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS])
     }
 
     @Test

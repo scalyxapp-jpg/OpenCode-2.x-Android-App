@@ -5,6 +5,55 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.2] - 2026-10-15
+
+### Fixed
+
+**Das Diktat schnitt den Schluss ab.** Gemeldet als „zeichnet nicht alles auf, wird gegen den
+Schluss einfach abgeschnitten". Die Ursache stand im Code: Die Stille-Schwellen aus der Zeit **vor**
+Push-to-Talk waren immer noch gesetzt —
+
+```
+EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS     = 850 ms
+EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS = 1300 ms
+EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS              = 400 ms
+```
+
+Damit sagte die App dem Erkenner: *„850 ms Stille = der Satz ist fertig"*. Bei einem Diktat mitten
+im Satz beendet er dann selbständig — und der Rest geht verloren. Bei Push-to-Talk darf der
+**Erkenner das Ende gar nicht entscheiden**; das tut der Finger des Nutzers, und `stopListening()`
+schließt danach zügig ab. Die drei Extras werden **nicht mehr gesendet** (Plattform-Defaults
+bleiben, weil sie pro Engine abgestimmt sind und sich von hier aus nicht erraten lassen). Der
+Test pinnt genau das: keine der drei Schwellen darf im Intent landen.
+
+### Changed
+
+**Fehler werden protokolliert und einmal still wiederholt, statt sofort gemeldet.**
+Die Meldung „speech recognition failed" kam weiterhin, obwohl nichts sichtbar schiefging — und im
+Logcat war dazu **nichts** zu finden (der Erkenner protokolliert nur unter eigenen Tags, die App
+gar nicht). Beides behoben:
+
+- **Jeder** Fehler wird jetzt mit seinem **Rohcode** protokolliert
+  (`dictation: Busy (raw code 8, held=true)`) — die nächste Meldung ist damit diagnostizierbar
+  statt geraten.
+- Ein **einmaliger, stiller Wiederholungsversuch** innerhalb desselben Versuchs: Ist der Erkenner
+  beschäftigt (`ERROR_RECOGNIZER_BUSY`) oder meldet „out of order" (`ERROR_CLIENT` — genau das
+  erzeugt das Loslassen/Abbrechen), wird der Erkenner neu erzeugt und sofort erneut gestartet,
+  solange der Knopf noch gehalten wird. Erst wenn auch das scheitert, erscheint eine Meldung.
+- Ergebnis und Startfehler werden ebenfalls protokolliert (Zeichenzahl des Ergebnisses, zweimaliger
+  Startfehler).
+
+### Changed
+
+**Mikrofon sitzt ganz links.** Der Knopf wurde mit dem Attachment-Knopf getauscht: das Mikrofon ist
+jetzt das äußerste linke Element im Composer, „+" folgt direkt danach.
+
+### Added (tests)
+
+- `SpeechRequestPolicyTest` (5): die Stille-Schwellen dürfen **nicht** gesendet werden (sonst schneidet
+  die Engine das Diktat ab), Teilergebnisse/Max-Results bleiben wie gehabt.
+- Betroffen geprüft (nur diese Klassen): **56 Tests, 0 Fehler**.
+
 ## [3.8.1] - 2026-10-15
 
 ### Fixed

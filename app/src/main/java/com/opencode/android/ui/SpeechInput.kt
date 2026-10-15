@@ -19,6 +19,12 @@ import android.speech.SpeechRecognizer
  * so the microphone is only live between [start] and [stop]. Everything that can fail is reported
  * through [onError] instead of a silent nothing: unavailable service, permission missing, no match.
  */
+/**
+ * `SpeechRecognizer.ERROR_CLIENT` (5) - mirrored: reading the framework constant in a unit test
+ * returns 0, and this one is worth naming in the retry rule.
+ */
+private const val CLIENT_ERROR = 5
+
 internal class SpeechInput(
     private val context: Context,
 ) {
@@ -54,83 +60,121 @@ internal class SpeechInput(
         onError: (com.opencode.android.util.SpeechError, String?) -> Unit,
     ) {
         if (listening) return
+        // Bump BEFORE touching the old engine: its callbacks must not be attributed to this attempt.
         generation += 1
         val mine = generation
         stoppedByUser = false
         delivered = false
-        // Fresh engine per attempt. Reusing one instance after an error or a cancel is what made
-        // dictation work "sometimes": a wedged recognizer accepts no further start.
-        releaseEngine()
-        // `isRecognitionAvailable()` is deliberately NOT a gate: on some builds (Samsung in
-        // particular) it answers false while a recognizer can be created fine. It is only used for
-        // the wording when creation genuinely fails.
-        val engine = createEngine() ?: createEngine()
-        if (engine == null) {
-            onError(com.opencode.android.util.SpeechError.Unavailable, null)
-            return
-        }
-        recognizer = engine
-        engine.setRecognitionListener(
-            object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) = Unit
+        // One silent retry inside the same attempt: a busy/out-of-order engine (busy, or a call that
+        // arrived while the previous attempt was still tearing down) is not worth a message while
+        // the user is holding the button.
+        var retried = false
 
-                override fun onBeginningOfSpeech() = Unit
+        fun begin() {
+            releaseEngine()
+            val engine = createEngine() ?: createEngine()
+            if (engine == null) {
+                listening = false
+                com.opencode.android.util.AppLog.e(
+                    com.opencode.android.util.APP_LOG_TAG,
+                    "dictation: no recognizer could be created",
+                )
+                onError(com.opencode.android.util.SpeechError.Unavailable, null)
+                return
+            }
+            recognizer = engine
+            engine.setRecognitionListener(
+                object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) = Unit
 
-                override fun onRmsChanged(rmsdB: Float) = Unit
+                    override fun onBeginningOfSpeech() = Unit
 
-                override fun onBufferReceived(buffer: ByteArray?) = Unit
+                    override fun onRmsChanged(rmsdB: Float) = Unit
 
-                override fun onEndOfSpeech() = Unit
+                    override fun onBufferReceived(buffer: ByteArray?) = Unit
 
-                override fun onError(error: Int) {
-                    listening = false
-                    // Classified, not guessed: "heard nothing" stays silent, "still busy" invites a
-                    // retry, and only a real failure talks about the service. The previous version
-                    // collapsed the silent case into "no recognition available" - which told users
-                    // their device cannot dictate when it can.
-                    onError(
-                        com.opencode.android.util.SpeechErrorPolicy
-                            .classify(error),
-                        errorLabel(error),
-                    )
-                }
+                    override fun onEndOfSpeech() = Unit
 
-                override fun onResults(results: Bundle?) {
-                    if (mine != generation) return
-                    listening = false
-                    // The final result is the POINT of a press-and-hold: it is delivered even after
-                    // the user released, so the words land in the composer.
-                    delivered = true
-                    val text =
-                        results
+                    override fun onError(error: Int) {
+                        if (mine != generation) return
+                        val classified = com.opencode.android.util.SpeechErrorPolicy.classify(error)
+                        // Every failure is logged WITH its raw code: the log is the only way to tell
+                        // "the engine was busy" from "the network conked out" afterwards.
+                        com.opencode.android.util.AppLog.w(
+                            com.opencode.android.util.APP_LOG_TAG,
+                        ) { "dictation: $classified (raw code $error, held=${!stoppedByUser})" }
+                        val retryable =
+                            classified == com.opencode.android.util.SpeechError.Busy ||
+                                error == CLIENT_ERROR
+                        if (!retried && !stoppedByUser && !delivered && retryable) {
+                            retried = true
+                            com.opencode.android.util.AppLog.d(
+                                com.opencode.android.util.APP_LOG_TAG,
+                            ) { "dictation: retrying once after $classified" }
+                            begin()
+                            return
+                        }
+                        listening = false
+                        if (com.opencode.android.util.SpeechErrorPolicy
+                                .shouldReport(
+                                    error = classified,
+                                    stale = false,
+                                    stoppedByUser = stoppedByUser,
+                                    delivered = delivered,
+                                )
+                        ) {
+                            onError(classified, errorLabel(error))
+                        }
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        if (mine != generation) return
+                        listening = false
+                        delivered = true
+                        val text =
+                            results
+                                ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                ?.firstOrNull()
+                                .orEmpty()
+                        com.opencode.android.util.AppLog.d(
+                            com.opencode.android.util.APP_LOG_TAG,
+                        ) { "dictation: final result with ${text.length} chars" }
+                        onFinal(text)
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        if (mine != generation) return
+                        partialResults
                             ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                             ?.firstOrNull()
-                            .orEmpty()
-                    onFinal(text)
-                }
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(onPartial)
+                    }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    if (mine != generation) return
-                    partialResults
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let(onPartial)
+                    override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                },
+            )
+            listening = true
+            runCatching { engine.startListening(recognitionIntent(options)) }
+                .onFailure { failure ->
+                    if (!retried && !stoppedByUser) {
+                        retried = true
+                        com.opencode.android.util.AppLog.w(
+                            com.opencode.android.util.APP_LOG_TAG,
+                        ) { "dictation: start failed (${failure.message}) - retrying once" }
+                        begin()
+                        return@onFailure
+                    }
+                    listening = false
+                    releaseEngine()
+                    com.opencode.android.util.AppLog.e(
+                        com.opencode.android.util.APP_LOG_TAG,
+                        "dictation: start failed twice: ${failure.message}",
+                    )
+                    onError(com.opencode.android.util.SpeechError.Failed, failure.message)
                 }
-
-                override fun onEvent(
-                    eventType: Int,
-                    params: Bundle?,
-                ) = Unit
-            },
-        )
-        listening = true
-        runCatching { engine.startListening(recognitionIntent(options)) }
-            .onFailure { failure ->
-                listening = false
-                releaseEngine()
-                onError(com.opencode.android.util.SpeechError.Failed, failure.message)
-            }
+        }
+        begin()
     }
 
     /** The recognizer's own wording for an error code, used as the detail of a failure. */

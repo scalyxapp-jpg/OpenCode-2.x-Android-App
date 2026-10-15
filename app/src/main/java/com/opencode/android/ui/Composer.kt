@@ -683,21 +683,6 @@ internal fun Composer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                 ) {
-                    IconButton(
-                        onClick = onAddFiles,
-                        // 48 dp = platform minimum touch target; 40 dp missed it on
-                        // the two most-tapped controls of the composer.
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = stringResource(R.string.add_images_and_files),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // Push to talk: listening lasts exactly as long as the button is held. The
-                    // gesture ends on release AND on cancel (finger slid off, app backgrounded), so
-                    // no recording can survive the button.
                     if (speechInputEnabled) {
                         // Same box as the other controls: a 48 dp touch target with a GLYPH at the
                         // icon size. Drawing the icon itself at 48 dp made it roughly 1.7x the
@@ -735,6 +720,18 @@ internal fun Composer(
                                     },
                             )
                         }
+                    }
+                    IconButton(
+                        onClick = onAddFiles,
+                        // 48 dp = platform minimum touch target; 40 dp missed it on
+                        // the two most-tapped controls of the composer.
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = stringResource(R.string.add_images_and_files),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     BasicTextField(
                         value = inputText,

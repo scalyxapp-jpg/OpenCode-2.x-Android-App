@@ -23,19 +23,16 @@ data class SpeechOptions(
 
 object SpeechRequestPolicy {
     /**
-     * How long silence after speech must last before the result is considered final.
+     * Silence thresholds are deliberately NOT sent.
      *
-     * The platform default is ~2 s and varies by build; that is the single biggest "why is it so
-     * slow?" factor after speaking. Under a second keeps dictation snappy while still leaving room
-     * for a short thinking pause mid-sentence.
+     * They were the "react faster" idea from before push-to-talk: 850 ms of silence made the engine
+     * call the utterance complete — which cut dictation off in the middle of a sentence and dropped
+     * the ending (reported: "it truncates towards the end"). With push-to-talk the ENGINE must not
+     * decide when the recording ends; the user's finger does, and `stopListening()` then finalises
+     * promptly. The platform defaults stay untouched, because they are tuned per engine and cannot
+     * be improved by a guess from here.
      */
-    const val COMPLETE_SILENCE_MS = 850L
-
-    /** A shorter threshold for a likely end, so the engine can commit earlier. */
-    const val POSSIBLY_COMPLETE_SILENCE_MS = 1_300L
-
-    /** How long speech must last to count at all: shorter = partial results appear sooner. */
-    const val MINIMUM_LENGTH_MS = 400L
+    const val DICTATION_END_IS_USER_CONTROLLED = true
 
     /**
      * Vocabulary the recognizer is biased towards.
@@ -87,10 +84,6 @@ object SpeechRequestPolicy {
         // One result: the engine's best hypothesis. More results cost latency and the app never
         // showed the alternatives, so it would be paid for nothing.
         map[RecognizerIntent.EXTRA_MAX_RESULTS] = 1
-        map[RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS] = COMPLETE_SILENCE_MS
-        map[RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS] =
-            POSSIBLY_COMPLETE_SILENCE_MS
-        map[RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS] = MINIMUM_LENGTH_MS
 
         options.languageTag?.takeIf { it.isNotBlank() }?.let {
             map[RecognizerIntent.EXTRA_LANGUAGE] = it
