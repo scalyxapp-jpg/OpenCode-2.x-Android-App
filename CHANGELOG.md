@@ -5,6 +5,52 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.4] - 2026-10-17
+
+### Fixed
+
+**Drei Ursachen — alle im Code gefunden, nicht am Gerät geraten** (das Gerät war während der Arbeit
+nicht verbunden; die Belege sind Code-Analyse + Tests).
+
+1. **„speech recognition failed" trotz erfolgreichem Diktat.** Beim Weiteraufnehmen (mein Fix aus
+   3.8.3) wird der alte Erkenner *innerhalb* seines eigenen `onResults` zerstört. Das Zerstoeren
+   erzeugt beim Erkenner `ERROR_CLIENT` — und weil `begin()` die Generation **nicht** hochzählte,
+   zählte der neue Versuch diesen Fehler **als seinen eigenen**, `delivered` war noch `false`, also
+   lief erst der Wiederholungsversuch und dann die Meldung. Jetzt zählt **jede Sub-Session** eine
+   eigene Generation (`begin()`), und **sobald irgendetwas zugestellt wurde** (Chunk oder
+   Teilergebnis), wird **nie** mehr eine Meldung gezeigt — sie wäre nachweislich falsch, weil der
+   Nutzer seinen Text sieht.
+2. **Pausen schnitten das Diktat ab.** Nach dem Entfernen der alten 850-ms-Schwellen galten die
+   Plattform-Defaults (~1–1,5 s) — die beenden die Äußerung **bei einer normalen Sprechpause**. Der
+   `RecognizerIntent`-Vertrag hat genau dafür die Schwellen: sie werden jetzt mit **60 000 ms**
+   gesendet, also „beende das nie von selbst". Damit ist das geforderte Verhalten erfüllt: **Pausen
+   sind egal, aufgenommen wird bis zum Loslassen**; die Aufnahme beendet nur `stopListening()` beim
+   Loslassen. Die Chunk-Fortsetzung bleibt als Sicherheitsnetz für Engines, die den Hinweis
+   ignorieren.
+3. **Der Composer-Text wurde überschrieben statt ergänzt.** Angehängt wurde in der Oberfläche gegen
+   den **eingefrorenen** `inputText` der Komposition. Bei mehreren Chunks (die es seit 3.8.3 gibt)
+   startete jeder Anhang beim **alten** Text — der vorherige Chunk war damit verloren, was wie
+   „Text wurde geleert" aussieht. Neu: `ChatViewModel.appendInput(text)` liest **immer den aktuellen**
+   Text (`DictationPolicy.appendFinal`), also ist jeder Chunk additiv, egal wie viele während des
+   Haltens kommen. `ComposerActions.onAppendInput` reicht das durch.
+
+### Changed
+
+- Alle Diktat-Diagnosen laufen jetzt über **`DictationLog`** (immer aktiv, Tag `OpenCodeDictation`).
+  In `SpeechInput` standen noch drei `AppLog`-Aufrufe, die im Release **nichts** geschrieben hätten —
+  genau der Fehler, der die Diagnose beim letzten Mal wertlos machte.
+
+### Added (tests)
+
+- `SpeechRequestPolicyTest` (5): die Stille-Schwellen müssen gesendet werden **und lang** sein
+  (`SILENCE_NEVER_ENDS_MS` > 30 s), damit keine Pause das Diktat beendet.
+- Betroffen geprüft (nur diese Klassen): **21 Tests, 0 Fehler**.
+
+### Offen
+
+- **Geräteprüfung fehlt** (kein `adb`-Gerät während der Änderung). Zu prüfen: langes Diktat **mit
+  Pausen** bis zum Loslassen, kein Verlust vorherigen Composer-Textes, keine Fehlermeldung mehr.
+
 ## [3.8.3] - 2026-10-15
 
 ### Fixed

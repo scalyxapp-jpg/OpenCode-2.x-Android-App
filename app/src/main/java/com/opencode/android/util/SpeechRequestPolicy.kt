@@ -23,16 +23,19 @@ data class SpeechOptions(
 
 object SpeechRequestPolicy {
     /**
-     * Silence thresholds are deliberately NOT sent.
+     * Silence must never end a push-to-talk recording.
      *
-     * They were the "react faster" idea from before push-to-talk: 850 ms of silence made the engine
-     * call the utterance complete — which cut dictation off in the middle of a sentence and dropped
-     * the ending (reported: "it truncates towards the end"). With push-to-talk the ENGINE must not
-     * decide when the recording ends; the user's finger does, and `stopListening()` then finalises
-     * promptly. The platform defaults stay untouched, because they are tuned per engine and cannot
-     * be improved by a guess from here.
+     * Two rounds of reports taught the same lesson from both sides: 850 ms made the engine end the
+     * utterance mid-sentence (tail lost), and leaving the platform default (~1–1.5 s) still ended it
+     * during a normal speaking pause. The contract in `RecognizerIntent` exists exactly for this, so
+     * the thresholds are sent — set so high that they never fire inside a dictation. The recording
+     * ends only when the user releases the button (`stopListening()`), which is the requirement:
+     * "pauses must not matter, everything until I let go".
      */
-    const val DICTATION_END_IS_USER_CONTROLLED = true
+    const val SILENCE_NEVER_ENDS_MS = 60_000L
+
+    /** Speech may count after this long: keeps partials coming quickly. */
+    const val MINIMUM_LENGTH_MS = 200L
 
     /**
      * Vocabulary the recognizer is biased towards.
@@ -84,6 +87,11 @@ object SpeechRequestPolicy {
         // One result: the engine's best hypothesis. More results cost latency and the app never
         // showed the alternatives, so it would be paid for nothing.
         map[RecognizerIntent.EXTRA_MAX_RESULTS] = 1
+        // "Do not end this for me": see SILENCE_NEVER_ENDS_MS. Engines that ignore the hint are
+        // covered by the chunk continuation on the listener side.
+        map[RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS] = SILENCE_NEVER_ENDS_MS
+        map[RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS] = SILENCE_NEVER_ENDS_MS
+        map[RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS] = MINIMUM_LENGTH_MS
 
         options.languageTag?.takeIf { it.isNotBlank() }?.let {
             map[RecognizerIntent.EXTRA_LANGUAGE] = it

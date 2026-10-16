@@ -948,6 +948,7 @@ internal fun ChatScreen(
                                             onLoadOlder = { viewModel.loadOlderMessages() },
                                             onRetry = viewModel::retry,
                                             onInputChange = viewModel::updateInput,
+                                            onAppendInput = viewModel::appendInput,
                                             onSend = viewModel::sendMessage,
                                             onQueue = viewModel::queueMessage,
                                             onSteer = viewModel::steerMessage,
@@ -1093,6 +1094,8 @@ internal class ChatActions(
     val onLoadOlder: () -> Unit = {},
     val onRetry: () -> Unit = {},
     val onInputChange: (String) -> Unit,
+    /** Dictation: appends to the CURRENT text (no stale capture). */
+    val onAppendInput: (String) -> Unit = {},
     val onSend: () -> Unit,
     /** Queues the composer's text (web: Ctrl+Enter). */
     val onQueue: () -> Unit = {},
@@ -1165,6 +1168,7 @@ internal fun SessionTab(
     val onLoadOlder = actions.onLoadOlder
     val onRetry = actions.onRetry
     val onInputChange = actions.onInputChange
+    val onAppendInput = actions.onAppendInput
     val onSend = actions.onSend
     val onInterrupt = actions.onInterrupt
     val onAddFiles = actions.onAddFiles
@@ -2067,6 +2071,7 @@ internal fun SessionTab(
                 remember {
                     ComposerActions(
                         onInputChange = onInputChange,
+                        onAppendInput = onAppendInput,
                         onSend = onSend,
                         onQueue = actions.onQueue,
                         onSteer = actions.onSteer,

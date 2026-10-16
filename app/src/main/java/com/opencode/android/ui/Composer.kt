@@ -185,6 +185,8 @@ private fun formatBytes(bytes: Long): String =
 @Immutable
 internal class ComposerActions(
     val onInputChange: (String) -> Unit,
+    /** Dictation appends to the CURRENT text; the composable's captured value would lose chunks. */
+    val onAppendInput: (String) -> Unit = onInputChange,
     val onSend: () -> Unit,
     /**
      * Queues the composer's text instead of sending it now — the web's Ctrl+Enter
@@ -253,6 +255,7 @@ internal fun Composer(
     providerGroups: List<ProviderEntry> = emptyList(),
 ) {
     val onInputChange = actions.onInputChange
+    val onAppendInput = actions.onAppendInput
     val onSend = actions.onSend
     val onQueue = actions.onQueue
     val onSteer = actions.onSteer
@@ -317,9 +320,7 @@ internal fun Composer(
             // keep recording, so the rest of the sentence is not cut off (reported).
             onChunk = { chunk ->
                 val text = com.opencode.android.util.DictationPolicy.finalize(chunk, speechPunctuation)
-                if (text.isNotEmpty()) {
-                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, text))
-                }
+                if (text.isNotEmpty()) onAppendInput(text)
             },
             onFinal = { text ->
                 listening = false
@@ -333,9 +334,7 @@ internal fun Composer(
                 // Straight into the composer: finalised text, no intermediate window, no message.
                 val finalText =
                     com.opencode.android.util.DictationPolicy.finalize(source, speechPunctuation)
-                if (finalText.isNotEmpty()) {
-                    onInputChange(com.opencode.android.util.DictationPolicy.appendFinal(inputText, finalText))
-                }
+                if (finalText.isNotEmpty()) onAppendInput(finalText)
             },
             onError = { error, message ->
                 listening = false

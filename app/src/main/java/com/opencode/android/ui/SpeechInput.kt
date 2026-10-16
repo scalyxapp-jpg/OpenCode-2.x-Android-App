@@ -19,6 +19,7 @@ import android.speech.SpeechRecognizer
  * so the microphone is only live between [start] and [stop]. Everything that can fail is reported
  * through [onError] instead of a silent nothing: unavailable service, permission missing, no match.
  */
+
 /**
  * `SpeechRecognizer.ERROR_CLIENT` (5) - mirrored: reading the framework constant in a unit test
  * returns 0, and this one is worth naming in the retry rule.
@@ -41,6 +42,7 @@ internal class SpeechInput(
     private var delivered = false
 
     /** Whether the device offers a recognition service at all. */
+
     /** Whether the app may record audio right now. */
     fun hasPermission(): Boolean =
         context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
@@ -67,9 +69,6 @@ internal class SpeechInput(
         onChunk: (String) -> Unit = {},
     ) {
         if (listening) return
-        // Bump BEFORE touching the old engine: its callbacks must not be attributed to this attempt.
-        generation += 1
-        val mine = generation
         stoppedByUser = false
         delivered = false
         // One silent retry inside the same attempt: a busy/out-of-order engine (busy, or a call that
@@ -82,14 +81,16 @@ internal class SpeechInput(
         var lastPartial = ""
 
         fun begin() {
+            // Every sub-session gets its own generation. Tearing the previous engine down fires
+            // ERROR_CLIENT on it, and without this the new attempt counted that as ITS failure -
+            // which is why "speech recognition failed" appeared even though dictation had worked.
+            generation += 1
+            val mine = generation
             releaseEngine()
             val engine = createEngine() ?: createEngine()
             if (engine == null) {
                 listening = false
-                com.opencode.android.util.AppLog.e(
-                    com.opencode.android.util.APP_LOG_TAG,
-                    "dictation: no recognizer could be created",
-                )
+                com.opencode.android.util.DictationLog.state("no recognizer could be created")
                 onError(com.opencode.android.util.SpeechError.Unavailable, null)
                 return
             }
@@ -108,7 +109,9 @@ internal class SpeechInput(
 
                     override fun onError(error: Int) {
                         if (mine != generation) return
-                        val classified = com.opencode.android.util.SpeechErrorPolicy.classify(error)
+                        val classified =
+                            com.opencode.android.util.SpeechErrorPolicy
+                                .classify(error)
                         // Always-on diagnostics with the raw code: the app's own logger is silent in
                         // release builds, which is why the last report had an EMPTY log.
                         com.opencode.android.util.DictationLog.failure(
@@ -118,14 +121,19 @@ internal class SpeechInput(
                             deliveredChars = deliveredChars,
                             partialChars = lastPartial.length,
                         )
+                        // Anything already delivered (a chunk earlier in this attempt or a partial)
+                        // means words arrived: a failure message would be wrong.
+                        val somethingArrived = deliveredChars > 0
                         // Rescue what was already heard: an engine that fails at the end must not
                         // throw away the words it produced (and must not shout "failed" when it has
                         // something to show).
                         val rescue = lastPartial.trim()
-                        if (com.opencode.android.util.SpeechErrorPolicy.shouldRescuePartial(lastPartial, delivered)) {
+                        if (com.opencode.android.util.SpeechErrorPolicy
+                                .shouldRescuePartial(lastPartial, delivered)
+                        ) {
                             delivered = true
                             com.opencode.android.util.DictationLog.state(
-                                "error ${error}, rescuing the ${rescue.length}-char partial",
+                                "error $error, rescuing the ${rescue.length}-char partial",
                             )
                             onChunk(rescue)
                             listening = false
@@ -137,21 +145,23 @@ internal class SpeechInput(
                                 error == CLIENT_ERROR
                         if (!retried && !stoppedByUser && !delivered && retryable) {
                             retried = true
-                            com.opencode.android.util.DictationLog.state("retrying once after $classified")
+                            com.opencode.android.util.DictationLog
+                                .state("retrying once after $classified")
                             begin()
                             return
                         }
                         listening = false
-                        if (com.opencode.android.util.SpeechErrorPolicy
-                                .shouldReport(
+                        // Words arrived in this attempt (a chunk or a partial)? Then a failure
+                        // message would be a lie - the user can see their text.
+                        val report =
+                            !somethingArrived &&
+                                com.opencode.android.util.SpeechErrorPolicy.shouldReport(
                                     error = classified,
                                     stale = false,
                                     stoppedByUser = stoppedByUser,
                                     delivered = delivered,
                                 )
-                        ) {
-                            onError(classified, errorLabel(error))
-                        }
+                        if (report) onError(classified, errorLabel(error))
                     }
 
                     override fun onResults(results: Bundle?) {
@@ -174,7 +184,8 @@ internal class SpeechInput(
                         if (!stoppedByUser) {
                             val chunk = text.ifEmpty { lastPartial.trim() }
                             deliveredChars += chunk.length
-                            com.opencode.android.util.DictationLog.chunk(chunk.length)
+                            com.opencode.android.util.DictationLog
+                                .chunk(chunk.length)
                             if (chunk.isNotEmpty()) onChunk(chunk)
                             lastPartial = ""
                             if (text.isNotEmpty()) {
@@ -200,7 +211,10 @@ internal class SpeechInput(
                             }
                     }
 
-                    override fun onEvent(eventType: Int, params: Bundle?) = Unit
+                    override fun onEvent(
+                        eventType: Int,
+                        params: Bundle?,
+                    ) = Unit
                 },
             )
             listening = true
@@ -208,17 +222,16 @@ internal class SpeechInput(
                 .onFailure { failure ->
                     if (!retried && !stoppedByUser) {
                         retried = true
-                        com.opencode.android.util.AppLog.w(
-                            com.opencode.android.util.APP_LOG_TAG,
-                        ) { "dictation: start failed (${failure.message}) - retrying once" }
+                        com.opencode.android.util.DictationLog.state(
+                            "start failed (${failure.message}) - retrying once",
+                        )
                         begin()
                         return@onFailure
                     }
                     listening = false
                     releaseEngine()
-                    com.opencode.android.util.AppLog.e(
-                        com.opencode.android.util.APP_LOG_TAG,
-                        "dictation: start failed twice: ${failure.message}",
+                    com.opencode.android.util.DictationLog.state(
+                        "start failed twice: ${failure.message}",
                     )
                     onError(com.opencode.android.util.SpeechError.Failed, failure.message)
                 }

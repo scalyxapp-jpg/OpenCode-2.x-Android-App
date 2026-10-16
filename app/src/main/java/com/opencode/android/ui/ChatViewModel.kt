@@ -1423,6 +1423,25 @@ class ChatViewModel
          * the agent ran instead of taking it on faith. The artifact and its wording come from
          * [com.opencode.android.ui.explain.ExplainPolicy.target] (pure, tested).
          */
+        /**
+         * Appends dictated text to the composer field.
+         *
+         * Deliberately here and not in the composable: the UI lambda captures the text it was
+         * composed with, so a second dictation chunk appended to the OLD value silently lost the
+         * first one (reported as "the prompt gets emptied"). Reading the current state makes every
+         * chunk additive, no matter how many arrive while the button is held.
+         */
+        fun appendInput(text: String) {
+            val add = text.trim()
+            if (add.isEmpty()) return
+            _uiState.update {
+                it.copy(
+                    inputText =
+                        com.opencode.android.util.DictationPolicy.appendFinal(it.inputText, add),
+                )
+            }
+        }
+
         fun explainPart(part: Part) {
             val target =
                 com.opencode.android.ui.explain.ExplainPolicy
