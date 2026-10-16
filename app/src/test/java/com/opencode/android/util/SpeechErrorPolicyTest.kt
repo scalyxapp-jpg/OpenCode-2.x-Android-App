@@ -86,6 +86,19 @@ class SpeechErrorPolicyTest {
     }
 
     @Test
+    fun `transient and unknown codes are retried instead of reported`() {
+        // raw = 11 from the device log: outside the AOSP range, engine still reconnecting, and the
+        // next attempt worked - exactly the case that must not reach the user as a message.
+        assertEquals(true, SpeechErrorPolicy.isRetryable(SpeechError.Failed))
+        assertEquals(true, SpeechErrorPolicy.isRetryable(SpeechError.Busy))
+        assertEquals(true, SpeechErrorPolicy.isRetryable(SpeechError.Network))
+        // Nothing to retry, or the user/device has to act.
+        assertEquals(false, SpeechErrorPolicy.isRetryable(SpeechError.NoSpeech))
+        assertEquals(false, SpeechErrorPolicy.isRetryable(SpeechError.Permission))
+        assertEquals(false, SpeechErrorPolicy.isRetryable(SpeechError.Unavailable))
+    }
+
+    @Test
     fun `a real failure while the button is held still speaks up`() {
         assertEquals(
             true,

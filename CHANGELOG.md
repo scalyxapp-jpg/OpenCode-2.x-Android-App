@@ -5,6 +5,63 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.6] - 2026-10-17
+
+### Fixed
+
+**„speech recognition failed" — Ursache aus dem Gerätelog bewiesen.** Nach dem Einbau der
+Immer-an-Diagnose (3.8.3) stand der Fehler endlich schwarz auf weiß:
+
+```
+10-17 00:30:45  W OpenCodeDictation: failure=Failed raw=11 held=true deliveredChars=0 partialChars=0
+10-17 00:30:49  RecognitionService#logStartListening ... locale: de-CH
+                SodaSpeechRecognizer: Offline recognizer - start listening
+                SodaSpeechRecognizer: SodaDetectionHandler.blockingReconnect
+                … onStartOfSpeech → onStopListening → „Audio process finished, transcription completed"
+                → handleFinalResult: 3 hyp   →  Ende, OHNE Fehlerzeile
+```
+
+Zwei Erkenntnisse daraus:
+
+1. **`raw = 11` liegt außerhalb der dokumentierten AOSP-Codes (1–9)** — ein Samsung-eigener Code
+   (`ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS`). Der Erkenner stand noch auf `blockingReconnect`
+   (Verbindung/Sprachpaket), als der Start kam.
+2. **4 Sekunden später lief derselbe Aufruf fehlerfrei durch.** Das ist also ein **transienter
+   Zustand**, kein Fehler — und meine Wiederholung griff nur bei `Busy`/`Client`, bei unbekannten
+   Codes lief sie ins Leere und zeigte die Meldung.
+
+**Fix:** `SpeechErrorPolicy.isRetryable` (getestet) entscheidet, was wiederholt wird — **jeder
+transiente oder unbekannte Code** (`Busy`, `Network`, `Failed` inkl. OEM-Codes), **nicht**
+`NoSpeech` (nichts zu wiederholen), `Permission` (Nutzer muss handeln) und `Unavailable` (kein
+Erkenner vorhanden). Die Wiederholung läuft **verzögert (350 ms)** über den Main-Handler, damit die
+Engine den Reconnect abschließen kann, und startet **nur**, wenn derselbe Versuch noch läuft **und
+der Knopf noch gehalten wird** — die Push-to-Talk-Regel bleibt unangetastet. Jeder Fehler und jede
+Wiederholung wird mit Rohcode protokolliert.
+
+### Verified am Gerät (3.8.5, aus dem Log)
+
+- Diktat **funktioniert** grundsätzlich: `onStartOfSpeech` → `onStopListening` → „Audio process
+  finished, transcription completed" → `handleFinalResult: 3 hyp` — die Erkennung liefert Text.
+- **Kein** `error 13` mehr (Sprachpaket `de_CH` wird zugewiesen, SODA initialisiert).
+- **Keine** anderen App-Fehler, **0 FATAL**.
+- Getippter Text im Composer („Test:") **blieb** während eines Diktat-Versuchs erhalten.
+- **Der neue Wiederholungspfad selbst ist am Gerät nachgestellt** (3.8.6): schnelles Doppel-Halten
+  provoziert genau den Zustand „Engine verbindet noch" und damit `raw = 11`:
+
+```
+00:35:51.595  failure=Failed raw=11 held=true
+00:35:51.595  retrying once after Failed (raw 11) in 350ms
+00:35:52.387  failure=NoSpeech raw=7 held=false
+```
+
+  → die Wiederholung greift, **keine** Meldung im UI.
+
+### Added (tests)
+
+- `SpeechErrorPolicyTest` (7, +1): transiente und unbekannte Codes sind wiederholbar, `NoSpeech` /
+  `Permission` / `Unavailable` nicht.
+- Betroffen geprüft (nur diese Klassen): **22 Tests, 0 Fehler**.
+
 ## [3.8.5] - 2026-10-17
 
 ### Fixed

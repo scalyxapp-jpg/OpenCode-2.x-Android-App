@@ -89,6 +89,25 @@ object SpeechErrorPolicy {
         delivered: Boolean,
     ): Boolean = !delivered && partial.trim().isNotEmpty()
 
+    /**
+     * Whether the attempt deserves ONE silent retry before the user is told anything.
+     *
+     * Learned from the device log: Samsung's engine answered `raw = 11` (outside the documented
+     * AOSP range 1..9, `ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS`) while the engine was still
+     * reconnecting from the previous session — and the very next attempt four seconds later worked
+     * perfectly. So an unknown/OEM code is *transient* by definition here: retrying is right, a
+     * message is wrong.
+     *
+     * Never retried: `NoSpeech` (nothing to retry), `Permission` (needs the user) and `Unavailable`
+     * (the device really has no recognizer - creating another one immediately cannot help; the
+     * creation path already retries once).
+     */
+    fun isRetryable(error: SpeechError): Boolean =
+        when (error) {
+            SpeechError.NoSpeech, SpeechError.Permission, SpeechError.Unavailable -> false
+            SpeechError.Busy, SpeechError.Network, SpeechError.Failed -> true
+        }
+
     fun shouldReport(
         error: SpeechError,
         stale: Boolean,

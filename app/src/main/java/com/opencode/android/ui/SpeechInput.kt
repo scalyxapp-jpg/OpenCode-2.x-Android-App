@@ -26,6 +26,14 @@ import android.speech.SpeechRecognizer
  */
 private const val CLIENT_ERROR = 5
 
+/**
+ * How long to wait before the single silent retry.
+ *
+ * The engine needs a moment to finish reconnecting (observed on the device: `raw = 11` while the
+ * SODA engine was still reconnecting, and the very next attempt worked).
+ */
+private const val RETRY_DELAY_MS = 350L
+
 internal class SpeechInput(
     private val context: Context,
 ) {
@@ -90,7 +98,8 @@ internal class SpeechInput(
             val engine = createEngine() ?: createEngine()
             if (engine == null) {
                 listening = false
-                com.opencode.android.util.DictationLog.state("no recognizer could be created")
+                com.opencode.android.util.DictationLog
+                    .state("no recognizer could be created")
                 onError(com.opencode.android.util.SpeechError.Unavailable, null)
                 return
             }
@@ -140,14 +149,29 @@ internal class SpeechInput(
                             onFinal("")
                             return
                         }
-                        val retryable =
-                            classified == com.opencode.android.util.SpeechError.Busy ||
-                                error == CLIENT_ERROR
-                        if (!retried && !stoppedByUser && !delivered && retryable) {
+                        // Any transient or UNKNOWN code gets one silent retry, after a short pause:
+                        // the engine is often still reconnecting from the previous session (raw 11
+                        // on Samsung), and an immediate second call fails again. The delay also lets
+                        // the reconnect/language pack finish.
+                        if (!retried &&
+                            !stoppedByUser &&
+                            !delivered &&
+                            com.opencode.android.util.SpeechErrorPolicy
+                                .isRetryable(classified)
+                        ) {
                             retried = true
                             com.opencode.android.util.DictationLog
-                                .state("retrying once after $classified")
-                            begin()
+                                .state("retrying once after $classified (raw $error) in ${RETRY_DELAY_MS}ms")
+                            android.os
+                                .Handler(android.os.Looper.getMainLooper())
+                                .postDelayed(
+                                    {
+                                        // Still the same attempt AND the user still holds the button:
+                                        // only then may a new recording start (push-to-talk rule).
+                                        if (mine == generation && listening && !stoppedByUser) begin()
+                                    },
+                                    RETRY_DELAY_MS,
+                                )
                             return
                         }
                         listening = false
