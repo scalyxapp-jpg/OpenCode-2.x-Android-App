@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.5] - 2026-10-17
+
+### Fixed
+
+**Der Abstand zwischen Mikrofon und Anhang war größer als rechts.** Gemeldet mit Screenshot. Die
+Ursache war rechnerisch eindeutig — und die frühere Messung am Gerät bestätigt sie:
+
+| Gruppe | Aufbau | Glyph-Lücke | gemessen |
+| --- | --- | --- | --- |
+| links (vorher) | Mic **48 dp** + 4 dp + „+" **48 dp** | 12 + 4 + 12 = **28 dp** | 27,7 dp |
+| rechts | Verlauf **40 dp** + 4 dp + Senden **48 dp** | 8 + 4 + 12 = **24 dp** | 23,8 dp |
+
+Die rechte Gruppe nutzt **40-dp**-Boxen für Verlauf/Queue, die linken sind 48 dp (Push-to-Talk-Ziel).
+Beides in 48 dp zu lassen und nur den Abstand zu verkleinern trifft es exakt: Mikrofon und Anhang
+sitzen jetzt als **eine Gruppe mit 0 dp** Abstand → Glyph-Lücke **24 dp**, identisch zu rechts.
+
+Bewusst **nicht** die Mikrofon-Box verkleinert: 48 dp ist das Plattform-Minimum für Touch-Ziele und
+war in der CI-Doku als Regel festgeschrieben (Diktieren wird oft mit dem Daumen gehalten).
+
+### Added (tests)
+
+- Keine neuen Unit-Tests: eine Layout-Änderung ist so nicht sinnvoll testbar. **Beleg ist die
+  Rechnung oben plus die frühere Gerätemessung** (27,7 vs. 23,8 dp) — nach dem Installieren mit einem
+  Blick zu prüfen.
+
 ## [3.8.4] - 2026-10-17
 
 ### Fixed

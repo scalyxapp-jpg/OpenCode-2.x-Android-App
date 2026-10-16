@@ -270,8 +270,8 @@ Home/Centre/Settings als untere Navigation (`NavigationBar`), Chat als eigene Ro
 │   Live-Bereich: „Waiting for the model…"    │
 ├─────────────────────────────────────────────┤
 │ Composer (Radius 28 dp, 4 dp Abstand)       │
-│  [Mic 48] [＋ 48]  Eingabefeld … [Verlauf]  │  ← Glyphen gemessen: Höhe 24,2 dp,
-│  [Agent ▾] [Modell ▾] [Effort ▾]   [Send 48]│    Zentren 52 dp auseinander, Zeile y≈677 dp
+│  [Mic 48][＋ 48]  Eingabefeld … [Verlauf 40]│  ← Glyphen gemessen: Höhe 24,2 dp,
+│  [Agent ▾] [Modell ▾] [Effort ▾]  [Send 48] │    Glyph-Lücke beidseitig 24 dp, Zeile y≈677 dp
 └─────────────────────────────────────────────┘
 ```
 
@@ -373,7 +373,7 @@ Gemessen mit `adb` auf dem Referenzgerät **Samsung SM-A176B** (Android 17), App
 | --- | --- | --- |
 | Tab-Beschriftungen („Session info", „Changes") | y **140,1–147,9 dp**, Textband 7,8 dp | `TabRow` (Material, 48 dp) direkt unter der TopAppBar |
 | Composer-Glyphen (Mic, „+", Verlauf, Stop) | y **665,2–689,4 dp**, Höhe **24,2 dp** | §7: Glyphe 24 dp |
-| Abstand der Composer-Ziele | Glyphen-Zentren **52 dp** auseinander | 48 dp Ziel + **4 dp** `spacing.extraSmall` |
+| Abstand der Composer-Ziele | Glyphen-**Lücke 24 dp** (Zentren 48 bzw. 52 dp) | links: 48 + **0** + 48; rechts: 40 + **4** + 48 |
 | Mic / „+" horizontal | x **28,1–52,3** / **80,0–104,2** dp | Mic ist das **linke** Element (seit 3.8.2) |
 | Composer-Zeile (Mitte) | **≈ 677 dp** von 832 dp | unteres Zehntel, über der Chip-Zeile |
 | Eingabefeld-Text („Ask anything…") | y **668,8–685,5 dp** (16,7 dp) | `bodyLarge`/`bodyMedium` (16/14 sp) |

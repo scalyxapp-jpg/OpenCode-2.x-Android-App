@@ -690,6 +690,14 @@ internal fun Composer(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
                 ) {
+                    // Microphone and attachment sit as ONE group with no gap between them.
+                    // The right-hand pair (history 40 dp + send 48 dp) shows a 24 dp glyph gap;
+                    // with 48 + 4 + 48 on the left it was 28 dp, which read as too much space
+                    // (reported with a screenshot). Same 24 dp now.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    ) {
                     if (speechInputEnabled) {
                         // Same box as the other controls: a 48 dp touch target with a GLYPH at the
                         // icon size. Drawing the icon itself at 48 dp made it roughly 1.7x the
@@ -740,6 +748,8 @@ internal fun Composer(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    }
+
                     BasicTextField(
                         value = inputText,
                         onValueChange = onInputChange,
