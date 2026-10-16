@@ -34,6 +34,17 @@ private const val CLIENT_ERROR = 5
  */
 private const val RETRY_DELAY_MS = 350L
 
+/**
+ * Backoff for the continuation after the engine ended a sub-session by itself.
+ *
+ * Measured on the device: the microphone was closed for ~0.9 s (engine teardown + a 350 ms wait +
+ * engine setup) and everything spoken in that window was lost - the reported "after the pause it
+ * stopped recording". The on-device engine (SODA, `applicationDomain: AMBIENT_ONESHOT`) is
+ * one-utterance-only and answers `raw 11` until its reconnect finished, so the microphone is asked
+ * back as early as it allows: several short attempts instead of one long wait.
+ */
+private val RETRY_DELAYS_MS = longArrayOf(120L, 250L, 500L)
+
 internal class SpeechInput(
     private val context: Context,
 ) {
@@ -82,7 +93,7 @@ internal class SpeechInput(
         // One silent retry inside the same attempt: a busy/out-of-order engine (busy, or a call that
         // arrived while the previous attempt was still tearing down) is not worth a message while
         // the user is holding the button.
-        var retried = false
+        var retriesUsed = 0
         // Everything delivered for this attempt, so an error can tell "nothing at all" from "some
         // words already arrived" (the latter must never produce a failure message).
         var deliveredChars = 0
@@ -153,26 +164,34 @@ internal class SpeechInput(
                         // the engine is often still reconnecting from the previous session (raw 11
                         // on Samsung), and an immediate second call fails again. The delay also lets
                         // the reconnect/language pack finish.
-                        if (!retried &&
-                            !stoppedByUser &&
+                        if (!stoppedByUser &&
                             !delivered &&
                             com.opencode.android.util.SpeechErrorPolicy
                                 .isRetryable(classified)
                         ) {
-                            retried = true
-                            com.opencode.android.util.DictationLog
-                                .state("retrying once after $classified (raw $error) in ${RETRY_DELAY_MS}ms")
-                            android.os
-                                .Handler(android.os.Looper.getMainLooper())
-                                .postDelayed(
-                                    {
-                                        // Still the same attempt AND the user still holds the button:
-                                        // only then may a new recording start (push-to-talk rule).
-                                        if (mine == generation && listening && !stoppedByUser) begin()
-                                    },
-                                    RETRY_DELAY_MS,
-                                )
-                            return
+                            // Several SHORT attempts instead of one long wait: every millisecond the
+                            // microphone stays closed is lost speech (measured gap was ~0.9 s).
+                            val attempt = retriesUsed
+                            if (attempt < RETRY_DELAYS_MS.size) {
+                                retriesUsed += 1
+                                val delay = RETRY_DELAYS_MS[attempt]
+                                com.opencode.android.util.DictationLog
+                                    .state(
+                                        "retry ${attempt + 1}/${RETRY_DELAYS_MS.size} after $classified " +
+                                            "(raw $error) in ${delay}ms",
+                                    )
+                                android.os
+                                    .Handler(android.os.Looper.getMainLooper())
+                                    .postDelayed(
+                                        {
+                                            // Same attempt AND the button still held: only then may a
+                                            // new recording start (push-to-talk rule).
+                                            if (mine == generation && listening && !stoppedByUser) begin()
+                                        },
+                                        delay,
+                                    )
+                                return
+                            }
                         }
                         listening = false
                         // Words arrived in this attempt (a chunk or a partial)? Then a failure
@@ -244,8 +263,8 @@ internal class SpeechInput(
             listening = true
             runCatching { engine.startListening(recognitionIntent(options)) }
                 .onFailure { failure ->
-                    if (!retried && !stoppedByUser) {
-                        retried = true
+                    if (retriesUsed == 0 && !stoppedByUser) {
+                        retriesUsed += 1
                         com.opencode.android.util.DictationLog.state(
                             "start failed (${failure.message}) - retrying once",
                         )

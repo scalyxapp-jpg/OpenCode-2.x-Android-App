@@ -55,7 +55,9 @@ class SpeechRequestPolicyTest {
     @Test
     fun `offline and language are opt-in`() {
         val plain = extras()
-        assertEquals(null, plain[RecognizerIntent.EXTRA_PREFER_OFFLINE])
+        // Always present, and false by default: see the comment in SpeechRequestPolicy - the
+        // on-device one-shot engine is what ends a dictation at the first pause.
+        assertEquals(false, plain[RecognizerIntent.EXTRA_PREFER_OFFLINE])
         assertEquals(null, plain[RecognizerIntent.EXTRA_LANGUAGE])
 
         val tuned = extras(SpeechOptions(preferOffline = true, languageTag = "de-DE"))

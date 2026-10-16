@@ -3,6 +3,7 @@ package com.opencode.android.ui
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
@@ -10,20 +11,16 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicNone
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,16 +38,18 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PlaylistAdd
-import androidx.compose.material.icons.filled.PlaylistPlay
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicNone
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -66,14 +65,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,7 +87,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -272,13 +272,15 @@ internal fun Composer(
     val speechContext = androidx.compose.ui.platform.LocalContext.current
     val speech = remember { SpeechInput(speechContext) }
     var listening by remember { mutableStateOf(false) }
+
     /** Last partial of the running attempt: the fallback when the engine returns nothing. */
     var lastPartial by remember { mutableStateOf("") }
     DisposableEffect(Unit) { onDispose { speech.destroy() } }
     val speechToast = com.opencode.android.util.UserMessages
     val micPermission =
         rememberLauncherForActivityResult(
-            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+            androidx.activity.result.contract.ActivityResultContracts
+                .RequestPermission(),
         ) { granted ->
             // Granting must NOT start a recording by itself: the finger is already off the button,
             // and nothing may record without it. Say what to do instead.
@@ -288,6 +290,7 @@ internal fun Composer(
         }
 
     /** Records until [stopDictation]; the final result lands in the composer. */
+
     /**
      * Starts recording. Called ONLY from the press handler of the microphone button, and always
      * followed by [stopDictation] on release - nothing starts a recording by itself.
@@ -304,12 +307,15 @@ internal fun Composer(
                 languageTag =
                     speechLanguage.takeIf { it.isNotBlank() }
                         ?: if (android.os.Build.VERSION.SDK_INT >= 24) {
-                            java.util.Locale.getDefault().toLanguageTag()
+                            java.util.Locale
+                                .getDefault()
+                                .toLanguageTag()
                         } else {
                             null
                         },
                 biasing =
-                    com.opencode.android.util.SpeechRequestPolicy.biasingFor(speechSessionTitle) +
+                    com.opencode.android.util.SpeechRequestPolicy
+                        .biasingFor(speechSessionTitle) +
                         (if (speechQuality) com.opencode.android.util.SpeechRequestPolicy.DOMAIN_WORDS else emptyList()),
             )
         lastPartial = ""
@@ -319,7 +325,9 @@ internal fun Composer(
             // A chunk the engine finalised while the finger STAYS on the button: insert it now and
             // keep recording, so the rest of the sentence is not cut off (reported).
             onChunk = { chunk ->
-                val text = com.opencode.android.util.DictationPolicy.finalize(chunk, speechPunctuation)
+                val text =
+                    com.opencode.android.util.DictationPolicy
+                        .finalize(chunk, speechPunctuation)
                 if (text.isNotEmpty()) onAppendInput(text)
             },
             onFinal = { text ->
@@ -328,12 +336,14 @@ internal fun Composer(
                 // instead of dropping the words (on-device engines do this regularly).
                 val source =
                     text.ifBlank {
-                        com.opencode.android.util.DictationPolicy.fallbackFromPartial(lastPartial)
+                        com.opencode.android.util.DictationPolicy
+                            .fallbackFromPartial(lastPartial)
                     }
                 lastPartial = ""
                 // Straight into the composer: finalised text, no intermediate window, no message.
                 val finalText =
-                    com.opencode.android.util.DictationPolicy.finalize(source, speechPunctuation)
+                    com.opencode.android.util.DictationPolicy
+                        .finalize(source, speechPunctuation)
                 if (finalText.isNotEmpty()) onAppendInput(finalText)
             },
             onError = { error, message ->
@@ -341,16 +351,21 @@ internal fun Composer(
                 // The policy already filtered the expected noise (release, stale attempt, nothing
                 // heard); what arrives here is worth telling.
                 when (error) {
-                    com.opencode.android.util.SpeechError.Unavailable ->
+                    com.opencode.android.util.SpeechError.Unavailable -> {
                         speechToast.post(R.string.speech_unavailable)
+                    }
 
-                    com.opencode.android.util.SpeechError.Busy ->
+                    com.opencode.android.util.SpeechError.Busy -> {
                         speechToast.post(R.string.speech_busy)
+                    }
 
-                    com.opencode.android.util.SpeechError.Permission ->
+                    com.opencode.android.util.SpeechError.Permission -> {
                         speechToast.post(R.string.speech_permission_denied)
+                    }
 
-                    else -> speechToast.post(R.string.speech_failed, message.orEmpty())
+                    else -> {
+                        speechToast.post(R.string.speech_failed, message.orEmpty())
+                    }
                 }
             },
         )
@@ -698,56 +713,67 @@ internal fun Composer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(0.dp),
                     ) {
-                    if (speechInputEnabled) {
-                        // Same box as the other controls: a 48 dp touch target with a GLYPH at the
-                        // icon size. Drawing the icon itself at 48 dp made it roughly 1.7x the
-                        // neighbouring "+" (reported with a screenshot).
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(48.dp)
-                                    .pointerInput(speechInputEnabled) {
-                                        detectTapGestures(
-                                            onPress = {
-                                                if (speech.hasPermission()) {
-                                                    startDictation()
-                                                } else {
-                                                    micPermission.launch(
-                                                        android.Manifest.permission.RECORD_AUDIO,
+                        if (speechInputEnabled) {
+                            // Same box as the other controls: a 48 dp touch target with a GLYPH at the
+                            // icon size. Drawing the icon itself at 48 dp made it roughly 1.7x the
+                            // neighbouring "+" (reported with a screenshot).
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(48.dp)
+                                        .pointerInput(speechInputEnabled) {
+                                            detectTapGestures(
+                                                onPress = {
+                                                    // Confirmation that the recording started: the
+                                                    // microphone is held with the thumb, so the screen is
+                                                    // often not readable while dictating.
+                                                    haptics.performHapticFeedback(
+                                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
                                                     )
-                                                }
-                                                // Suspends until release or cancel.
-                                                tryAwaitRelease()
-                                                stopDictation()
-                                            },
-                                        )
-                                    }.semantics { this.role = Role.Button },
-                            contentAlignment = Alignment.Center,
+                                                    if (speech.hasPermission()) {
+                                                        startDictation()
+                                                    } else {
+                                                        micPermission.launch(
+                                                            android.Manifest.permission.RECORD_AUDIO,
+                                                        )
+                                                    }
+                                                    // Suspends until release or cancel.
+                                                    tryAwaitRelease()
+                                                    // A lighter tick marks the end, so "recording" and
+                                                    // "done" are distinguishable by feel.
+                                                    haptics.performHapticFeedback(
+                                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
+                                                    )
+                                                    stopDictation()
+                                                },
+                                            )
+                                        }.semantics { this.role = Role.Button },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = stringResource(R.string.speech_hold_to_talk),
+                                    tint =
+                                        if (listening) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onAddFiles,
+                            // 48 dp = platform minimum touch target; 40 dp missed it on
+                            // the two most-tapped controls of the composer.
+                            modifier = Modifier.size(48.dp),
                         ) {
                             Icon(
-                                Icons.Default.Mic,
-                                contentDescription = stringResource(R.string.speech_hold_to_talk),
-                                tint =
-                                    if (listening) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
+                                Icons.Default.Add,
+                                contentDescription = stringResource(R.string.add_images_and_files),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                    }
-                    IconButton(
-                        onClick = onAddFiles,
-                        // 48 dp = platform minimum touch target; 40 dp missed it on
-                        // the two most-tapped controls of the composer.
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = stringResource(R.string.add_images_and_files),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                     }
 
                     BasicTextField(
@@ -768,6 +794,7 @@ internal fun Composer(
                                             onInterrupt()
                                             true
                                         }
+
                                         // Enter sends; Shift+Enter inserts a newline.
                                         // Ctrl/Cmd+Enter also sends, the habit from
                                         // desktop chat clients.
@@ -785,7 +812,10 @@ internal fun Composer(
                                             }
                                             true
                                         }
-                                        else -> false
+
+                                        else -> {
+                                            false
+                                        }
                                     }
                                 },
                         textStyle =
@@ -831,14 +861,20 @@ internal fun Composer(
                         visible = composerHasText && !isUploading,
                         enter =
                             androidx.compose.animation.fadeIn(
-                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                                animationSpec =
+                                    com.opencode.android.ui.theme.Motion
+                                        .effects(),
                             ) +
                                 androidx.compose.animation.scaleIn(
-                                    animationSpec = com.opencode.android.ui.theme.Motion.expressive(),
+                                    animationSpec =
+                                        com.opencode.android.ui.theme.Motion
+                                            .expressive(),
                                 ),
                         exit =
                             androidx.compose.animation.fadeOut(
-                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                                animationSpec =
+                                    com.opencode.android.ui.theme.Motion
+                                        .effects(),
                             ),
                     ) {
                         val steers = followUpBehavior == "steer"
@@ -886,11 +922,15 @@ internal fun Composer(
                         visible = !composerHasText && !isUploading,
                         enter =
                             androidx.compose.animation.fadeIn(
-                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                                animationSpec =
+                                    com.opencode.android.ui.theme.Motion
+                                        .effects(),
                             ),
                         exit =
                             androidx.compose.animation.fadeOut(
-                                animationSpec = com.opencode.android.ui.theme.Motion.effects(),
+                                animationSpec =
+                                    com.opencode.android.ui.theme.Motion
+                                        .effects(),
                             ),
                     ) {
                         IconButton(
@@ -995,8 +1035,7 @@ internal fun Composer(
                                 .background(
                                     MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f),
                                     MaterialTheme.shapes.small,
-                                )
-                                .padding(horizontal = MaterialTheme.spacing.small),
+                                ).padding(horizontal = MaterialTheme.spacing.small),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(

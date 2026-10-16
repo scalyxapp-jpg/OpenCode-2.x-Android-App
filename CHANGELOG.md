@@ -5,6 +5,69 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.7] - 2026-10-17
+
+### Fixed
+
+**Nach der Sprechpause wurde nichts mehr aufgezeichnet — Ursache aus der Geräte-Zeitachse bewiesen.**
+
+Der Log (3.8.6) zeigt den ganzen Ablauf einer gehaltenen Aufnahme:
+
+```
+00:47:45.734  SodaSpeechRecognizer: #handleFinalResult: 1 hyp      ← Erkenner beendet SELBST (Pause)
+00:47:46.191  RecognitionService#onEndOfSpeech
+00:47:46.210  RecognitionService#onMicrophoneCloseRequested        ← MIKROFON ZU
+00:47:46.649  App: raw=11  → retry in 350 ms
+00:47:47.097  RecognitionService#onMicrophoneOpened                ← erst 0,89 s später wieder offen
+00:47:48.027  RecognitionService#onStartOfSpeech                   ← hört erst jetzt wieder
+```
+
+Drei Erkenntnisse:
+
+1. **Die Stille-Schwellen (60 s) werden ignoriert.** Der Erkenner läuft als
+   `applicationDomain: AMBIENT_ONESHOT` — Samsung-`SODA` ist **Einzel-Äußerung**: er beendet die
+   Sitzung bei jeder Pause von selbst. Meine Chunk-Fortsetzung war deshalb richtig, aber:
+2. **Die Lücke kostet Sprache.** Zwischen „Mikrofon zu" und „wieder offen" lagen **~0,9 s**
+   (Engine-Teardown + 350 ms Wartezeit + Engine-Setup). Genau dort verschwanden die Wörter nach der
+   Pause.
+3. **`raw 11` ist der Reconnect-Zustand**, nicht der Fehler (schon in 3.8.6 behandelt).
+
+**Fixes:**
+
+- **Mikrofon früher zurückholen:** statt **einer** 350-ms-Wartezeit jetzt **drei kurze Versuche
+  (120 / 250 / 500 ms)** — sobald die Engine bereit ist, hört sie wieder; jede eingesparte
+  Millisekunde ist gerettete Sprache. Weiterhin nur, solange derselbe Versuch läuft **und** der
+  Knopf gehalten wird (Push-to-Talk bleibt unangetastet).
+- **Online-Modell explizit anfordern:** `EXTRA_PREFER_OFFLINE` wird jetzt **immer** gesendet (und
+  ist `false`, solange „Dictate on-device only" aus ist). Das On-Device-SODA ist bauartbedingt
+  Einzel-Äußerung; das Online-Modell hält eine lange, pausenreiche Diktat-Sitzung in **einer**
+  Sitzung durch. Ob die Engine den Hinweis befolgt, entscheidet das Gerät — der Log sagt es.
+
+### Added
+
+- **Haptisches Feedback am Aufnahme-Knopf.** Beim Drücken/Halten kommt ein **kräftiger Impuls**
+  (`HapticFeedbackType.LongPress`, wie an den anderen Composer-Knöpfen), beim Loslassen ein
+  **leichterer Tick** (`TextHandleMove`). Beim Diktieren hält man den Knopf mit dem Daumen und liest
+  selten auf den Bildschirm — so ist „Aufnahme läuft" und „Aufnahme beendet" auch ohne Blick
+  unterscheidbar. Die Rückmeldung kommt nur beim tatsächlichen Drücken (kein Auto-Aufnehmen).
+
+### Verified am Gerät
+
+- **Haptik:** der Vibrator-Dienst protokolliert beide Impulse unseres Pakets —
+  `performHapticFeedback(constant=0)` beim Drücken und `(constant=9)` beim Loslassen, 1,5 s
+  auseinander (die simulierte Haltedauer) ✓
+- **Online-Hinweis wird von Samsungs Engine ignoriert:** im Log steht nach dem expliziten
+  `EXTRA_PREFER_OFFLINE=false` weiterhin `SodaSpeechRecognizer: Offline recognizer - start
+  detection` (`AMBIENT_ONESHOT`). Die Einzel-Äußerung und damit die Lücke bei Pausen sind hier
+  **Geräteverhalten**, nicht App-Verhalten; die drei kurzen Wiederholversuche holen das Mikrofon aber
+  so früh zurück, wie die Engine es zulässt (erster Versuch nach 120 ms statt 350 ms).
+
+### Ehrlich offen
+
+- **Pausen-Verhalten mit echter Sprache** ist noch nicht verifiziert (dafür braucht es Sprache).
+  Falls die Lücke weiter stört: in den **Systemeinstellungen** den Spracherkennungsdienst wechseln
+  (Google statt Samsung) — dessen Online-Modell hält eine lange Aufnahme in einer Sitzung durch.
+
 ## [3.8.6] - 2026-10-17
 
 ### Fixed

@@ -96,9 +96,12 @@ object SpeechRequestPolicy {
         options.languageTag?.takeIf { it.isNotBlank() }?.let {
             map[RecognizerIntent.EXTRA_LANGUAGE] = it
         }
-        if (options.preferOffline) {
-            map[RecognizerIntent.EXTRA_PREFER_OFFLINE] = true
-        }
+        // Sent ALWAYS, and explicitly `false` when the user did not ask for on-device: the built-in
+        // on-device engine (SODA, `applicationDomain: AMBIENT_ONESHOT`) is one-utterance-only - it
+        // ends the session on every pause and closes the microphone (~0.9 s) while the speaker keeps
+        // talking, which is exactly the "it stops recording after a pause" report. The online model
+        // handles a long, pause-filled dictation in one session.
+        map[RecognizerIntent.EXTRA_PREFER_OFFLINE] = options.preferOffline
         if (apiLevel >= 33) {
             if (options.optimizeQuality) {
                 map[RecognizerIntent.EXTRA_ENABLE_FORMATTING] =
