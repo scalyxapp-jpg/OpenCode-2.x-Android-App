@@ -1431,6 +1431,39 @@ class ChatViewModel
          * first one (reported as "the prompt gets emptied"). Reading the current state makes every
          * chunk additive, no matter how many arrive while the button is held.
          */
+        /**
+         * Appends RAW dictated text, deciding punctuation and capitalisation against the CURRENT
+         * field content.
+         *
+         * Both decisions need the current text: a chunk that continues a sentence must not be
+         * capitalised ("ein Test du wartest" - not "ein Test Du wartest", which the device test
+         * produced), and only the view model knows the field at append time.
+         */
+        fun appendDictated(
+            raw: String,
+            spokenPunctuation: Boolean,
+        ) {
+            if (raw.isBlank()) return
+            _uiState.update {
+                val current = it.inputText
+                val text =
+                    com.opencode.android.util.DictationPolicy.finalize(
+                        raw,
+                        spokenPunctuation,
+                        continuesSentence =
+                            com.opencode.android.util.DictationPolicy.continuesSentence(current),
+                    )
+                if (text.isEmpty()) {
+                    it
+                } else {
+                    it.copy(
+                        inputText =
+                            com.opencode.android.util.DictationPolicy.appendFinal(current, text),
+                    )
+                }
+            }
+        }
+
         fun appendInput(text: String) {
             val add = text.trim()
             if (add.isEmpty()) return

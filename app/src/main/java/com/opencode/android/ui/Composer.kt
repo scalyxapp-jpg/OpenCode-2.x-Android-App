@@ -187,6 +187,8 @@ internal class ComposerActions(
     val onInputChange: (String) -> Unit,
     /** Dictation appends to the CURRENT text; the composable's captured value would lose chunks. */
     val onAppendInput: (String) -> Unit = onInputChange,
+    /** Raw dictated text plus the punctuation switch - finalised in the view model. */
+    val onAppendDictated: (String, Boolean) -> Unit = { text, _ -> onAppendInput(text) },
     val onSend: () -> Unit,
     /**
      * Queues the composer's text instead of sending it now — the web's Ctrl+Enter
@@ -256,6 +258,7 @@ internal fun Composer(
 ) {
     val onInputChange = actions.onInputChange
     val onAppendInput = actions.onAppendInput
+    val onAppendDictated = actions.onAppendDictated
     val onSend = actions.onSend
     val onQueue = actions.onQueue
     val onSteer = actions.onSteer
@@ -324,12 +327,10 @@ internal fun Composer(
             onPartial = { lastPartial = it },
             // A chunk the engine finalised while the finger STAYS on the button: insert it now and
             // keep recording, so the rest of the sentence is not cut off (reported).
-            onChunk = { chunk ->
-                val text =
-                    com.opencode.android.util.DictationPolicy
-                        .finalize(chunk, speechPunctuation)
-                if (text.isNotEmpty()) onAppendInput(text)
-            },
+            // Raw text + the punctuation switch go to the view model: it knows the CURRENT field
+            // text, so it can decide whether the phrase continues a sentence (and therefore must
+            // NOT be capitalised). Doing that here captured a stale value.
+            onChunk = { chunk -> onAppendDictated(chunk, speechPunctuation) },
             onFinal = { text ->
                 listening = false
                 // Spoke, released, engine returned nothing: use the last partial it already heard
@@ -341,10 +342,7 @@ internal fun Composer(
                     }
                 lastPartial = ""
                 // Straight into the composer: finalised text, no intermediate window, no message.
-                val finalText =
-                    com.opencode.android.util.DictationPolicy
-                        .finalize(source, speechPunctuation)
-                if (finalText.isNotEmpty()) onAppendInput(finalText)
+                onAppendDictated(source, speechPunctuation)
             },
             onError = { error, message ->
                 listening = false
@@ -727,9 +725,10 @@ internal fun Composer(
                                                     // Confirmation that the recording started: the
                                                     // microphone is held with the thumb, so the screen is
                                                     // often not readable while dictating.
-                                                    haptics.performHapticFeedback(
-                                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                                    )
+                                                    // Direct vibrator pulse: performHapticFeedback is
+                                                    // dropped when the system touch-feedback setting is
+                                                    // off, which made the button feel dead.
+                                                    com.opencode.android.util.Haptics.press(speechContext)
                                                     if (speech.hasPermission()) {
                                                         startDictation()
                                                     } else {
@@ -741,9 +740,7 @@ internal fun Composer(
                                                     tryAwaitRelease()
                                                     // A lighter tick marks the end, so "recording" and
                                                     // "done" are distinguishable by feel.
-                                                    haptics.performHapticFeedback(
-                                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove,
-                                                    )
+                                                    com.opencode.android.util.Haptics.release(speechContext)
                                                     stopDictation()
                                                 },
                                             )
@@ -889,9 +886,7 @@ internal fun Composer(
                         ) {
                             IconButton(
                                 onClick = {
-                                    haptics.performHapticFeedback(
-                                        androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                                    )
+                                    com.opencode.android.util.Haptics.press(speechContext)
                                     // Follow-up behavior (web: Preferences):
                                     // queue the message or steer the running turn.
                                     // The queued cards' "Steer" stays available as
@@ -978,9 +973,7 @@ internal fun Composer(
                     )
                     FilledTonalIconButton(
                         onClick = {
-                            haptics.performHapticFeedback(
-                                androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress,
-                            )
+                            com.opencode.android.util.Haptics.press(speechContext)
                             if (isGenerating) onInterrupt() else onSend()
                         },
                         enabled = (isGenerating || composerHasText) && !isUploading,

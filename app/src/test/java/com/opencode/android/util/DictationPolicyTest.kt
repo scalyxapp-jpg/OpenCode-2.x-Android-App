@@ -83,6 +83,30 @@ class DictationPolicyTest {
     }
 
     @Test
+    fun `a phrase that continues a sentence is not capitalised`() {
+        // From the device test: the chunks were capitalised individually, which produced
+        // "ein Test Du wartest jetzt" instead of "ein Test du wartest jetzt".
+        assertEquals(
+            "du wartest jetzt",
+            DictationPolicy.finalize("du wartest jetzt", spokenPunctuation = true, continuesSentence = true),
+        )
+        // At a sentence start (or an empty field) the capital stays.
+        assertEquals(
+            "Du wartest jetzt",
+            DictationPolicy.finalize("du wartest jetzt", spokenPunctuation = true, continuesSentence = false),
+        )
+
+        // The rule that feeds it: does the existing text end mid-sentence?
+        assertEquals(false, DictationPolicy.continuesSentence(""))
+        assertEquals(false, DictationPolicy.continuesSentence("   "))
+        assertEquals(true, DictationPolicy.continuesSentence("ein Test"))
+        assertEquals(false, DictationPolicy.continuesSentence("ein Test."))
+        assertEquals(false, DictationPolicy.continuesSentence("Fertig?"))
+        assertEquals(false, DictationPolicy.continuesSentence("Titel:"))
+        assertEquals(false, DictationPolicy.continuesSentence("Zeile\n"))
+    }
+
+    @Test
     fun `an empty final result falls back to the last partial`() {
         // "Spoke, released, nothing appeared" - on-device engines do this; the partials already
         // heard the words.

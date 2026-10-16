@@ -5,6 +5,76 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.8] - 2026-10-17
+
+### Fixed
+
+**Haptik am Aufnahme-Knopf war wirkungslos — mein „Beweis" war falsch.** Ich hatte im
+Vibrator-Log nur den **Aufruf** gesehen und dabei zwei entscheidende Felder überlesen:
+
+```
+| ignored_for_settings | … | reason: performHapticFeedback(constant=0): ViewRootImpl#performHapticFeedback | played: null
+```
+
+`played: null` heißt: die Anfrage wurde protokolliert und **nichts abgespielt**. Dazu die Ursachen,
+beide am Gerät gemessen:
+
+| Befund | Folge |
+| --- | --- |
+| `settings get system haptic_feedback_enabled` = **0** | Das System-Touch-Feedback ist **aus**; `performHapticFeedback` wird mit `ignored_for_settings` verworfen. |
+| `android.permission.VIBRATE` **fehlte** im Manifest | Ein direkter Vibrator-Aufruf wäre wirkungslos geblieben. |
+
+**Fix:** neuer Helfer `util/Haptics` — der **Vibrator wird direkt** benutzt
+(`VibrationEffect.createOneShot`), also **unabhängig** von dieser Systemeinstellung; die
+`VIBRATE`-Permission ist ergänzt. Zwei klar unterscheidbare Impulse:
+
+- **Drücken:** 30 ms, Amplitude 255 (kräftig)
+- **Loslassen:** 15 ms, Amplitude 140 (leicht)
+
+Ohne Vibrator fällt der Helfer auf `performHapticFeedback` zurück.
+
+**Am Gerät bewiesen** (`dumpsys vibrator_manager`, Abschnitt „Recent vibrations", `played:` ist
+gefüllt — vorher stand dort `null`):
+
+```
+01:28:35.710 | usage: TOUCH | com.opencode.android | played: Step=30ms(amplitude=1.00)   ← Drücken
+01:28:37.182 | usage: TOUCH | com.opencode.android | played: Step=15ms(amplitude=0.55)   ← Loslassen
+```
+
+Genau die gesetzten Werte (255/255 = 1.00 und 140/255 = 0.55), 1,47 s auseinander = die gehaltene
+Dauer. Zwei Hinweise zur Prüfmethode: der Dump hat **zwei** Abschnitte — die alten
+`performHapticFeedback`-**Anfragen** (mit `played: null`) und die tatsächlich **abgespielten**
+Vibrationen; mein erster Blick hatte nur den Anfrage-Abschnitt gesehen. Die beiden anderen
+Composer-Knöpfe (Queue, Senden/Stop) nutzen denselben Helfer, damit es nur eine Quelle gibt.
+Ehrliche Grenze: bei aktivem „Nicht stören" mit abgeschalteter Vibration kann die Plattform
+weiterhin stumm schalten — das ist dann Systemverhalten.
+
+### Fixed (aus derselben Runde, durch den Gerätetest gefunden)
+
+**Diktat-Chunks wurden einzeln groß geschrieben.** Dein diktierter Text lautete „…ein Test **Du**
+wartest jetzt…" — jeder Chunk wurde für sich poliert und dabei groß geschrieben. Jetzt entscheidet
+`DictationPolicy.continuesSentence` gegen den **aktuellen** Feldtext: läuft der Satz weiter (kein
+`.`, `!`, `?`, `:`, kein Zeilenumbruch), bleibt der Chunk-Anfang klein. Da diese Entscheidung den
+aktuellen Text braucht, wandert sie ins ViewModel (`appendDictated`).
+
+**Testfund:** `continuesSentence` nutzte `trimEnd()` und entfernte damit auch den **Zeilenumbruch** —
+Text, der mit „\n" endet, galt fälschlich als fortlaufender Satz. Jetzt werden nur Leerzeichen/Tabs
+getrimmt.
+
+### Added (tests)
+
+- `DictationPolicyTest` (10, +1): Satzfortsetzung wird nicht groß geschrieben, am Satzanfang schon;
+  `continuesSentence` für leer/Leerzeichen/offen/`.`/`?`/`:`/Zeilenumbruch.
+- Betroffen geprüft (nur diese Klassen): **23 Tests, 0 Fehler**.
+
+### Verified am Gerät (aus deinem Testdiktat)
+
+- Ein Halten, **drei Chunks (22 + 47 + 13 = 82 Zeichen)** inklusive Pausen — im Composer stand
+  danach der durchgehende Satz „Hallo das ist ein Test … bis ich fertig gesprochen habe …".
+- Die Mikrofon-Lücke nach einer Pause sank von **890 ms auf ~90 ms** (drei kurze Versuche
+  120/250/500 ms statt einer 350-ms-Wartezeit).
+- **Keine** Fehlermeldung, **0 FATAL**.
+
 ## [3.8.7] - 2026-10-17
 
 ### Fixed

@@ -98,11 +98,37 @@ object DictationPolicy {
         }
     }
 
-    /** The whole pipeline for one recognized phrase: punctuation, then polish. */
+    /**
+     * The whole pipeline for one recognized phrase: punctuation, then polish.
+     *
+     * [continuesSentence] is true when the phrase is appended to text that does NOT end a sentence
+     * (no `.`, `!`, `?`, `:` or line break). Then the first letter stays as the engine returned it:
+     * capitalising every chunk wrote "ein Test Du wartest jetzt" instead of "ein Test du wartest
+     * jetzt" — visible in the dictated text that came out of the device test.
+     */
     fun finalize(
         recognized: String,
         spokenPunctuation: Boolean,
-    ): String = polish(if (spokenPunctuation) applySpokenPunctuation(recognized) else recognized.trim())
+        continuesSentence: Boolean = false,
+    ): String {
+        val punctuated = if (spokenPunctuation) applySpokenPunctuation(recognized) else recognized.trim()
+        val polished = polish(punctuated)
+        if (!continuesSentence || polished.isEmpty()) return polished
+        return polished.replaceFirstChar { it.lowercaseChar() }
+    }
+
+    /** Whether [existing] text ends mid-sentence, i.e. the next phrase continues it. */
+    fun continuesSentence(existing: String): Boolean {
+        // Only spaces/tabs are trimmed: trimEnd() also removed a trailing line break, so text ending
+        // with "\n" counted as a continued sentence and the next phrase was not capitalised (found by
+        // the test).
+        val tail = existing.trimEnd(' ', '\t')
+        if (tail.isEmpty()) return false
+        return !(
+            tail.endsWith(".") || tail.endsWith("!") || tail.endsWith("?") ||
+                tail.endsWith(":") || tail.endsWith("\n")
+        )
+    }
 
     /**
      * What to insert when the engine delivered no final result.
