@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.9] - 2026-10-17
+
+### Fixed
+
+**Haptik war abgespielt, aber nicht spürbar — zweite Ursache gefunden.** Nach 3.8.8 stand im
+Vibrator-Dump `played: Step=30ms(amplitude=1.00)`, also **wirklich abgespielt** — nur gefühlt wurde
+nichts. Der Grund steht im selben Eintrag: **`usage: TOUCH`**. Genau diese Kategorie skaliert das
+Gerät mit dem **„Touch"-Intensitätsregler**, und der gehört zu dem Schalter, der auf deinem Gerät aus
+ist (`haptic_feedback_enabled = 0`). Eine Rückmeldung, die ausdrücklich angefordert wurde, darf nicht
+von einer Einstellung über *Touch-Feedback* auf null skaliert werden.
+
+**Fix:**
+- **Andere Nutzungskategorie:** `VibrationAttributes.USAGE_PHYSICAL_EMULATION` („Vibration, die einen
+  physischen Knopf nachahmt") statt `USAGE_TOUCH` (ab API 30).
+- **Gerätetaugliche Effekte:** `VibrationEffect.createPredefined(EFFECT_CLICK / EFFECT_TICK)` statt
+  selbstgebauter Wellenform — die sind auf den Aktuator des Geräts abgestimmt und spürbar besser;
+  Fallback auf eine Einmal-Vibration (45 ms/255 bzw. 20 ms/150) unter API 29.
+- Der Impuls ist damit kräftiger (45 ms statt 30 ms) und klar unterscheidbar (klick vs. tick).
+
+**Ehrliche Grenze:** bei „Nicht stören" mit stummgeschalteter Vibration kann die Plattform weiterhin
+nichts abspielen — das ist Systemverhalten, nicht die App.
+
+### Fixed
+
+**Das letzte Wort wurde abgeschnitten („dreimal hallo" → das dritte fehlte).** Gemessen war die
+Ursache: Der Erkenner beendet bei jeder Pause die Sitzung (Samsung-SODA, `AMBIENT_ONESHOT`), und
+meine Fortsetzung **erzeugte den Erkenner neu** — im Log jedes Mal `Initialize Soda` +
+`blockingReconnect`, also ~300 ms Aufbau, in denen das Mikrofon zu ist. Das dritte „hallo" fiel
+genau in dieses Fenster.
+
+Jetzt wird die **bestehende Instanz weiterverwendet** (`startListening()` erneut, kein Neuaufbau) —
+nur wenn das fehlschlägt, greift der bisherige Weg mit frischem Erkenner. Damit sollte die Lücke von
+~300 ms auf wenige Millisekunden fallen; das ist am nächsten Log direkt messbar (die
+`Initialize Soda`-Zeilen zwischen den Chunks müssen verschwinden).
+
+### Offen (Gerät war während der Änderung nicht verbunden)
+
+- **Am Gerät zu prüfen:** (a) Haptik spürbar? (b) Lücke zwischen den Chunks kleiner?
+  Prüfbefehle: `dumpsys vibrator_manager` (Abschnitt „Recent vibrations", `played:` und `usage:`)
+  und der Vergleich der `SodaSpeechRecognizer`-Zeilen zwischen zwei `chunk of N chars`-Einträgen.
+
 ## [3.8.8] - 2026-10-17
 
 ### Fixed

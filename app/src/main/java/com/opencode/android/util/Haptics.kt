@@ -2,57 +2,77 @@ package com.opencode.android.util
 
 import android.content.Context
 import android.os.Build
+import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 
 /**
- * Press feedback that actually plays.
+ * Press feedback on the dictation button that is actually felt.
  *
- * `View.performHapticFeedback` is gated on the device's **touch-feedback setting**: with
- * `Settings.System.HAPTIC_FEEDBACK_ENABLED = 0` the system logs the request as
- * `ignored_for_settings` and plays **nothing** (`played: null` in `dumpsys vibrator_manager`) —
- * which is why the dictation button felt dead although the call was made (reported, and then proven
- * on the device).
+ * Two dead ends were found on the device, and both are handled here:
  *
- * So the Vibrator is used directly: it plays regardless of that setting, and it only needs the
- * normal `VIBRATE` permission. Two distinguishable pulses make "recording" and "done" clear without
- * looking at the screen. If no vibrator exists, the old `performHapticFeedback` path is used as a
- * fallback.
+ * 1. `View.performHapticFeedback` is gated on the device's **touch-feedback setting**. With
+ *    `Settings.System.HAPTIC_FEEDBACK_ENABLED = 0` the system logs the request as
+ *    `ignored_for_settings` and plays nothing (`played: null`) - which is why the first attempt at
+ *    this feature was silent.
+ * 2. The Vibrator then played (`played: Step=30ms(amplitude=1.00)`) but was still not felt: the
+ *    effect carried `usage: TOUCH`, and that category is scaled by the "touch interactions"
+ *    vibration intensity - the very slider that sits next to the touch-feedback switch. A pulse the
+ *    user explicitly asked for must not be scaled down to nothing by a setting about touch feedback.
  *
- * Limits, stated honestly: in Do-not-disturb with vibration disabled, or on a device whose vibrator
- * is switched off in the system, nothing can play - that is the platform, not the app.
+ * So the Vibrator is used directly, with the device's own **predefined** effects (tuned for the
+ * actuator, which is perceptibly better than a raw one-shot) and with
+ * [VibrationAttributes.USAGE_PHYSICAL_EMULATION] from API 30 on - the category for "vibration that
+ * imitates a physical button", which is what a held dictation button is.
+ *
+ * Limits, stated honestly: with "Do not disturb" silencing vibration, or a device whose vibrator is
+ * switched off entirely, the platform may still play nothing.
  */
 object Haptics {
-    /** Recording started: firm, ~30 ms. */
+    /** Recording started: firm. */
     fun press(context: Context) {
-        if (!play(context, durationMs = 30L, amplitude = 255)) {
-            fallbackPress(context)
+        if (!play(context, predefined = VibrationEffect.EFFECT_CLICK, durationMs = 45L, amplitude = 255)) {
+            fallback(context, android.view.HapticFeedbackConstants.LONG_PRESS)
         }
     }
 
-    /** Recording ended: lighter, ~15 ms - clearly different from the start pulse. */
+    /** Recording ended: lighter, so "running" and "done" are distinguishable by feel. */
     fun release(context: Context) {
-        if (!play(context, durationMs = 15L, amplitude = 140)) {
-            fallbackRelease(context)
+        if (!play(context, predefined = VibrationEffect.EFFECT_TICK, durationMs = 20L, amplitude = 150)) {
+            fallback(context, android.view.HapticFeedbackConstants.CLOCK_TICK)
         }
     }
 
     private fun play(
         context: Context,
+        predefined: Int,
         durationMs: Long,
         amplitude: Int,
     ): Boolean =
         runCatching {
             val vibrator = vibrator(context) ?: return false
             if (!vibrator.hasVibrator()) return false
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val effect =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // The device's own tuned click/tick: much more likely to be felt than a waveform
+                    // that ignores the actuator's characteristics.
+                    VibrationEffect.createPredefined(predefined)
+                } else {
+                    @Suppress("DEPRECATION")
+                    VibrationEffect.createOneShot(durationMs, amplitude.coerceIn(1, 255))
+                }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 vibrator.vibrate(
-                    VibrationEffect.createOneShot(durationMs, amplitude.coerceIn(1, 255)),
+                    effect,
+                    // USAGE_PHYSICAL_EMULATION: "vibration that imitates a physical button".
+                    // Deliberately NOT USAGE_TOUCH - that category is the one the touch-feedback
+                    // switch and its intensity slider scale down, which is why the first version of
+                    // this pulse was played and still not felt.
+                    VibrationAttributes.createForUsage(VibrationAttributes.USAGE_PHYSICAL_EMULATION),
                 )
             } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(durationMs)
+                vibrator.vibrate(effect)
             }
             true
         }.getOrDefault(false)
@@ -67,19 +87,12 @@ object Haptics {
         }
 
     /** Only reached when the device has no usable vibrator. */
-    private fun fallbackPress(context: Context) {
+    private fun fallback(
+        context: Context,
+        constant: Int,
+    ) {
         runCatching {
-            (context as? android.app.Activity)?.window?.decorView?.performHapticFeedback(
-                android.view.HapticFeedbackConstants.LONG_PRESS,
-            )
-        }
-    }
-
-    private fun fallbackRelease(context: Context) {
-        runCatching {
-            (context as? android.app.Activity)?.window?.decorView?.performHapticFeedback(
-                android.view.HapticFeedbackConstants.CLOCK_TICK,
-            )
+            (context as? android.app.Activity)?.window?.decorView?.performHapticFeedback(constant)
         }
     }
 }

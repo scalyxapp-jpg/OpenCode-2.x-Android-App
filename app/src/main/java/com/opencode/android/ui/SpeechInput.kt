@@ -93,6 +93,9 @@ internal class SpeechInput(
         // One silent retry inside the same attempt: a busy/out-of-order engine (busy, or a call that
         // arrived while the previous attempt was still tearing down) is not worth a message while
         // the user is holding the button.
+        // Declared here and assigned after begin(): the listener inside begin() calls it, and a
+        // local function cannot be referenced before its declaration.
+        lateinit var continueSameEngine: (com.opencode.android.util.SpeechOptions) -> Unit
         var retriesUsed = 0
         // Everything delivered for this attempt, so an error can tell "nothing at all" from "some
         // words already arrived" (the latter must never produce a failure message).
@@ -232,8 +235,12 @@ internal class SpeechInput(
                             if (chunk.isNotEmpty()) onChunk(chunk)
                             lastPartial = ""
                             if (text.isNotEmpty()) {
-                                // A fresh engine for the next utterance; the attempt stays the same.
-                                begin()
+                                // Continue on the SAME recognizer: creating a new one re-initialises
+                                // the engine (SODA: "Initialize Soda" + "blockingReconnect", ~300 ms)
+                                // and every millisecond of that is lost speech - the reported "the
+                                // last word is cut off". Reusing the instance only re-arms listening.
+                                // Error retries still get a fresh engine (begin()).
+                                continueSameEngine(options)
                                 return
                             }
                         }
@@ -279,6 +286,31 @@ internal class SpeechInput(
                     onError(com.opencode.android.util.SpeechError.Failed, failure.message)
                 }
         }
+        /**
+         * Re-arms the CURRENT recognizer without recreating it.
+         *
+         * When the engine ends an utterance by itself (a pause) while the button is still held, a
+         * fresh instance would re-initialise the whole engine first (SODA: "Initialize Soda" +
+         * "blockingReconnect", ~300 ms) - and every millisecond of that is lost speech, which is the
+         * reported "the last word is cut off". `startListening` on the existing instance resumes
+         * immediately. If it fails, the normal error path retries with a fresh engine.
+         */
+        continueSameEngine = { options ->
+            val engine = recognizer
+            if (engine == null) {
+                begin()
+            } else {
+                listening = true
+                runCatching { engine.startListening(recognitionIntent(options)) }
+                    .onFailure { failure ->
+                        com.opencode.android.util.DictationLog.state(
+                            "same-engine continue failed (${failure.message}) - recreating",
+                        )
+                        begin()
+                    }
+            }
+        }
+
         begin()
     }
 
