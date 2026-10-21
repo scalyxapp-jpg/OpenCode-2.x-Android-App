@@ -59,6 +59,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -70,6 +72,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -926,10 +930,14 @@ private fun SearchRow(
                 onValueChange = onQueryChange,
                 // Fixed height keeps the row from growing (the default field is
                 // 56 dp, which dominated the list header).
+                // NOT a fixed 44 dp: the clear button below has a 48 dp touch target, and
+                // constraining the field below that squeezed the decoration box so far that the
+                // text was no longer visible once something was typed (reported). A minimum keeps
+                // the row compact without clipping.
                 modifier =
                     Modifier
                         .weight(1f)
-                        .height(44.dp),
+                        .heightIn(min = 48.dp),
                 placeholder = {
                     Text(
                         text = stringResource(R.string.search_in, scopeName),
@@ -948,7 +956,17 @@ private fun SearchRow(
                 // very common action.
                 trailingIcon = {
                     if (query.isNotEmpty()) {
-                        IconButton(onClick = { onQueryChange("") }) {
+                        // A plain clickable glyph, not an IconButton: the button's 48 dp minimum is
+                        // what squeezed the field (see above). 32 dp is still a comfortable target
+                        // for a secondary action inside a text field.
+                        Box(
+                            modifier =
+                                Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button) { onQueryChange("") },
+                            contentAlignment = Alignment.Center,
+                        ) {
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = stringResource(R.string.clear_search),
@@ -967,6 +985,13 @@ private fun SearchRow(
                         disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
+                        // Spelled out so the typed text can never inherit a low-contrast colour from
+                        // a custom theme - "I type and see nothing" must be impossible.
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = MaterialTheme.colorScheme.primary,
+                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     ),
             )
             FilledTonalIconButton(onClick = onNewSession) {
@@ -1110,6 +1135,8 @@ private fun AddProjectDialog(
     // Quick-add for projects the server knows but the user did not keep.
     var query by remember { mutableStateOf("") }
     var entries by remember { mutableStateOf<List<FileEntry>>(emptyList()) }
+    /** Free absolute path, for folders the browser would take many steps to reach. */
+    var pathInput by remember { mutableStateOf("") }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -1243,6 +1270,65 @@ private fun AddProjectDialog(
                     },
                     placeholder = stringResource(R.string.search_folders),
                 )
+                // Quick jumps + free path: the browser must reach EVERY folder the server can
+                // see, not only what lies under its home directory (the reason it felt like it
+                // "would not let me browse"). "/" is the filesystem root, and the path field takes
+                // any absolute path - e.g. /storage/emulated/0/Download when the server runs on the
+                // phone itself.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.extraSmall),
+                ) {
+                    AssistChip(
+                        onClick = {
+                            home?.let { h ->
+                                currentDir = h
+                                query = ""
+                                list(h)
+                            }
+                        },
+                        label = { Text(stringResource(R.string.add_project_home), maxLines = 1) },
+                        leadingIcon = { Icon(Icons.Default.Home, contentDescription = null) },
+                    )
+                    AssistChip(
+                        onClick = {
+                            currentDir = "/"
+                            query = ""
+                            list("/")
+                        },
+                        label = { Text("/") },
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+                ) {
+                    OutlinedTextField(
+                        value = pathInput,
+                        onValueChange = { pathInput = it },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        placeholder = {
+                            Text(
+                                text = stringResource(R.string.add_project_path_hint),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                    )
+                    TextButton(
+                        enabled = pathInput.trim().startsWith("/"),
+                        onClick = {
+                            val target = pathInput.trim()
+                            currentDir = target
+                            query = ""
+                            list(target)
+                        },
+                    ) { Text(stringResource(R.string.open)) }
+                }
                 // Breadcrumb: current location relative to home.
                 Text(
                     text =

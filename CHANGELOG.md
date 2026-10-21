@@ -5,6 +5,48 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-10-21
+
+### Fixed
+
+**Der eingetippte Suchtext war unsichtbar.** Ursache aus dem Code: Das Feld war auf **44 dp
+festgenagelt**, und der **Löschen-Knopf** (`IconButton`, dessen Touch-Ziel Material auf **48 dp**
+zwingt) erscheint **genau dann, wenn Text vorhanden ist**. Damit wurde das Dekorationsfeld
+gequetscht — sichtbar wurde nichts mehr, sobald man tippte.
+
+- **Kein fester Deckel mehr:** `heightIn(min = 48.dp)` — kompakt, aber ohne Abschneiden.
+- **Löschen als schlichtes Glyph** (32 dp, klickbar) statt `IconButton` — es kann die Zeile nicht mehr
+  aufblähen.
+- **Farben explizit:** Text, Cursor und Placeholder sind jetzt ausdrücklich gesetzt
+  (`onSurface` / `primary` / `onSurfaceVariant`), damit ein Theme-Wechsel den Text nie
+  kontrastarm machen kann.
+
+### Added — „Add project": wirklich durch die Ordner browsen
+
+Der Dialog war schon ein Browser (Breadcrumb, „up one level", Suche, „Open"), startete aber **nur im
+Home des Servers** — Wurzeln wie `/` oder ein Pfad außerhalb davon waren nicht erreichbar, was wie
+„ich kann nicht browsen" wirkt. Neu:
+
+- **Schnellzugriffe:** **Home** und **`/`** (Dateisystem-Wurzel des Servers).
+- **Freie Pfadeingabe:** ein Feld für **jeden absoluten Pfad** plus **Open** — damit ist jedes
+  Verzeichnis erreichbar, das der Server sieht (auch z. B. `/srv/projekte`, `/mnt/…`).
+- Der bestehende Weg bleibt: Ordner antippen = hinein, „up one level" = zurück, Suche = filtern,
+  **Open** = den aktuellen Ordner als Projekt hinzufügen.
+- Ehrlich: `LocalBackend` ist nur die Backend-Verbindung — der Server läuft **extern**. Der Browser
+  zeigt daher **das Dateisystem des Servers**, nicht das des Telefons; „Handy-Speicher" wäre meist ein
+  Fehlgriff und ist bewusst kein Schnellzugriff.
+
+### Verified
+
+- `GET /api/fs/list?path=.` mit `x-opencode-directory` liefert die Verzeichnisse (live geprüft, auch
+  für absolute Pfade wie `/home/scalyxsoft/Documents/coding`) — die Grundlage des Browsers
+  funktioniert.
+
+### Offen
+
+- **Geräteprüfung** (kein `adb`-Gerät während der Änderung): Tippen im Suchfeld sichtbar? Ordner über
+  `/` und über einen freien Pfad erreichbar und als Projekt hinzugefügt?
+
 ## [3.8.9] - 2026-10-17
 
 ### Fixed

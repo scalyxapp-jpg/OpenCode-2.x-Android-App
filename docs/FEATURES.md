@@ -77,6 +77,15 @@ The home screen is the project/session hub.
 - **Offline first** — the last session list and message tails are cached, so a
   cold start paints immediately and a brief network drop does not blank the app.
 
+### Adding a project — folder browser
+
+"Add project" opens a browser for the **server's** filesystem (the server runs elsewhere; the phone's
+own storage is not what it shows): quick jumps to **Home** and **`/`**, a **free absolute-path field**
+with *Open*, then tap a folder to enter it, "up one level" to go back, the search field to filter, and
+**Open** to add the current folder as a project. Listings come from `GET /api/fs/list` (directories
+only) and the search from `GET /api/fs/find`, both scoped by the `x-opencode-directory` header — so
+every folder the server can read is reachable.
+
 ## 3. Chat & live streaming
 
 The chat is a reverse-layout timeline (newest at the bottom) fed by SSE.

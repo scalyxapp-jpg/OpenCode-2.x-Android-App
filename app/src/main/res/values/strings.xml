@@ -671,4 +671,6 @@
     <string name="settings_speech_language_sub" formatted="false">Which language the recognizer expects. “System” lets the device decide; naming it helps when you speak one language and dictate tool names from another.</string>
     <string name="settings_speech_language_system" formatted="false">System (device setting)</string>
     <string name="speech_permission_granted" formatted="false">Microphone allowed — hold the button again to dictate.</string>
+    <string name="add_project_home" formatted="false">Home</string>
+    <string name="add_project_path_hint" formatted="false">Absolute path, e.g. /home/me/projects</string>
 </resources>
