@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.opencode.android.R
+import com.opencode.android.ui.media.MediaStrip
 import com.opencode.android.domain.Message
 import com.opencode.android.domain.Part
 import com.opencode.android.domain.SessionQuestion
@@ -74,6 +75,8 @@ internal fun MessageBubble(
     onExplain: (String) -> Unit = {},
     /** Explain mode for a tool row (command / written code / the call). */
     explainToolsEnabled: Boolean = false,
+    /** Settings switch: show generated images/videos/audio as thumbnails. */
+    mediaPreviews: Boolean = true,
     onExplainPart: (com.opencode.android.domain.Part) -> Unit = {},
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -175,6 +178,17 @@ internal fun MessageBubble(
                         )
                     }
         }
+    // Generated media (screenshots, images, videos, audio) is not text: extract the
+    // references once per message, from tool results AND from markdown/paths in the
+    // text, so a thumbnail exists no matter which shape the tool returned.
+    val mediaRefs =
+        remember(message, mediaPreviews) {
+            if (mediaPreviews) {
+                com.opencode.android.ui.media.MediaRefs.forMessage(message)
+            } else {
+                emptyList()
+            }
+        }
     val questionParts = remember(toolParts) { toolParts.filter { it.toolName() == "question" } }
     val otherToolParts = remember(toolParts) { toolParts.filter { it.toolName() != "question" } }
     // Meta line mirrors web: agent - model - duration - time. Memoised: the
@@ -190,6 +204,7 @@ internal fun MessageBubble(
     if (text.isBlank() &&
         !reasoningVisible &&
         toolParts.isEmpty() &&
+        mediaRefs.isEmpty() &&
         errorText == null
     ) {
         return
@@ -291,6 +306,9 @@ internal fun MessageBubble(
                         )
                     }
                 }
+                // Attachments of the user's own turn (images they sent): same strip,
+                // right-aligned because the bubble is.
+                MediaStrip(refs = mediaRefs, alignEnd = true)
                 // Also reachable on OWN messages: "Revert message" only exists for user
                 // messages, and that is exactly where the visible button was missing.
                 MessageActionsButton(onClick = { showContextMenu = true })
@@ -426,6 +444,9 @@ internal fun MessageBubble(
                             }
                         }
                     }
+                    // Media of the whole turn: one strip, so a screenshot that a tool
+                    // returned inline and also printed as a path appears ONCE.
+                    MediaStrip(refs = mediaRefs)
                     // Error state (mirrors web "Interrupted"/error display)
                     if (!errorText.isNullOrBlank()) {
                         Text(

@@ -185,6 +185,15 @@ data class Message(
      */
     val skill: String? = null,
     val name: String? = null,
+    /**
+     * Files the user attached to this turn (V2 `files[]`).
+     *
+     * Each item carries the inline base64 payload (`data`), the mime type and the
+     * name, which is what the chat needs to show a thumbnail instead of a bare
+     * "[Attached: name]" marker. [com.opencode.android.data.CacheTrimming] drops the
+     * payload before the offline cache is written — the network load brings it back.
+     */
+    val files: List<MessageFile> = emptyList(),
     /** `synthetic` messages carry a short description (journal: where/when). */
     val description: String? = null,
     // Web endpoint structure: { info, parts }
@@ -242,6 +251,14 @@ data class Part(
     val state: kotlinx.serialization.json.JsonElement? = null,
     val title: String? = null,
     val time: PartTime? = null,
+    // File parts carry their payload location instead of text: the web shape is
+    // {"type":"file","mime":"image/png","url":"data:...","filename":"x.png"}, and
+    // tool content items use `uri` for the same thing. Kept as strings so a media
+    // reference never fails deserialisation of a message.
+    val mime: String? = null,
+    val url: String? = null,
+    val filename: String? = null,
+    val uri: String? = null,
     // Which message this part belongs to. Used to tell a USER part (the prompt
     // echoed back by the server) from an ASSISTANT part, so the prompt is never
     // rendered as the live assistant response.
@@ -405,6 +422,28 @@ data class InboxItem(
     val time: MessageTime? = null,
     val payload: InboxPayload? = null,
     val delivery: String? = null,
+)
+
+/**
+ * One attachment of a user turn (V2 `files[]`).
+ *
+ * `data` is the raw base64 payload (no `data:` prefix), `source.uri` the original
+ * location when the attachment was referenced rather than inlined.
+ */
+@Serializable
+@Immutable
+data class MessageFile(
+    val data: String? = null,
+    val mime: String? = null,
+    val name: String? = null,
+    val source: MessageFileSource? = null,
+)
+
+@Serializable
+@Immutable
+data class MessageFileSource(
+    val type: String? = null,
+    val uri: String? = null,
 )
 
 @Serializable

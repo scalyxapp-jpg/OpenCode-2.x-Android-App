@@ -673,4 +673,13 @@
     <string name="speech_permission_granted" formatted="false">Microphone allowed — hold the button again to dictate.</string>
     <string name="add_project_home" formatted="false">Home</string>
     <string name="add_project_path_hint" formatted="false">Absolute path, e.g. /home/me/projects</string>
+    <string name="media_preview" formatted="false">Media</string>
+    <string name="media_play" formatted="false">Play</string>
+    <string name="media_pause" formatted="false">Pause</string>
+    <string name="media_audio" formatted="false">Audio</string>
+    <string name="media_audio_hint" formatted="false">Tap to play</string>
+    <string name="media_preview_failed" formatted="false">Media could not be loaded</string>
+    <string name="media_preview_unavailable" formatted="false">Preview not available</string>
+    <string name="settings_media" formatted="false">Media previews in chat</string>
+    <string name="settings_media_sub" formatted="false">Generated images, screenshots, videos and audio are shown as thumbnails; tap one to view it full screen or play it</string>
 </resources>

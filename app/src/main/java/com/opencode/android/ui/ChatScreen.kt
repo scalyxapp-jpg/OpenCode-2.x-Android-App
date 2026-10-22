@@ -1795,6 +1795,7 @@ internal fun SessionTab(
                                             editToolPartsExpanded = appSettings.editToolPartsExpanded,
                                             onOpenSession = onOpenSession,
                                             explainToolsEnabled = appSettings.explainEnabled,
+                                            mediaPreviews = appSettings.mediaPreviews,
                                             onExplainPart = actions.onExplainPart,
                                         )
                                     }

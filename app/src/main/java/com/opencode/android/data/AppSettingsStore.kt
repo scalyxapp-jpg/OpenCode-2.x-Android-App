@@ -47,6 +47,12 @@ object AppSettingsStore {
         val autoApprove: Boolean = false,
         val terminalShell: String = "/bin/bash",
         val showReasoningSummaries: Boolean = true,
+        /**
+         * Show generated media (images, screenshots, videos, audio) as thumbnails in
+         * the chat, with a full-screen viewer on tap. Off: the message keeps its text
+         * and tool rows, but nothing is downloaded to show a preview.
+         */
+        val mediaPreviews: Boolean = true,
         val shellToolPartsExpanded: Boolean = false,
         val editToolPartsExpanded: Boolean = false,
         /**
@@ -211,6 +217,7 @@ object AppSettingsStore {
             autoApprove = prefs.getBoolean("autoApprove", false),
             terminalShell = prefs.getString("terminalShell", "/bin/bash") ?: "/bin/bash",
             showReasoningSummaries = prefs.getBoolean("showReasoningSummaries", true),
+            mediaPreviews = prefs.getBoolean("mediaPreviews", true),
             shellToolPartsExpanded = prefs.getBoolean("shellToolPartsExpanded", false),
             editToolPartsExpanded = prefs.getBoolean("editToolPartsExpanded", false),
             expandThinkingBlocks = prefs.getBoolean("expandThinkingBlocks", false),
@@ -285,6 +292,8 @@ object AppSettingsStore {
     fun setTerminalShell(v: String) = update { it.putString("terminalShell", v) }
 
     fun setShowReasoningSummaries(v: Boolean) = update { it.putBoolean("showReasoningSummaries", v) }
+
+    fun setMediaPreviews(v: Boolean) = update { it.putBoolean("mediaPreviews", v) }
 
     fun setShellToolPartsExpanded(v: Boolean) = update { it.putBoolean("shellToolPartsExpanded", v) }
 

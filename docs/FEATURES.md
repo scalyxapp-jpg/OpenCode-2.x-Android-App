@@ -86,6 +86,27 @@ with *Open*, then tap a folder to enter it, "up one level" to go back, the searc
 only) and the search from `GET /api/fs/find`, both scoped by the `x-opencode-directory` header — so
 every folder the server can read is reachable.
 
+### Media in the chat (images, screenshots, video, audio)
+
+Any media a turn produces is shown as a tile under the message: images and videos as
+thumbnails (videos carry a play badge), audio as a labelled card. Tapping a tile opens a
+full-screen viewer — pinch/pan for images, an embedded player with controls for video,
+play/pause + seek for audio, and ‹ › to step through several items of the same message.
+
+Detection (`ui/media/MediaRefs.kt`) covers every shape the server uses: a tool result's
+`content: [{type:"file", uri, mime}]` items, `data:` URIs, markdown images/links, `src`
+attributes, http(s) URLs and absolute or relative file paths (including `file://` and
+`sandbox:` prefixes). References are deduplicated per file, and tool *inputs* are ignored
+so a path the agent merely mentioned is not previewed.
+
+Bytes are materialised once into `cacheDir/media` (`ui/media/MediaCache.kt`): inline
+payloads are base64-decoded, server files are read through `GET /api/fs/read` (scoped to
+the file's parent directory, because the route is limited to the
+`x-opencode-directory` header), and remote URLs are fetched with a size ceiling. The
+cache is atomic (write-then-rename), capped at 256 MB and cleared when the setting is
+switched off. Settings → General → *Media previews in chat* turns the whole feature off
+(no tiles, no downloads).
+
 ## 3. Chat & live streaming
 
 The chat is a reverse-layout timeline (newest at the bottom) fed by SSE.

@@ -201,6 +201,21 @@ interface OpenCodeApi {
 
     suspend fun getFileContent(path: String): FileContent
 
+    /**
+     * Raw bytes of a file on the server, for media the chat shows (image, video,
+     * audio). [getFileContent] returns a String and therefore cannot carry binary
+     * payloads; this variant streams the body with a byte ceiling.
+     *
+     * [directory] is not optional in practice: `fs/read` is scoped to the
+     * `x-opencode-directory` header, so a file outside the session's directory (a
+     * `/tmp` screenshot, a generated video in `~/Videos`) is "not found" unless the
+     * header names its own folder. Verified against the live server.
+     */
+    suspend fun readFileBytes(
+        path: String,
+        directory: String? = null,
+    ): ByteArray
+
     // --- catalog -----------------------------------------------------------
 
     suspend fun getAgents(): DataListResponse<Agent>

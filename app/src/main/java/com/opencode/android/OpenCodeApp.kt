@@ -22,6 +22,8 @@ class OpenCodeApp : Application() {
         installCrashLogger()
         // Stores that only capture the context / register callbacks are cheap.
         MessageCache.init(this)
+        // Media shown in the chat (thumbnails + full-screen viewer) lives in cacheDir/media.
+        com.opencode.android.ui.media.MediaCache.init(this)
         NetworkMonitor.init(this)
         Notifier.init(this)
         // Background step/summary notifications: know whether the app is in focus,

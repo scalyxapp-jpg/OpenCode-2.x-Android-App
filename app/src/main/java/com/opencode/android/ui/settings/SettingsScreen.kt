@@ -173,6 +173,21 @@ internal fun GeneralTab() {
         }
         item {
             SettingSwitch(
+                title = stringResource(R.string.settings_media),
+                subtitle = stringResource(R.string.settings_media_sub),
+                checked = settings.mediaPreviews,
+                onCheckedChange = { enabled ->
+                    AppSettingsStore.setMediaPreviews(enabled)
+                    if (!enabled) {
+                        // Off means off: the tile never appears again, so the
+                        // downloads that only existed for previews can go.
+                        com.opencode.android.ui.media.MediaCache.clear()
+                    }
+                },
+            )
+        }
+        item {
+            SettingSwitch(
                 title = stringResource(R.string.settings_expand_shell_tool_parts),
                 subtitle = stringResource(R.string.settings_show_shell_tool_parts_expanded_by_default_in_the),
                 checked = settings.shellToolPartsExpanded,

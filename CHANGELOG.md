@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-10-22
+
+### Added — Medien aus dem Chat heraus sehen und abspielen
+
+Jede Nachricht kann jetzt Medien zeigen, egal in welcher Form sie ankommen — als
+Tool-Ergebnis (`content: [{type:"file", ...}]`), als Markdown-Bild, als nackter Pfad in
+einer Tool-Ausgabe oder als Inline-Base64-Anhang:
+
+- **Thumbnails im Chat:** Bilder und Videos erscheinen als Kachel (Video mit
+  Play-Symbol), Audio als Karte mit Namen. **Antippen öffnet die Großansicht.**
+- **Großansicht:** Bilder zoomen (Pinch) und verschieben, Videos spielen mit
+  Player-Steuerung, Audio hat Play/Pause, Positionsregler und Zeitangabe. Bei mehreren
+  Medien einer Nachricht lässt sich mit ‹ › durchblättern.
+- **Erkennung** (`MediaRefs`): MIME-Typ zuerst, Dateiendung als Rückfall. Erkannt werden
+  `content`-Items von Tools, `data:`-URIs, Markdown-Bilder/-Links, `src`-Attribute,
+  http(s)-URLs und absolute/relative Pfade (auch `file://` und `sandbox:`), dedupliziert
+  pro Datei — ein Screenshot, den ein Tool inline **und** als Pfad liefert, erscheint
+  einmal.
+- **Abruf** (`MediaCache`): lädt einmalig nach `cacheDir/media` (Inline-Dekodierung,
+  Server-Datei über `fs/read`, entfernte URL per HTTP), schreibt atomar und hält den
+  Cache bei 256 MB. `fs/read` ist serverseitig auf das `x-opencode-directory`-Header
+  gescoped — für absolute Pfade (z. B. `/tmp/screenshot.png`) wird deshalb das
+  Elternverzeichnis als Scope mitgeschickt (live verifiziert: sonst „File not found“).
+- **Anhänge des Nutzers** zeigen jetzt ebenfalls ein Vorschaubild statt nur
+  `[Attached: name]`.
+- **Schalter** in den Einstellungen: *Media previews in chat* (aus = keine Vorschauen und
+  keine Downloads; der Medienspeicher wird dabei geleert). Medien-Cache wird beim
+  Abschalten geleert und nach 256 MB automatisch beschnitten.
+
+### Verified
+
+- `MediaRefsTest` (15 Fälle): Tool-`file`-Items, absolute/relative Pfade, Markdown,
+  `data:`-URIs, http-URLs, Anhänge, Dedup, `input`-Pfade werden ignoriert, Cap.
+- Live gegen den Server: PNG-Bytes über `fs/read` (richtig gescopet, byte-identisch),
+  Fehlerfall ohne Scope reproduziert (`FileNotFoundError`).
+
+### Offen
+
+- **Geräteprüfung** (kein `adb`-Gerät): Thumbnail-Optik, Zoom, Video-/Audio-Wiedergabe,
+  Verhalten bei sehr großen Bildern.
+
 ## [3.9.0] - 2026-10-21
 
 ### Fixed

@@ -46,7 +46,11 @@ object CacheTrimming {
             // otherwise be cached with NO text at all and paint an empty bubble
             // until the network load replaced it.
             val content = if (parts.isNotEmpty()) emptyList() else message.content.map { it.trimmed() }
-            message.copy(parts = parts, content = content)
+            // Attachment payloads are base64 and dominate the file size; the first
+            // paint shows the name, and the network load brings the bytes back (the
+            // media cache keeps an already-downloaded thumbnail).
+            val files = message.files.map { it.copy(data = null) }
+            message.copy(parts = parts, content = content, files = files)
         }
 
     private fun com.opencode.android.domain.Part.trimmed() =

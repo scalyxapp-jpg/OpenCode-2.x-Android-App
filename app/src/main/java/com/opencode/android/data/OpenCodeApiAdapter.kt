@@ -466,6 +466,26 @@ class OpenCodeApiAdapter(
         return FileContent(content = text, path = path)
     }
 
+    override suspend fun readFileBytes(
+        path: String,
+        directory: String?,
+    ): ByteArray {
+        val response = v2.fsRead(path, directory = directory)
+        if (!response.isSuccessful) {
+            response.errorBody()?.close()
+            throw IOException("file read HTTP ${response.code()}")
+        }
+        val body = response.body() ?: throw IOException("empty file body")
+        return body.use { responseBody ->
+            com.opencode.android.util
+                .LimitedInputStream(
+                    responseBody.byteStream(),
+                    MAX_MEDIA_BYTES,
+                    "media file",
+                ).use { stream -> stream.readBytes() }
+        }
+    }
+
     // --- catalog -----------------------------------------------------------
 
     override suspend fun getAgents(): DataListResponse<Agent> = DataListResponse(data = v2.agents().data.orEmpty())
@@ -1375,6 +1395,13 @@ class OpenCodeApiAdapter(
 
         /** Largest file body read for the file viewer (the message path has its own). */
         private const val MAX_FILE_BYTES = 8L * 1024 * 1024
+
+        /**
+         * Ceiling for a media download. Videos are the reason this is larger than
+         * the text limit; anything beyond it is reported to the user instead of
+         * being pulled into memory (a 500 MB video would kill the process).
+         */
+        private const val MAX_MEDIA_BYTES = 96L * 1024 * 1024
     }
 }
 
