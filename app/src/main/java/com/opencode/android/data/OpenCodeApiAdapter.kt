@@ -1,5 +1,7 @@
 package com.opencode.android.data
 
+import com.opencode.android.util.APP_LOG_TAG
+import com.opencode.android.util.AppLog
 import com.opencode.android.domain.Agent
 import com.opencode.android.domain.AuthSetRequest
 import com.opencode.android.domain.CommandEntry
@@ -436,7 +438,7 @@ class OpenCodeApiAdapter(
     }
 
     override suspend fun getFileContent(path: String): FileContent {
-        val response = v2.fsRead(path)
+        val response = v2.fsRead(encodeFsPath(path))
         if (!response.isSuccessful) {
             // A 4xx/5xx must not be rendered as the file's content.
             response.errorBody()?.close()
@@ -470,8 +472,13 @@ class OpenCodeApiAdapter(
         path: String,
         directory: String?,
     ): ByteArray {
-        val response = v2.fsRead(path, directory = directory)
+        val response = v2.fsRead(encodeFsPath(path), directory = directory)
         if (!response.isSuccessful) {
+            // The URL and the scope are the two things that decide this request; without
+            // them a 404 is impossible to tell apart from a bad path or a bad header.
+            AppLog.d(APP_LOG_TAG) {
+                "file read failed: HTTP ${response.code()} path=$path dir=$directory url=${response.raw().request.url}"
+            }
             response.errorBody()?.close()
             throw IOException("file read HTTP ${response.code()}")
         }
@@ -1402,6 +1409,15 @@ class OpenCodeApiAdapter(
          * being pulled into memory (a 500 MB video would kill the process).
          */
         private const val MAX_MEDIA_BYTES = 96L * 1024 * 1024
+
+        /**
+         * Percent-encodes a path for the `{path}` slot of `api/fs/read`.
+         *
+         * `URLEncoder` encodes `/` as `%2F` (what the route needs) and spaces as `+`,
+         * which is literal in a path — hence the replacement.
+         */
+        internal fun encodeFsPath(path: String): String =
+            java.net.URLEncoder.encode(path, "UTF-8").replace("+", "%20")
     }
 }
 

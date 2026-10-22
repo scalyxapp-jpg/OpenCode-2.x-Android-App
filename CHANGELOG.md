@@ -5,6 +5,36 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-10-22
+
+### Fixed (auf dem Gerät gefunden, nicht im Code vermutet)
+
+**1. Server-Dateien außerhalb des Session-Ordners waren „nicht gefunden" (HTTP 404).**
+Der erste Test auf dem Gerät zeigte statt des Audio-Players `file read HTTP 404` — obwohl
+die Datei existierte und `curl` sie lieferte. Ursache: `@Path` ohne `encoded = true` lässt
+Schrägstriche stehen; `/api/fs/read/home/...` passt dann nicht mehr auf die Route
+`api/fs/read/{path}`. Jetzt wird der Pfad **selbst** percent-kodiert (`%2F`), Header-Scope
+für absolute Pfade bleibt. Auf dem Gerät geprüft: Audio lädt, Dauer 0:07, Wiedergabe läuft
+(Position 0:03), Video spielt (MediaPlayer/MediaCodec, 00:02/00:03).
+
+**2. Dasselbe Bild erschien zweimal in einer Nachricht.**
+Ein `read`-Werkzeug liefert `{type:"file", mime, name:"/abs/pfad.png", uri:"data:..."}` —
+der `name` ist selbst ein Pfad, wurde beim Text-Scan erneut gefunden und ergab eine zweite
+Kachel. Datei-Content-Items werden beim Text-Scan jetzt übersprungen (auf dem Gerät: vorher
+2 identische Fuchs-Kacheln, jetzt 1).
+
+**3. Diagnose:** Ein fehlgeschlagener Datei-Abruf loggt jetzt HTTP-Code, Pfad, Scope und die
+tatsächliche URL — ohne diese vier Angaben ist ein 404 nicht von einem falschen Header zu
+unterscheiden.
+
+### Verified auf dem Gerät (SM-A176B, WLAN-ADB)
+
+- Bild-Kachel (Fuchs) → Antippen → Großansicht mit Titel, X, ‹ › und „1 / 2"
+- Audio-Karte „media-test-audio.mp3 / Tap to play" → Player mit 0:00 / 0:07, Play → 0:03, Pause-Symbol
+- Video-Kachel mit Frame + Play-Badge → Wiedergabe mit Steuerung, 00:02 / 00:03
+- Einstellungen → **Media previews in chat**: aus → keine Kacheln; wieder an → Kacheln zurück
+- Kein `FATAL EXCEPTION` im Logcat, kein fehlgeschlagener Abruf nach dem Fix
+
 ## [3.10.0] - 2026-10-22
 
 ### Added — Medien aus dem Chat heraus sehen und abspielen

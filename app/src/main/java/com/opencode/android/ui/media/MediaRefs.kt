@@ -225,6 +225,11 @@ object MediaRefs {
     ) {
         when (element) {
             is JsonObject -> {
+                // A file content item's `name` IS a path and its `uri` a data URL.
+                // Scanning them as text produced a SECOND tile for the same picture
+                // (seen on the device: one inline image plus a "file" tile of its own
+                // name). Those items are handled by collectFromJson.
+                if (element["type"].asString() == "file") return
                 element.forEach { (key, value) -> if (key != "input") scanJsonStrings(value, add) }
             }
 

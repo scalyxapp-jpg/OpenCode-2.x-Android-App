@@ -478,9 +478,13 @@ interface OpenCodeV2Api {
         @Header("x-opencode-directory") directory: String? = null,
     ): WireEnvelope<List<WireFsEntry>>
 
+    // `encoded = true`: callers percent-encode the path themselves. A slash must reach
+    // the server as %2F — Retrofit leaves `/` unescaped in a plain @Path, so an absolute
+    // path turned into extra path segments and the route answered 404 (seen on device
+    // for /home/.../media-test-audio.mp3). Use [encodeFsPath].
     @GET("api/fs/read/{path}")
     suspend fun fsRead(
-        @Path("path") path: String,
+        @Path("path", encoded = true) path: String,
         @Header("x-opencode-directory") directory: String? = null,
     ): Response<ResponseBody>
 

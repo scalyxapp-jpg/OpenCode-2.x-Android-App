@@ -156,6 +156,28 @@ class MediaRefsTest {
     }
 
     @Test
+    fun `a file content item does not produce a second tile from its own name`() {
+        // Device finding: the read tool returns {type:"file", mime, name:"/abs/path.png",
+        // uri:"data:..."}. Scanning the state as text found the NAME as a server path,
+        // so the same picture appeared twice in one strip.
+        val part =
+            Part(
+                type = "tool",
+                tool = "read",
+                state =
+                    state(
+                        """{"status":"completed","content":[
+                            {"type":"text","text":"Image read successfully"},
+                            {"type":"file","mime":"image/jpeg","name":"/home/me/Pictures/fox.jpg","uri":"data:image/jpeg;base64,AAAA"}
+                        ]}""",
+                    ),
+            )
+        val refs = MediaRefs.forMessage(Message(role = "assistant", parts = listOf(part)))
+        assertEquals(1, refs.size)
+        assertTrue(refs.single().source is MediaSource.Inline)
+    }
+
+    @Test
     fun `tool input paths are not treated as generated media`() {
         val part =
             Part(
