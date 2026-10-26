@@ -176,7 +176,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.10.2")
 
     // Networking
-    implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.1")
     implementation("com.squareup.retrofit2:retrofit:3.0.0")
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:3.0.0")
 
@@ -190,7 +190,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     // Real HTTP against a local server: exercises the streamed JSON decode and
     // the OOM/timeout paths, which pure-function tests cannot reach.
-    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
+    testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     // The Compose BOM must be applied per-configuration, otherwise the
     // androidTest/debug Compose artefacts resolve without a version.
