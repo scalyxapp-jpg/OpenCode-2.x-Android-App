@@ -181,17 +181,17 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:3.0.0")
 
     // Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.12.0")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
     // Real HTTP against a local server: exercises the streamed JSON decode and
     // the OOM/timeout paths, which pure-function tests cannot reach.
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.0")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.12.0")
     // The Compose BOM must be applied per-configuration, otherwise the
     // androidTest/debug Compose artefacts resolve without a version.
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
